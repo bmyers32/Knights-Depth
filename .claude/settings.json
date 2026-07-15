@@ -1,0 +1,16 @@
+{
+  "$comment": "PreToolUse hook: mechanical enforcement of red lines (IP guard + law-file guard). Hooks run regardless of what the model decides — zero context cost. Verify the hook schema against the current Claude Code docs before first session; adjust matcher/command form if the format has changed.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/guard.py"
+          }
+        ]
+      }
+    ]
+  }
+}
