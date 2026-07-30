@@ -10,6 +10,7 @@ evolved across versions.
 """
 import json
 import sys
+from pathlib import Path
 
 BLOCKED_CONTENT = [
     # SK IP must never enter the repo (CLAUDE.md Prime Directive 5)
@@ -47,8 +48,14 @@ def main() -> int:
 
     # IP guard is scoped: root-level planning docs (*.md at repo root) may legitimately
     # NAME the inspiration; game content, code, scenes, and assets may never contain it.
-    lowered_path = path.lower().replace("\\", "/")
-    is_root_doc = lowered_path.endswith(".md") and "/" not in lowered_path.strip("./")
+    # Resolve against cwd (hooks run from repo root) rather than string-matching the
+    # path, since Claude Code may pass either a relative or an absolute path.
+    is_root_doc = False
+    if path.lower().endswith(".md"):
+        try:
+            is_root_doc = Path(path).resolve().parent == Path.cwd().resolve()
+        except OSError:
+            is_root_doc = False
     if not is_root_doc:
         for term in BLOCKED_CONTENT:
             if term in content or term in lowered_path:

@@ -13,7 +13,7 @@ against the actual goal: a game that keeps getting built because building it sta
 | 7 | Art wall — asset creation stalls momentum | Med | Medium | Playtest gate forbids art before fun · timebox: art ≤20% of any milestone until its mechanics gate passes | ACCEPTED (§1.5 covers worst case) |
 | 8 | Estimate slippage → demoralization (M3 realistically 2–3× its estimate) | High | Feeds #1 | Estimates are ranges; milestone NOT-lists; Always-Playable Exit makes slippage non-fatal | ACCEPTED |
 | 9 | Understanding gap — Claude builds systems the user can't reason about, making future debugging sessions frustrating | Med | Medium (friction, not failure — deprioritized with portfolio goal) | Concept explanations on first use (always) · opt-in "you drive" when curiosity strikes · concepts ledger in HANDOFF for lookup | ACCEPTED (opt-in tools exist) |
-| 10 | Doc/code drift — law says one thing, repo does another | Med | Erodes the system | /gate spot-checks, Change Log discipline, dangling-reference rule | ACCEPTED (existing controls) |
+| 10 | Doc/code drift — law says one thing, repo does another | Med | Erodes the system | /gate spot-checks, Change Log discipline, dangling-reference rule, verify enforcement hooks by triggering them (not just reading config — see BRAIN.md) | ACCEPTED (existing controls) |
 | 11 | Godot version/addon churn mid-project | Low | Medium | Version pinned; no upgrades mid-milestone | ACCEPTED (existing controls) |
 
 Wind-down criteria (graceful pause, not failure): if two consecutive months pass with

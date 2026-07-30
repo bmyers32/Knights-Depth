@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/guard.py"
+            "command": "python scripts/guard.py"
           }
         ]
       }

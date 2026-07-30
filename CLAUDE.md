@@ -73,7 +73,7 @@ knight_depths/
 ## Milestones (exit criteria in GAME-RULES §5)
 | # | Scope | Status |
 |---|---|---|
-| 0 | Warmups: 2 tiny tutorial games; Godot basics; repo + workflow bootstrap | [ ] |
+| 0 | Warmups: 2 tiny tutorial games; Godot basics; repo + workflow bootstrap | [x] |
 | 1 | Combat slice: knight, sword+gun+shield, 3 enemies, 1 arena, 1 status effect | [ ] |
 | 2 | Procedural depths: tile segments, seeded 5-floor runs, elevators, difficulty curve | [ ] |
 | 3 | Co-op netcode: 2–4 player server-authoritative, prediction, 150ms-latency playable | [ ] |
@@ -89,6 +89,8 @@ knight_depths/
   the autoloads listed in Structure — adding an autoload requires a CLAUDE.md edit.
 - Implied requirements: implement + flag at >80% confidence — never silently add/omit.
 - Ideas mid-session → ROADMAP.md Feature Proposals, never inline "while I'm here" code.
+- Headless test command (this machine, PowerShell — run verbatim):
+  `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd`
 
 ## Companion Files
 **Always loaded:** AGENTS.md (rules of engagement), GAME-RULES.md (domain law —
