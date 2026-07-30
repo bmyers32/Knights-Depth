@@ -8,7 +8,8 @@ Solo hobby project — built because building it is the point: a top-down co-op 
 roguelite inspired by Spiral Knights' *mechanics* — 100% original IP, assets, and names.
 Godot 4 + GDScript. Milestone-gated: each milestone ends as a finished, playable thing
 before the next begins. Multiplayer-ready architecture from Milestone 1 even though
-netcode lands in Milestone 3. Bind all decisions to this.
+netcode lands in Milestone 3. World identity (the Lattice, Envoys, Drift, the Axiom)
+lives in WORLD-CANON.md; vocabulary law in LEXICON.md. Bind all decisions to this.
 **Fun to play > feature count. Momentum > process purity. A playable game > a perfect plan.**
 
 ## Developer Context
@@ -50,7 +51,7 @@ knight_depths/
 ├── game/
 │   ├── autoload/      # GameRoot, ContentDB, DebugOverlay (service locators — listed here only)
 │   ├── sim/           # SimWorld, Command, Event, combat resolution — NO Node imports
-│   ├── actors/        # Node scenes: knight, enemies — presentation + input → Commands
+│   ├── actors/        # Node scenes: envoy, enemies — presentation + input → Commands
 │   ├── content/       # weapons/, enemies/, status/ as .tres resources
 │   ├── gen/           # seeded depth/floor generation — headless-runnable
 │   ├── net/           # M3+: sync, prediction, server entry point
@@ -74,10 +75,10 @@ knight_depths/
 | # | Scope | Status |
 |---|---|---|
 | 0 | Warmups: 2 tiny tutorial games; Godot basics; repo + workflow bootstrap | [x] |
-| 1 | Combat slice: knight, sword+gun+shield, 3 enemies, 1 arena, 1 status effect | [ ] |
-| 2 | Procedural depths: tile segments, seeded 5-floor runs, elevators, difficulty curve | [ ] |
+| 1 | Combat slice: Envoy, sword+gun+shield, 3 enemies (Common Fang / Drifted Ooze / Claimed Watcher), 1 arena, 1 status effect | [ ] |
+| 2 | Procedural depths: tile segments, seeded 5-floor runs, elevators, difficulty curve (strata: Archive, Foundry) | [ ] |
 | 3 | Co-op netcode: 2–4 player server-authoritative, prediction, 150ms-latency playable | [ ] |
-| 4 | Persistence & hub: accounts/saves, hub scene, crafting/heat progression | [ ] |
+| 4 | Persistence & hub: accounts/saves, Commons hub scene, crafting/heat progression | [ ] |
 | 5 | MMO layer: dedicated server, auction house, guilds, PvP mode (re-scope at M4 exit) | [ ] |
 
 ## Always-On Rules
@@ -89,6 +90,9 @@ knight_depths/
   the autoloads listed in Structure — adding an autoload requires a CLAUDE.md edit.
 - Implied requirements: implement + flag at >80% confidence — never silently add/omit.
 - Ideas mid-session → ROADMAP.md Feature Proposals, never inline "while I'm here" code.
+- Vocabulary follows LEXICON.md — player-facing strings AND code identifiers
+  (`drift_level`, never `corruption_level`; actors are envoys, never knights).
+  Banned strings guard-enforced (GAME-RULES §6.7).
 - Headless test command (this machine, PowerShell — run verbatim):
   `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd`
 
@@ -96,5 +100,6 @@ knight_depths/
 **Always loaded:** AGENTS.md (rules of engagement), GAME-RULES.md (domain law —
 contradicting code is a bug by definition).
 **Per session:** HANDOFF.md (read by /kickoff, overwritten by /closeout — hard cap 120 lines).
-**On demand:** ROADMAP.md, BRAIN.md (wisdom), ASSETS.md.
+**On demand:** ROADMAP.md, BRAIN.md (wisdom), ASSETS.md, LEXICON.md (vocabulary law),
+WORLD-CANON.md (fiction), CORE-FANTASY.md (feature filter), MECHANICS-REFERENCE.md.
 **Zero-token until invoked:** .claude/commands/ (kickoff, closeout, gate, recon, playtest, resume).

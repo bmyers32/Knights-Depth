@@ -12,7 +12,7 @@ asymmetry is the whole loadout game: you can't cover everything, so party compos
 and weapon slots become meaningful choices. Dual-type weapons resolve as two
 simultaneous half-attacks, each checked against the matrix independently.
 
-Our mapping (types: **Force** = baseline, **Pierce**, **Arc** = energy, **Umbral** = dark):
+Our mapping (types: **Force** = baseline, **Pierce** = precision/penetration, **Arc** = directed energy, **Umbral** = coherence disruption — LEXICON.md, never "dark damage"):
 | Our family (RG analogue) | Weak to | Resists |
 |---|---|---|
 | Fang — beasts | Pierce | Arc |
@@ -20,7 +20,7 @@ Our mapping (types: **Force** = baseline, **Pierce**, **Arc** = energy, **Umbral
 | Tinker — mischief-machinists | Umbral | Arc |
 | Ooze — slimes | Umbral | Pierce |
 | Hollow — undead | Arc | Umbral |
-| Automaton — constructs | Arc | Pierce |
+| Watcher — constructs (true name: Custodian) | Arc | Pierce |
 
 Load-bearing properties to preserve: each non-Force type is the weakness of exactly
 TWO families; Force is nobody's weakness; every family resists exactly one non-Force

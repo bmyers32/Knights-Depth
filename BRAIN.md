@@ -39,6 +39,34 @@ class cache is just stale. **Applies elsewhere:** every future global class in t
 project — `SimWorld`, `Command`, `ContentDB`, `DepthGenerator` (M1–M2) will all hit
 this the first time they're added or renamed.
 
+### Inspiration vocabulary hides best in words that feel native
+**Incident (design arc, pre-M1):** "Operator" survived eight rounds of naming review
+that killed Navi, Net King, and Dark Web — because it felt original. It wasn't; it was
+Battle Network's word for the same role. Separately, "corruption" sat at the center of
+the design for seven documents unexamined, because it arrived as a genre premise
+rather than a choice. **Mechanism:** review attention goes to words that SOUND
+borrowed; loanwords that match the project's register pass every scan while silently
+importing the source universe's assumptions. **Failure if ignored:** the world's
+identity converges back toward its inspiration one "natural-sounding" word at a time;
+guard.py can't flag what nobody listed. **Applies elsewhere:** every future
+MECHANICS-REFERENCE translation session; any term that "just feels right" during
+content design deserves one explicit "where did this word come from?" check before it
+enters LEXICON.md.
+
+### Design conversation converges; capture at the plateau or it re-expands
+**Incident (design arc, pre-M1):** ten review documents followed a clean arc — dream,
+critique, simplify, unify — but each round past convergence produced lateral renames
+(Weave→Loom→Lattice) rather than improvements, and twice "reduce scope" arguments
+concluded by adding systems (three companion loops proposed while warning against
+parallel ecosystems). **Mechanism:** open-ended review always generates output;
+without a capture deadline, generation continues past the point where changes improve
+anything, and the expansion reflex returns disguised as refinement. **Failure if
+ignored:** decisions stay perpetually provisional, law files never get written, and
+banned vocabulary calcifies in drafts while the naming session is "almost done."
+**Applies elsewhere:** status-roster design (P2), M4 progression design, any future
+multi-session design debate — set the capture criterion ("vetoes only, then files")
+when quality of changes turns lateral.
+
 ### A string-matched path check breaks the moment the caller's path format changes
 **Incident (M0):** `guard.py`'s "root docs may name the inspiration" exception checked
 `"/" not in lowered_path` on an absolute path — always false, since absolute paths are

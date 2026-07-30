@@ -16,6 +16,14 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P4 | Mender-type enemy | PROPOSED | Enemy healer → kill-priority decisions; justifies Venom |
 | P5 | Gear stars, heat, crafting | PROPOSED | M4 progression skeleton, recorded shape |
 | P6 | Rotating gate map (arcade) | PROPOSED | M5 shared-world route meta-game |
+| P7 | Companion system | PROPOSED | One slot, protocol-determined occupant; sync-anchor fiction; M4+ |
+| P8 | Protocols (Mend/Temper) | PROPOSED | Per-run philosophy loadout; expression not access; M4+ |
+| P9 | Drift scalar | PROPOSED | Zone `drift: float` in sim drives spawns/presentation; M2-adjacent |
+| P10 | Gear states (Mended/Stable/Drifted) | PROPOSED | Mechanical identities per state; content multiplier — earned rollout |
+| P11 | Contested enemy state | PROPOSED | Caught between forces; elite encounters, post-M2 |
+| P12 | Frames (mobility platforms) | PROPOSED | Combat identities, not transport; maybe a Companion-slot expression |
+| P13 | Community world-state | PROPOSED | Shared Drift scalar + thresholds; architect-for at P9, build M5-if-ever |
+| P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
@@ -32,6 +40,15 @@ Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 - **PvP** — M5 candidate; needs M3 netcode to be proven first.
 - **Custom level editor** — §1.4 rule of two: hand-author segments in the Godot editor
   until the pain is demonstrated twice.
+- **Protocol expansion beyond Mend/Temper** — architecture supports N protocols; the
+  design commits to TWO. Each protocol must reinterpret gear+Companion+playstyle
+  coherently; that cost is why "why stop at two?" stays parked. Revisit post-M4.
+- **Guild bases / guild progression** — M5-if-ever; folded under P13's world-state
+  architecture question. Do not design independently.
+- **Programmable companion AI + companion personality** — likely the SAME feature
+  (P7 notes); post-M4 dream, not a pillar. High cost even before personality.
+- **Status renames to lore vocabulary** — REJECTED (LEXICON.md: statuses are Plain
+  register; combat vocabulary is UX). Do not reopen without playtest evidence.
 
 ## Feature Proposals
 (Format per entry: `### P<n> — Title` then Idea / Reasoning / Design questions / Why
@@ -88,6 +105,88 @@ timer and are previewable, making route planning a meta-game.
 **Reasoning:** The reference game's most distinctive structural feature; genuinely an
 MMO-layer system since its value comes from a shared persistent world.
 **Why deferred:** M5. The M2 next-floor preview is the single-run seed of this idea.
+
+### P7 — Companion system (one slot, many expressions)
+**Idea:** Every Envoy has one Companion slot — a synchronization anchor (WORLD-CANON).
+The loaded protocol determines the occupant: Mend → a Reclaimed being that grows;
+Temper → the Pyre (Drift engine fed by residue from defeated enemies; name
+provisional per LEXICON).
+**Reasoning:** One architecture, many fantasies — the single-status-slot philosophy at
+system scale. §6.2: this is ONE progression loop, deliberately, not three (AI pet +
+mount + virus companion collapsed here by design).
+**Design questions:** Behavior config depth vs. cost; does personality emerge from
+config over time (the "programmable + beloved" unification)? Frames (P12) as
+mission-specific slot expressions?
+**Why deferred:** Canon now, mechanics M4+ — annotated in WORLD-CANON so fiction
+doesn't outrun the roadmap (RISKS #12).
+
+### P8 — Protocols: Mend / Temper
+**Idea:** Per-expedition philosophy loadout ("Load Protocol: MEND/TEMPER"), not a
+permanent faction. Changes how shared systems behave — Companion expression, gear
+interaction with Drift, support-vs-risk flavor. §6.4 governs: expression, not access.
+**Reasoning:** Turns the Purify/Purge schism into build identity (the core pillar:
+gear defines playstyle); dissolves faction-lock problems; roguelite-native.
+**Design questions:** What concretely differs at M4 scope (companion + 2–3 behavior
+modifiers is plenty)? Co-op composition effects?
+**Why deferred:** Needs Companion (P7) and progression (M4) to exist first.
+
+### P9 — Drift scalar
+**Idea:** `drift: float` per zone/run in the sim; presentation derives palette shifts,
+music, spawn-table weights, hazard density from thresholds. Headlessly testable.
+**Reasoning:** Replaces N boolean world-state flags with one scalar — textbook
+sim/presentation split. Single-player first; the community version (P13) is the same
+system pointed at a server, which keeps live-events possible without building netcode
+now.
+**Design questions:** Per-run, per-save, or per-zone-persistent? Threshold table in
+config; interaction with typed_damage_ramp. **Rule-of-two guard:** first prove ONE
+concrete consumer; do not create a universal Drift scalar merely because several
+future systems (spawn weighting, visuals, run exposure, community state) might use
+something with the same name — that's a god variable.
+**Why deferred:** M2-adjacent — consider during M2 design sessions, after golden-seed
+gen exists. Not an M2 gate item.
+
+### P10 — Gear states: Mended / Stable / Drifted
+**Idea:** Weapon identities, not rarity: Stable = baseline; Drifted = mechanical
+mutation (e.g. 6-hit combo, whiff-stun; doubled parry window, overload on fail) —
+challenge, not stat tax; Mended = reliable/synergistic. Drifted gear's downsides are
+ARCHITECTURAL, not numeric (e.g. occupies the wielder's status slot, or opens a
+type vulnerability) — and Umbral-neutral per §6.8: damage types are never faction
+property.
+**Reasoning:** Aspirational mastery + the seduction principle (§6.5) made tangible.
+**Design questions:** Which weapon gets the first Drifted identity; acquisition path
+per protocol.
+**Why deferred:** CONTENT MULTIPLIER (RISKS #13) — most weapons ship Stable-only;
+states are earned content one weapon at a time, post-M2, Treat-Rule friendly.
+
+### P11 — Contested enemy state
+**Idea:** Third state tag: caught between Drift and Axiom influence; elite/miniboss
+encounters where both motion languages collide on one body.
+**Reasoning:** Free drama from the orthogonal family×state architecture (§3).
+**Why deferred:** Needs Drifted+Claimed states shipped and readable first.
+
+### P12 — Frames (mobility platforms)
+**Idea:** Combat-identity platforms (spider frame, hover rig, assault walker) —
+change movement AND tactics; never "+5% speed," never a gear grind.
+**Reasoning:** Concept preserved from the arc; implementation archived. Relationship
+to Companion (P7) is UNRESOLVED — do not share a slot or base class without two
+concrete overlapping uses (§1.4 rule of two); ownership, animation, collision, and
+netcode needs may differ entirely.
+**Why deferred:** §6.2 — a fourth loop needs its lifetime cost justified.
+
+### P13 — Community world-state
+**Idea:** Shared Drift scalar across all players; community actions move zone
+thresholds (merchants evacuate at 0.95, boss appears at 0.68, etc.).
+**Reasoning:** "Architect for it, don't build it" — P9's design must not preclude a
+server-side source for the scalar; that single constraint keeps this alive for free.
+**Why deferred:** M5-if-ever; re-scope with M5 per §5.
+
+### P14 — Title decision
+**Idea:** Replace working title "Knight Depths" with a lexicon-family title.
+**Reasoning:** Repo name is the last knight standing (LEXICON: exempt, temporarily).
+Titles get trademark/collision search before adoption (Lattice and Loom both collide
+commercially as bare names).
+**Why deferred:** Zero urgency; titles crystallize once the world's language has been
+lived in. Explicitly deferred ≠ forgotten.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

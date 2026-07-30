@@ -50,7 +50,7 @@ Any unclear on non-trivial work → flag and ask/defer.
 
 ## Red Lines (stop + flag, do not proceed)
 Presentation writing sim state · unseeded RNG in gen/combat · content values hardcoded ·
-SK assets/names entering the repo · generic "engine" code with <2 concrete uses ·
+SK assets/names or LEXICON.md-banned terms entering the repo · generic "engine" code with <2 concrete uses ·
 new system started with open Sev-1 bugs · save schema change without version bump ·
 (M3+) client authority over health/damage/spawns · request ambiguity on never-trivial items.
 

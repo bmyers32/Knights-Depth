@@ -129,11 +129,11 @@ the one place hands-on-keyboard genuinely beats delegation: it installs the voca
 future session assumes.
 
 **C2. Warmup 2 — tiny arena, inside the real repo (3–6 hours).**
-Now in `knight-depths/`, run `/kickoff 0`. Build: a knight that moves with WASD
+Now in `knight-depths/`, run `/kickoff 0`. Build: an Envoy that moves with WASD
 (define input actions `move_up/down/left/right`, `attack`, `block` in the Input Map —
 names in config, never keycodes in scripts), a sword swing that's a short-lived hitbox
 (Area3D), one dummy enemy with HP that dies. Crucially, build it as a **miniature of
-the real architecture**: a tiny `sim/` with a SimWorld holding knight/enemy state,
+the real architecture**: a tiny `sim/` with a SimWorld holding Envoy/enemy state,
 input converted to Commands, mesh positions read from sim state. It will feel like
 ceremony for something this small — that's the rehearsal. Ask Claude to explain the
 split as you go; this is where Prime Directive 1 stops being abstract.
@@ -160,7 +160,7 @@ each session ends with something visible or a green test (Momentum Protocol):
    classes (zero Node imports — the headless GUT test enforcing this IS the deliverable).
    SimWorld.tick() moves one entity from scripted MoveCommands. Boring on screen,
    load-bearing forever.
-2. **Knight moves for real.** Input → Commands → sim → model interpolation. First
+2. **Envoy moves for real.** Input → Commands → sim → model interpolation. First
    moment the architecture pays rent visibly.
 3. **Sword + damage pipeline.** 3-hit combo in sim ticks, hit detection, the 4-type
    damage matrix read from `content/` resources (§3). GUT tests: weak AND resist
@@ -174,9 +174,10 @@ each session ends with something visible or a green test (Momentum Protocol):
    Iterate tuning (data changes only!) until PASS.
 9. **Itch build.** Export (HTML5 via Compatibility renderer), upload, hand the link to
    one friend. Art comes from the staging folder via an asset-intake session: KayKit
-   Adventurers (knight, weapons) + Character Animations, Quaternius monsters for
-   enemies, Kenney for environment/UI/audio — glTF preferred, **every import logged
-   in ASSETS.md the moment it enters the repo**.
+   Adventurers (the knight model becomes the Envoy's body — asset filenames are
+   LEXICON-exempt, code identifiers are not) + Character Animations, Quaternius
+   monsters for enemies, Kenney for environment/UI/audio — glTF preferred, **every
+   import logged in ASSETS.md the moment it enters the repo**.
 10. `/closeout` M1. Then take the Treat Rule — you'll have earned it.
 
 ## Standing habits from day one

@@ -35,8 +35,8 @@ PROMPTS-AND-USAGE.md. Check boxes as you go.
 
 ## Then — Milestone 1 (Phase D: ~6–10 sessions)
 - [ ] Asset intake session (once repo exists, before or during M1 session 2): Claude
-      Code imports ONLY what M1 needs from staging — KayKit knight + weapons +
-      animations, glTF preferred — and writes ASSETS.md rows
+      Code imports ONLY what M1 needs from staging — KayKit knight model (the Envoy's
+      body) + weapons + animations, glTF preferred — and writes ASSETS.md rows
 - [ ] `/kickoff 1` → follow the session ordering in SETUP-AND-START Phase D
       (sim skeleton → movement → damage pipeline → enemies → shield → gun →
       Burn → arena `/playtest` → itch build)
@@ -48,7 +48,7 @@ PROMPTS-AND-USAGE.md. Check boxes as you go.
 |---|---|
 | Claude, every session | CLAUDE.md → AGENTS.md + GAME-RULES.md (the law) |
 | Claude, per session | HANDOFF.md (baton, ≤120 lines) |
-| Claude, on demand | ROADMAP.md · BRAIN.md · RISKS.md · MECHANICS-REFERENCE.md · ASSETS.md |
+| Claude, on demand | ROADMAP.md · BRAIN.md · RISKS.md · MECHANICS-REFERENCE.md · ASSETS.md · LEXICON.md · WORLD-CANON.md · CORE-FANTASY.md |
 | Claude, when typed | .claude/commands/: kickoff · closeout · gate · recon · playtest · resume |
 | Machine, always | .claude/settings.json + scripts/guard.py (IP + law-file enforcement) |
 | You, once | QUICKSTART.md · SETUP-AND-START.md · PROMPTS-AND-USAGE.md · WORKFLOW-README.md |
