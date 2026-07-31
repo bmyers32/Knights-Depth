@@ -1,41 +1,40 @@
-# HANDOFF — 2026-07-30 (world-identity capture session, claude.ai)
+# HANDOFF — 2026-07-30 (guard.py hardening session)
 Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
 
 ## Done this session
-- M0 complete (both warmups done and closed out prior to this session).
-- Ten-document lore/design arc captured into law: LEXICON.md, WORLD-CANON.md,
-  CORE-FANTASY.md created; GAME-RULES gained §6 Design Laws (Change Log now §7).
-- Global renames: knight→Envoy (CLAUDE.md, GAME-RULES, SETUP/QUICKSTART Phase D);
-  Automaton→Watcher (true name Custodian) in §3 + MECHANICS-REFERENCE matrix.
-- §3 amendments: family×state orthogonality;
-  channel law (damage types=color, forces=silhouette/motion).
-- §5 M2: strata named (Archive, Foundry); run-end screen = Emergency Recall framing.
-- ROADMAP +P7–P14 (Companion, Protocols, Drift scalar, gear states, Contested,
-  Frames, community world-state, title) + NOT-list additions.
-- RISKS +12–14 (canon-outruns-milestones, gear-state multiplier, lexicon regression).
-- BRAIN +2 entries (native-sounding loanwords; capture-at-convergence).
-- Post-capture amendment (seed+5): three-axis law explicit in §6.8; Umbral combat
-  identity = coherence disruption; P10 Drift↔Umbral residue removed; type-count
-  challenge DECLINED (4 types × 6 families = locked arithmetic pair; playtest is
-  the venue for combat-feel challenges, not further documents).
-- QA fixes (seed+6): LEXICON's own "corruption engine" violation → Drift engine;
-  Umbral=dark gloss; channel law forces→STATES; warmup knight→Envoy; anti-multiplier
-  rule; Act 3 chronology; CORE-FANTASY provisional-authority; P9/P12 tightened.
-- **M1 roster LOCKED (seed+7): Common Fang · Drifted Ooze · Claimed Watcher** — one
-  weakness per specialized type. Hollow → Archive (M2) debut with true-name reveal.
-  Reversal requires playtest evidence.
+- `scripts/guard.py` updated per LEXICON.md "Banned & Watch Terms": hard-blocks navi,
+  net king, netking, dark web, undernet, virus, corruption (case-insensitive, scoped to
+  game/, tests/, content/ via pathlib component matching — never string search).
+- Warn-only (never block) added for "knight" in new game/ code; exempts asset
+  filenames, README, and the repo name ("Knight Depths").
+- Fixed a latent bug: the pre-existing SK-IP content check referenced an undefined
+  `lowered_path`, so it had never actually functioned (silent NameError on every real
+  trip) despite being wired correctly since M0 — see BRAIN's hook-verification entry,
+  second occurrence.
+- Fixed Edit/MultiEdit schema mismatch: content extraction read `new_str`, which
+  doesn't match the real tool field (`new_string`) or MultiEdit's `edits[]` array — both
+  were previously unscanned by any check.
+- Added a self-path exemption so guard.py doesn't trip its own IP/LEXICON term lists
+  when edited (those lists must exist as literal text in the file it guards).
+- RISKS #14 mitigation column: noted guard only covers Edit/Write/MultiEdit, Bash file
+  writes bypass the hook — accepted gap.
+- Verified via a 12-case trip matrix (3 LEXICON blocks, 1 warn, 4 allows, 1 fresh SK-IP
+  block, 1 guard-self-exemption check, 2 regression checks) — all passed as expected.
+- GUT suite re-run clean: 2 scripts, 5 tests, 9 asserts, 0.371s, no regressions
+  (expected — no sim/gen code touched).
+- Committed `7f43611` (bundles this session's guard hardening with the prior
+  world-identity-capture session's files, which were staged but uncommitted at
+  session start) and pushed to origin/main.
+- BRAIN.md: appended second occurrence + guard-can't-scan-its-own-source observation
+  to the existing "configured hook is not a working hook" entry (no new entry).
 
 ## Not done / next action
-1. **guard.py update** (file wasn't in session): banned strings per LEXICON — navi,
-   net king, netking, dark web, undernet, virus, corruption. Warn-only: `knight` in
-   NEW game/ identifiers. Normalize case + resolve paths with pathlib (BRAIN).
-   Verify by tripping BOTH directions:
-   BLOCK: game/content/corruption_weapon.tres · game/actors/virus.gd ·
-   tests/test_netking.gd — WARN: game/actors/knight.gd — ALLOW: README "Knight
-   Depths" · ASSETS.md KayKit filenames · GAME-RULES §7 history · BRAIN retrospectives.
-2. Copy updated files into repo root, review diff, commit + push
-   ("World identity capture + QA fixes + M1 roster — §7 seed+4..7").
-3. Then: asset intake session or /kickoff 1 session 1 (sim skeleton per Phase D).
+1. `/kickoff 1` session 1 — sim skeleton per SETUP-AND-START.md Phase D: SimWorld,
+   Command/Event types, headless-tick proof. No M1 combat code exists yet.
+2. Asset intake session (KayKit/Quaternius CC0 pulls for Envoy + Fang/Ooze/Watcher) —
+   still pending from the world-identity-capture session, untouched this session.
+3. M1 combat slice itself (Envoy, sword+gun+shield, 3 enemies, 1 arena, Burn status) —
+   not started.
 
 ## Open tensions
 - Pyre name provisional (Temper art direction); Hollow true name unassigned.
@@ -44,16 +43,20 @@ Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
 - CORE-FANTASY pillars are [YOUR CALL] drafts — developer homework, no deadline.
 
 ## Concepts introduced this session
-- (design, not engine) Register-based naming grammar; orthogonal state tags vs.
-  matrix rows; channel separation for visual language.
+- PreToolUse hooks: stdin JSON tool-call payload, exit 0 = allow / exit 2 = block,
+  stderr surfaces to Claude on block. "Configured" ≠ "verified" — a hook can be wired
+  correctly and still silently never fire; the only proof is deliberately tripping it.
 
 ## Do NOT redo
-- Naming re-litigation: slate is LOCKED per LEXICON amendment rule (vetoes were
-  taken; changes now require playtest/collision evidence + dated amendment).
-- Do not add Companion/Protocol mechanics before M4 (RISKS #12; canon annotated).
+- Naming re-litigation: slate is LOCKED (LEXICON amendment rule — playtest/collision
+  evidence + dated amendment only).
+- Do not add Companion/Protocol mechanics before M4 (RISKS #12).
 - Do not rename statuses to lore words (REJECTED — ROADMAP NOT-list).
+- guard.py: do not remove the `scripts/guard.py` self-path exemption or scan the
+  guard's own source for banned/IP content — it's structurally self-referential.
 
 ## Files touched
-LEXICON.md (new) · WORLD-CANON.md (new) · CORE-FANTASY.md (new) · GAME-RULES.md ·
-CLAUDE.md · AGENTS.md · MECHANICS-REFERENCE.md · ROADMAP.md · RISKS.md · BRAIN.md ·
-QUICKSTART.md · SETUP-AND-START.md
+scripts/guard.py · RISKS.md · BRAIN.md · HANDOFF.md (this file)
+(prior session's bundle, committed alongside: LEXICON.md, WORLD-CANON.md,
+CORE-FANTASY.md, GAME-RULES.md, CLAUDE.md, AGENTS.md, MECHANICS-REFERENCE.md,
+ROADMAP.md, QUICKSTART.md, SETUP-AND-START.md)

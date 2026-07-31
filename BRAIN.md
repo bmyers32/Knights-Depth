@@ -27,6 +27,20 @@ hook added at M3+ (netcode/save-schema guards), any cross-platform command wirin
 (`python3` vs `python`, `node` vs path-qualified). Verify a guard by trying to trip it,
 not by reading its config.
 
+**Second occurrence (M1, guard.py LEXICON update session):** the SK-IP content check
+referenced `lowered_path`, a variable never assigned anywhere in `main()` — every trip
+through that branch raised `NameError`, so the check had silently never functioned
+since it was written, wired correctly in settings.json the whole time. It only
+surfaced when the check was deliberately re-tripped via direct stdin invocation while
+adding unrelated banned-term coverage — not through any error visible during normal
+tool use. Confirms the lesson generalizes past interpreter-path failures to any silent
+runtime bug inside a hook body. **Adjacent, same session:** `guard.py`'s own source
+contains its banned/IP term lists as plaintext (`IP_BLOCKED_CONTENT`, `LEXICON_BANNED`)
+— so editing the guard through the very tool calls it's meant to gate (Edit/Write) trips
+its own content check, a permanent false positive requiring an explicit self-path
+exemption. **Applies elsewhere:** any future denylist-style guard whose term list lives
+in the same file it scans hits this by construction the first time someone edits it.
+
 ### New global class_name scripts need an editor scan before headless tests
 **Incident (M0):** added `class_name ToySimWorld` in `game/sim/toy_sim_world.gd`, wrote
 a GUT test referencing it, ran headless — `Identifier "ToySimWorld" not declared`.
