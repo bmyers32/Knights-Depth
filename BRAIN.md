@@ -53,6 +53,11 @@ class cache is just stale. **Applies elsewhere:** every future global class in t
 project — `SimWorld`, `Command`, `ContentDB`, `DepthGenerator` (M1–M2) will all hit
 this the first time they're added or renamed.
 
+**Second occurrence (M1, sim skeleton session):** hit again cold, exactly as predicted
+— adding `Command`/`Event`/`SimWorld` and a GUT test referencing them threw the same
+parse errors on the first headless run; the `--headless --editor --quit` rescan fixed
+it immediately. Confirms the lesson is genuinely load-bearing, not a one-off.
+
 ### Inspiration vocabulary hides best in words that feel native
 **Incident (design arc, pre-M1):** "Operator" survived eight rounds of naming review
 that killed Navi, Net King, and Dark Web — because it felt original. It wasn't; it was
