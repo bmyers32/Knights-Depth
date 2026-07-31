@@ -97,3 +97,35 @@ path-based rule (file-scoping, protected-dir checks) breaks the same way, silent
 the first time the caller's path format doesn't match what the string check assumed.
 **Applies elsewhere:** any hook/script in this repo that gates behavior on a file path
 — always resolve with `pathlib`/`os.path`, never assume relative-vs-absolute shape.
+
+### Sibling asset packs silently duplicate bundled content — diff before trusting either
+**Incident (M1, asset intake session):** KayKit's Adventurers pack bundles its own
+`Rig_Medium_General.glb`/`Rig_Medium_MovementBasic.glb`. The separate, dedicated
+Character Animations 1.1 pack ships files of the identical name covering a superset of
+categories. Parsing both glbs' animation-clip names (via the glTF JSON chunk) showed
+byte-for-byte identical clip lists — the Adventurers copies were pure duplicates, not a
+cut-down subset. **Mechanism:** publishers bundle a starter slice of a companion pack
+into a character pack for convenience; nothing in the filename or folder structure
+signals "this is a duplicate," only inspecting actual clip/mesh contents reveals it.
+**Failure if ignored:** importing both copies bloats the repo with redundant binary
+assets and creates two sources of truth that silently diverge the moment either pack
+updates. **Applies elsewhere:** the still-pending Kenney All-in-1 mega-bundle (likely
+internally overlaps with itself across sub-packs) and any future KayKit character pack
+(Barbarian/Mage/Ranger/Rogue) that bundles its own minimal animation set alongside the
+dedicated Animations pack — diff clip/mesh names before assuming either copy is unique.
+
+### glTF self-containment is per-file, not per-format — verify before copying
+**Incident (M1, asset intake session):** Quaternius's `.gltf` monster files embedded
+buffers and textures as base64 data URIs (fully self-contained despite the "external
+reference" `.gltf` extension), while KayKit's `.gltf` weapon files referenced an
+external `.bin` and a shared `weapons_bits_texture.png` by URI — same file extension,
+opposite packaging. Checked by parsing each file's `images`/`buffers` JSON keys for
+`bufferView` (embedded) vs `uri` (external) before deciding what to copy.
+**Mechanism:** `.glb` guarantees single-file self-containment by spec, but `.gltf` is
+just JSON — whether a given exporter embedded assets as data URIs or left them external
+is a per-file choice invisible from the extension or folder listing alone.
+**Failure if ignored:** copying only the `.gltf` for an externally-referenced pack ships
+a mesh with no texture and no geometry buffer — silent broken-asset bug that only
+surfaces when Godot tries to load it. **Applies elsewhere:** every future non-KayKit,
+non-Quaternius asset pack (Kenney included) — never assume a `.gltf`'s packaging from
+its sibling pack's convention; parse `images`/`buffers` per file before the copy step.
