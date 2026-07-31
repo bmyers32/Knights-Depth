@@ -66,7 +66,9 @@ knight_depths/
 - `SimWorld.tick(commands: Array[Command], dt) -> Array[Event]` — the only mutation path.
 - `Command` = {tick, actor_id, kind, params} · `Event` = {tick, kind, payload}. Both are
   plain data (serializable) — this is what makes M3 netcode a driver swap, not a rewrite.
-- `ContentDB.get(family, id) -> Resource` — content lookups by id, never preloads in sim.
+- `ContentDB.get_resource(family: StringName, id: StringName) -> Resource` — content
+  lookups by id, never preloads in sim. (Renamed from `get()`: GDScript can't override
+  native `Object.get()` with a different signature.)
 - `DepthGenerator.generate(seed: int, depth: int) -> FloorPlan` — pure function of inputs.
 - Combat pipeline order (fixed): hit detect → damage-type matrix (§3) → status apply →
   knockback → death/events. New mechanics slot into this pipeline, never bypass it.
