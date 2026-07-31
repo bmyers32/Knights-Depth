@@ -58,6 +58,30 @@ this the first time they're added or renamed.
 parse errors on the first headless run; the `--headless --editor --quit` rescan fixed
 it immediately. Confirms the lesson is genuinely load-bearing, not a one-off.
 
+**Third occurrence (M1, Envoy sim pipeline session):** same failure on `EnvoyStats`
+(new `class_name` in `game/content/envoy/envoy_stats.gd`) referenced from a GUT test.
+This time `--quit-after N` raced the scan and got killed mid-import (0 `.import` files
+generated); switched to `--headless --import`, which runs importing to completion and
+exits cleanly on its own — the more reliable fix going forward.
+
+### GDScript cannot override a native Object method with a different signature
+**Incident (M1, Envoy sim pipeline session):** `ContentDB.get(family, id)` was
+CLAUDE.md's documented Core Interface. Godot 4.7 hard-errors at parse time: `Object`
+already defines `get(StringName) -> Variant`; a script redefining `get` with a
+different signature is "Parse Error... Warning treated as error", not a soft warning —
+the autoload fails to instantiate and the whole project fails to boot. **Mechanism:**
+non-underscore-prefixed Object/Node methods (`get`, `set`, `free`, `connect`,
+`duplicate`, etc.) are real engine methods, not overridable virtuals; GDScript allows
+shadowing many identifiers but enforces signature compatibility for these. **Failure if
+ignored:** designing a Core Interface method name before checking it isn't already an
+Object/Node method — caught here only because the headless run failed loudly at
+project boot; renamed to `get_resource()` and the CLAUDE.md line amended with the
+constraint inline (`# Interface — do not drift` files still need updating when the
+engine makes the literal name impossible). **Applies elsewhere:** any future
+autoload/service-locator method name (`DepthGenerator`, `DebugOverlay`, M3 net driver
+methods) — check the name against `Object`'s method list before writing it into a
+contract doc.
+
 ### Inspiration vocabulary hides best in words that feel native
 **Incident (design arc, pre-M1):** "Operator" survived eight rounds of naming review
 that killed Navi, Net King, and Dark Web — because it felt original. It wasn't; it was
