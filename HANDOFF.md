@@ -42,23 +42,30 @@ Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
   Driver script was scratchpad-only, deleted after — dev scene file itself untouched.
   Hit BRAIN-worthy bug twice: knockback from one scripted attack silently moved the
   target out of the NEXT scripted attack's reach (zero events, no error) — see BRAIN.
-  **This was a headless/scripted check only — the user's own Input-driven visual pass
-  on the dev scene is still outstanding, not yet done.**
+  **This was a headless/scripted check only, not a substitute for a real Input-driven
+  pass — see the user's manual pass below, done after closeout.**
+- **User's manual pass on `envoy_movement_dev.tscn` (post-closeout, via F6 on the
+  opened scene):** movement and Envoy->Fang combat confirmed working. Sword cone
+  behaves according to stored movement-facing (expected — no dedicated aim input
+  exists yet). Finding: mouse-to-world aim is NOT wired; expected to arrive with
+  Phase D Step 6 gun work (aim becomes the shared `params.aim` convention once sword
+  and gun are its two concrete consumers). Shield input (hold/release RMB) can be
+  sanity-checked now, but visual depletion, break, recovery, and hit-i-frame
+  validation remain BLOCKED until an enemy can attack the Envoy — that's Step 7.
 - ROADMAP: P15 (dodge — own input, shares this session's i-frame timer) and P16
   (timed shield bounce, layers on the recorded `_block_start_tick`) logged.
 
 ## Not done / next action
-1. **User's manual visual pass on `envoy_movement_dev.tscn`** — hold/release RMB,
-   provoke a break, watch recovery — not yet done by the user (headless above is not
-   a substitute). Do this before further Phase D work.
-2. **Phase D Step 6: gun** — implement a projectile with deterministic travel time
+1. **Phase D Step 6: gun** — implement a projectile with deterministic travel time
    through the existing attack pipeline. Aim becomes the shared `params.aim`
-   convention now that sword and gun are its two concrete consumers. Do NOT add
-   homing, spread, ammo, reload, weapon switching, or a generalized weapons framework
-   in this slice.
-3. Steps 7-10 of Phase D (renumbered): enemies 2&3 (Ooze/Watcher) + Burn status, real
+   convention now that sword and gun are its two concrete consumers (this also wires
+   real mouse-to-world aim, per the manual-pass finding above). Do NOT add homing,
+   spread, ammo, reload, weapon switching, or a generalized weapons framework in this
+   slice.
+2. Steps 7-10 of Phase D (renumbered): enemies 2&3 (Ooze/Watcher) + Burn status, real
    arena (retires `game/dev/envoy_movement_dev.tscn`), 10-min playtest gate, itch
-   build. Not started.
+   build. Not started. **Step 7 also unblocks the shield's visual validation** (an
+   attacker for the Envoy is what's been missing).
 
 ## Open tensions
 - Shield/i-frame numbers (meter 20, regen 0.4/tick, break delay 30 ticks, break
@@ -97,4 +104,5 @@ Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
 · `game/dev/envoy_movement_dev.gd` · `game/content/enemies/fang/fang_stats.gd`/`.tres`
 · `game/content/shield/shield_stats.gd`/`.tres` (new) · `tests/test_shield.gd` (new)
 · `ROADMAP.md` (P15/P16) · `BRAIN.md` (knockback-invalidates-reach lesson) — all
-committed in ba28e4d. `HANDOFF.md` (this file, committed at closeout).
+committed in d4c7c29. `HANDOFF.md` (this file, updated post-closeout to record the
+user's manual pass; not yet committed).
