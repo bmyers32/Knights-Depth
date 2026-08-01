@@ -10,6 +10,15 @@ const _REGISTRY: Dictionary = {
 	"envoy": {
 		"default": preload("res://game/content/envoy/envoy_stats.tres"),
 	},
+	"weapon": {
+		"sword_A": preload("res://game/content/weapons/sword_stats.tres"),
+	},
+	"enemy": {
+		"fang": preload("res://game/content/enemies/fang/fang_stats.tres"),
+	},
+	"combat": {
+		"damage_matrix": preload("res://game/content/combat/damage_matrix.tres"),
+	},
 }
 
 

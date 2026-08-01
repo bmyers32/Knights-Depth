@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/actors/enemies/fang/fang.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://game/actors/enemies/fang/models/Dino.gltf" id="2_model"]
+
+[node name="Fang" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Model" parent="." instance=ExtResource("2_model")]

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="DamageMatrix" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/content/combat/damage_matrix.gd" id="1_matrix"]
+
+[resource]
+script = ExtResource("1_matrix")
+families = {
+"fang": {"weak_to": "pierce", "resists": "arc"},
+"dread": {"weak_to": "pierce", "resists": "umbral"},
+"tinker": {"weak_to": "umbral", "resists": "arc"},
+"ooze": {"weak_to": "umbral", "resists": "pierce"},
+"hollow": {"weak_to": "arc", "resists": "umbral"},
+"watcher": {"weak_to": "arc", "resists": "pierce"}
+}
+weak_multiplier = 1.5
+resist_multiplier = 0.5

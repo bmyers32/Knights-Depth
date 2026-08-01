@@ -23,6 +23,21 @@ func test_get_resource_unknown_id_pushes_error_and_returns_null() -> void:
 	assert_null(result)
 
 
+func test_get_resource_returns_sword_a_weapon_stats() -> void:
+	var stats: Resource = ContentDB.get_resource(&"weapon", &"sword_A")
+	assert_not_null(stats)
+
+
+func test_get_resource_returns_fang_enemy_stats() -> void:
+	var stats: Resource = ContentDB.get_resource(&"enemy", &"fang")
+	assert_not_null(stats)
+
+
+func test_get_resource_returns_damage_matrix() -> void:
+	var matrix: Resource = ContentDB.get_resource(&"combat", &"damage_matrix")
+	assert_not_null(matrix)
+
+
 func test_integration_registered_entity_moves_at_content_db_speed() -> void:
 	var stats: EnvoyStats = ContentDB.get_resource(&"envoy", &"default")
 	var sim := SimWorld.new()

@@ -10,10 +10,15 @@ func _ready() -> void:
 	stats = ContentDB.get_resource(&"envoy", &"default")
 
 
-func build_command(tick: int) -> Command:
+func build_commands(tick: int) -> Array[Command]:
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var direction := Vector3(input_dir.x, 0.0, input_dir.y)
-	return Command.new(tick, actor_id, "move", {"direction": direction})
+	var commands: Array[Command] = [Command.new(tick, actor_id, "move", {"direction": direction})]
+	if Input.is_action_just_pressed("attack"):
+		# aim = ZERO: no dedicated aim input yet, so the sim falls back to facing
+		# (last move direction) — see SimWorld._normalize_horizontal.
+		commands.append(Command.new(tick, actor_id, "attack", {"weapon_id": &"sword_A", "aim": Vector3.ZERO}))
+	return commands
 
 
 func sync_from_sim(sim_position: Vector3) -> void:
