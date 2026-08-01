@@ -24,6 +24,8 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P12 | Frames (mobility platforms) | PROPOSED | Combat identities, not transport; maybe a Companion-slot expression |
 | P13 | Community world-state | PROPOSED | Shared Drift scalar + thresholds; architect-for at P9, build M5-if-ever |
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
+| P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
+| P16 | Timed shield bounce | PROPOSED | Raise-in-window repels the attacker; layers on the recorded block-start tick |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
@@ -187,6 +189,39 @@ Titles get trademark/collision search before adoption (Lattice and Loom both col
 commercially as bare names).
 **Why deferred:** Zero urgency; titles crystallize once the world's language has been
 lived in. Explicitly deferred ≠ forgotten.
+
+### P15 — Dodge: own input, sim movement burst, i-frame trigger
+**Idea:** A dedicated dodge input (needs its own Input Map action — none exists yet)
+that triggers a short sim-side movement burst with a cooldown, and arms the SAME
+invulnerability timer the shield/i-frames session built (`SimWorld
+._iframe_ticks_remaining`, armed via `_iframe_ticks_on_hit`-style content data in
+ticks) — never a second invulnerability mechanism living in parallel.
+**Reasoning:** GAME-RULES §3 already says "i-frames on dodge/hit" — the architecture
+anticipates this, but this milestone's scope (Phase D step 5) only implements the
+"hit" trigger, since no dodge input/command/animation exists anywhere in the repo yet.
+This is sequencing against an unscheduled feature, not a scope reduction.
+**Design questions:** Dodge distance/duration in ticks; cooldown length; does a dodge
+cancel an in-progress block/attack; i-frame duration shared with hit-i-frames or its
+own (probably longer) content field.
+**Why deferred:** Not part of the shield/i-frame step this session — no input binding
+or movement-burst design has been done. First candidate once combo/charge (§3) also
+needs revisiting, since dodge likely interacts with combo timing.
+
+### P16 — Timed shield bounce
+**Idea:** Raising the shield within `bounce_window_ticks` of an incoming hit repels
+the attacker (knockback applied TO THEM instead of the block just absorbing), with an
+internal `bounce_cooldown_ticks` preventing spam. Both new fields on `ShieldStats`.
+Layers directly onto the shipped block system via the block-start tick SimWorld
+already records on every READY→HELD rising edge (`_block_start_tick`) — the bounce
+reads existing state instead of retrofitting a new one.
+**Reasoning:** Rewards timing over passively holding block, translated from the
+reference game's shield mechanics — a skill expression the flat "hold to negate"
+model doesn't have room for on its own.
+**Design questions:** Does a bounced attack still drain the meter? Does bounce work
+during the post-break `break_recovery_delay_ticks` window? Can bosses/heavy attacks be
+bounced, or are some attacks bounce-immune by data flag?
+**Why deferred:** Shield v1 (this session) ships the flat block/break model only;
+bounce is a Treat-Rule-friendly layer once the base mechanic is playtested.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

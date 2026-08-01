@@ -18,6 +18,10 @@ func build_commands(tick: int) -> Array[Command]:
 		# aim = ZERO: no dedicated aim input yet, so the sim falls back to facing
 		# (last move direction) — see SimWorld._normalize_horizontal.
 		commands.append(Command.new(tick, actor_id, "attack", {"weapon_id": &"sword_A", "aim": Vector3.ZERO}))
+	# held sent every tick, unconditionally — mirrors "move": each tick fully declares
+	# intent so the sim's rising-edge detection (SimWorld._apply_block) never depends
+	# on a missed edge-triggered press.
+	commands.append(Command.new(tick, actor_id, "block", {"held": Input.is_action_pressed("block")}))
 	return commands
 
 

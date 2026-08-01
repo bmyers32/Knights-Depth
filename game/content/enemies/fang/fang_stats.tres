@@ -6,3 +6,4 @@
 script = ExtResource("1_stats")
 max_health = 20.0
 family = &"fang"
+iframe_ticks_on_hit = 15

@@ -52,6 +52,9 @@ Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
    itch build. Not started.
 
 ## Open tensions
+- ROADMAP P15 (dodge — own input, shares this session's i-frame timer) and P16
+  (timed shield bounce, layers on the recorded block-start tick) added — both
+  explicitly deferred, not part of this session's shield/i-frame scope.
 - Pyre name provisional (Temper art direction); Hollow true name unassigned.
 - Palettes provisional pending Umbral/damage-type art pass (channel law holds).
 - Sync-as-meter: default NO (narrative only); annotated in canon.

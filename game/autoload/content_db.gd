@@ -19,6 +19,9 @@ const _REGISTRY: Dictionary = {
 	"combat": {
 		"damage_matrix": preload("res://game/content/combat/damage_matrix.tres"),
 	},
+	"shield": {
+		"default": preload("res://game/content/shield/shield_stats.tres"),
+	},
 }
 
 
