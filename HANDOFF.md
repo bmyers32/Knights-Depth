@@ -1,88 +1,101 @@
-# HANDOFF — 2026-07-31 (Envoy sim pipeline session)
+# HANDOFF — 2026-07-31 (Sword damage pipeline session)
 Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
 
 ## Done this session
-- Phase D step 2 committed (61df44f): real Envoy input -> Command -> SimWorld ->
-  presentation pipeline, replacing the M0 toy pattern.
-  - `SimWorld.add_entity(actor_id, position, move_speed)` — tunables register once,
-    Commands now carry only per-tick intent (`direction`). `move`'s old
-    `params.speed` is gone; sim reads `_move_speeds` set at registration.
-  - `ContentDB` autoload (`game/autoload/content_db.gd`): explicit registry, method is
-    `get_resource(family: StringName, id: StringName) -> Resource` — NOT `get()`
-    (GDScript can't override native `Object.get()`, hard parse error; CLAUDE.md Core
-    Interfaces line corrected to match). Missing family/id -> `push_error` + `null`,
-    no bare `assert()` (stripped in release exports).
-  - `game/content/envoy/envoy_stats.gd`/`.tres` — first real content resource,
-    `move_speed = 4.0` (matches the M0 toy's calibrated feel).
-  - `game/actors/envoy/envoy.gd`/`.tscn` — real Envoy: `build_command()` builds
-    `move` only; `sync_from_sim(sim_position)` is presentation-only, sets transform,
-    never sim state (Prime Directive 1).
-  - `game/dev/envoy_movement_dev.gd`/`.tscn` — dev-only scaffold, owns the one shared
-    `SimWorld`, drives the tick loop. Explicitly temporary; dies at Phase D step 8.
-  - `project.godot`: `ContentDB` autoload registered; `attack`/`block` Input Map
-    actions added (LMB/RMB) but nothing reads them yet — only `move` enters the
-    Command stream this session; `physics/common/physics_interpolation=true` (engine
-    smooths transforms set in `_physics_process` across faster render frames — no
-    manual lerp code).
-  - Tests: `test_sim_world.gd` updated for the registration flow (+1 new boundary
-    test: unregistered entity + move command = no movement); `test_content_db.gd`
-    added (4 registry cases + 1 sim-integration case). 17/17 GUT passing headless.
-- Verification Gate: all items PASS or N/A (fun-impact N/A — pure plumbing, no
-  playtest-gated mechanic yet).
-- BRAIN: two entries updated — "class_name needs editor scan" hit a 3rd time
-  (`EnvoyStats`); "GDScript can't override native Object methods" is new wisdom.
+- Phase D step 3 + partial step 4 committed (1658f9f): deterministic sword-attack
+  pipeline against a minimal real Fang target. Full walkthrough: input -> Envoy
+  `build_commands(tick)` (move always, `attack` on just-pressed) -> `SimWorld.tick`
+  -> `hit`/`died`/`attack_rejected`/`moved` Events -> dev-scaffold prints + presentation
+  sync (position only, never sim-state writes).
+- `SimWorld` gained: facing (horizontal, normalized, never zero — invariant enforced
+  in `_normalize_horizontal`, shared by move-facing-update and aim resolution),
+  `register_combatant(actor_id, max_health, family)`, `register_weapon(weapon_id,
+  damage, damage_type, reach, cone_half_angle_degrees, knockback_distance)`,
+  `set_damage_matrix(families, weak_multiplier, resist_multiplier)`. All three
+  registration methods take plain scalars/dicts — the scene driver resolves
+  `ContentDB` resources and unpacks them; **sim/ still never touches Resource or
+  Node types**, matching the existing `move_speed` pattern.
+- `attack` Command: `params = {weapon_id, aim}` only — reach/damage/cone/knockback
+  are content values, never in the Command. Pipeline order (GAME-RULES §3): validate
+  (dead attacker / unknown weapon -> `attack_rejected`, facing NOT updated) -> aim
+  resolve (explicit aim, else falls back to stored facing) -> facing updates only on
+  acceptance -> hit detect (radius + cone, actor_id-sorted for determinism, self/dead
+  excluded) -> damage-matrix multiplier -> knockback (position offset in sim, no
+  physics impulse) -> death event.
+- New content resources: `DamageMatrix` (`game/content/combat/`) ships **all 6
+  families complete** per GAME-RULES §3 even though only Fang has enemy content yet;
+  `SwordStats` (Force-typed baseline, `game/content/weapons/`); `FangStats`
+  (`game/content/enemies/fang/`). Registered in `ContentDB` under new `weapon`,
+  `enemy`, `combat` families. All numeric values are first-pass/provisional — no
+  playtest date yet, calibrate at the M1 playtest gate.
+- Fang stub actor (`game/actors/enemies/fang/`): position-sync presentation only, no
+  AI/loot/animation — exists solely to give the pipeline a real target.
+- Tests: `tests/test_combat.gd` (23 cases: facing/aim resolution, hit detection,
+  damage matrix, knockback, death, rejection, determinism), `tests/test_damage_matrix.gd`
+  (5-case content-lint asserting the §3 matrix invariants), `test_content_db.gd` +3.
+  **48/48 GUT passing headless** (91 asserts, 1.6s).
+- Verification Gate: all items PASS (fun-impact N/A — pipeline plumbing, not yet the
+  playtest-gated mechanic; no RNG this feature, so PD4 doesn't apply).
+- Explicit note carried forward: the single-hit attack is the first proven step of
+  the LOCKED 3-hit combo + hold-to-charge spec (GAME-RULES §3) — not a scope
+  reduction. Combo/charge will sequence multiple attacks through this same pipeline.
 
 ## Not done / next action
-1. **Phase D step 3: sword damage pipeline.** First sim mechanic beyond `move` —
-   hit detect -> damage-type matrix -> status apply -> knockback -> death/events
-   (fixed pipeline order, GAME-RULES §3/Core Interfaces). Needs an `attack` Command
-   kind (bindings already exist in Input Map, unused), a weapon content resource
-   family (`sword_A` mesh is in the repo, no resource wrapping it yet), and a target
-   to hit — likely pairs naturally with step 5 (first enemy, Fang) rather than
-   sequencing strictly.
-2. Steps 4-10 of Phase D: first enemy (Fang) in sim, shield/i-frames, gun, enemies
-   2&3 (Ooze/Watcher) + Burn status, real arena (Kenney assets — retires
-   `game/dev/envoy_movement_dev.tscn`), 10-min playtest gate, itch build. Not started.
+1. **Phase D step 5: shield + i-frames.** Hold-to-block with its own break meter that
+   regenerates, knockback on break (GAME-RULES §3); i-frames on dodge/hit, durations
+   in sim ticks — never seconds — from config. Likely needs a `block` Command kind
+   (Input Map binding already exists, unused) and an i-frame/block-state flag per
+   entity in SimWorld, following the same "driver resolves content, sim takes plain
+   scalars" boundary established this session.
+2. Steps 6-10 of Phase D (renumbered): gun, enemies 2&3 (Ooze/Watcher) + Burn status,
+   real arena (retires `game/dev/envoy_movement_dev.tscn`), 10-min playtest gate,
+   itch build. Not started.
 
 ## Open tensions
 - Pyre name provisional (Temper art direction); Hollow true name unassigned.
 - Palettes provisional pending Umbral/damage-type art pass (channel law holds).
 - Sync-as-meter: default NO (narrative only); annotated in canon.
 - CORE-FANTASY pillars are [YOUR CALL] drafts — developer homework, no deadline.
+- Damage-matrix multipliers (weak x1.5, resist x0.5) and sword/Fang numbers (10 dmg,
+  2.0 reach, 60° cone, 1.0 knockback, 20 HP) are first-pass guesses, not calibrated —
+  flag for the M1 playtest gate.
 
 ## Concepts introduced this session
-- Godot physics interpolation (project setting): automatically smooths any transform
-  written in `_physics_process` across the faster `_process` render frames between
-  fixed sim ticks — replaces hand-rolled lerp-between-snapshots code entirely.
-- GDScript cannot override a native `Object`/`Node` method (`get`, `set`, `free`,
-  `connect`, ...) with a different signature — hard parse error, not a warning; check
-  new autoload/service-locator method names against `Object`'s method list first.
+- None new — the facing/aim/cone-hit-detection design (horizontal dot-product
+  threshold, radius+cone hit query) came from the user fully specified; no first-use
+  explanation was needed this session.
 
 ## Do NOT redo
 - Naming re-litigation: slate is LOCKED (LEXICON amendment rule).
 - Do not add Companion/Protocol mechanics before M4 (RISKS #12).
 - Do not rename statuses to lore words (REJECTED — ROADMAP NOT-list).
 - guard.py: do not remove the self-path exemption or scan the guard's own source.
-- Sim design calls are the pattern, not open questions: entities keyed by actor_id in
-  a Dictionary; tunables register via `SimWorld.add_entity(actor_id, position,
-  move_speed)` — **superseded from last session:** tunables no longer travel in
-  `Command.params`; params carry only per-tick intent (e.g. `direction`).
-- SimWorld ownership: ONE shared instance per level, owned by a scene-level driver
-  (not an autoload, not one-per-actor). Actors hold a direct reference and the driver
-  calls down (pulls commands, pushes results) — no `get_node` upward paths, no
-  signals needed for this. Don't generalize it into a reusable `SimDriver` class until
-  a second concrete scene needs it (rule of two) — that's naturally step 8 (real arena).
 - ContentDB's lookup method is `get_resource(family, id)`, never `get()` — see BRAIN.
-- Headless GUT runs need a prior `godot --headless --import` (not `--quit-after N`,
-  which can race and abort mid-scan) whenever a new `class_name` script is added —
-  see BRAIN "class_name needs editor scan."
+- Headless GUT runs need a prior `godot --headless --import` whenever a new
+  `class_name` script is added (`DamageMatrix`/`FangStats`/`SwordStats` hit this
+  again this session, 4th occurrence) — see BRAIN "class_name needs editor scan."
+- SimWorld ownership: ONE shared instance per level, owned by a scene-level driver
+  (not an autoload, not one-per-actor); don't generalize into a reusable `SimDriver`
+  until a second concrete scene needs it (rule of two) — still step 8 (real arena).
+- sim/ never references Resource or ContentDB directly — the driver always resolves
+  content and passes plain scalars/dicts into SimWorld registration methods
+  (`add_entity`, `register_combatant`, `register_weapon`, `set_damage_matrix`). Do
+  not "simplify" this by having SimWorld preload/ContentDB.get_resource itself.
+- Command.params carries only per-tick intent (`direction`, `weapon_id`, `aim`) —
+  never authoritative values (damage/reach/cone/cooldown live in registered content).
+- No combo counter, charge-hold, or attack cooldown state exists yet — the single
+  discrete attack is deliberate scope, not an oversight; do not bolt on combo/charge
+  as a second path. Sequence future attacks through `_apply_attack`.
 - Asset intake pattern: extract zips to OS temp (never into the repo), inspect for
   wrapper folders and license files directly, confirm glb vs external-ref gltf before
   copying, one commit per intake batch.
 
 ## Files touched
-`CLAUDE.md` (Core Interfaces line) · `BRAIN.md` (2 entries) · `game/sim/sim_world.gd` ·
-`game/autoload/content_db.gd` (new) · `game/content/envoy/**` (new) ·
-`game/actors/envoy/envoy.gd`/`.tscn` (new) · `game/dev/**` (new) ·
-`tests/test_sim_world.gd` · `tests/test_content_db.gd` (new) · `project.godot` — all
-committed in 61df44f. `HANDOFF.md` (this file, committed at closeout).
+`game/sim/sim_world.gd` · `game/actors/envoy/envoy.gd` · `game/autoload/content_db.gd`
+· `game/dev/envoy_movement_dev.gd`/`.tscn` · `game/actors/enemies/fang/**` (new) ·
+`game/content/combat/damage_matrix.gd`/`.tres` (new) ·
+`game/content/weapons/sword_stats.gd`/`.tres` (new) ·
+`game/content/enemies/fang/fang_stats.gd`/`.tres` (new) ·
+`tests/test_combat.gd` (new) · `tests/test_damage_matrix.gd` (new) ·
+`tests/test_content_db.gd` — all committed in 1658f9f. `HANDOFF.md` (this file,
+committed at closeout).
