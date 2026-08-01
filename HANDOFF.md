@@ -1,104 +1,100 @@
-# HANDOFF — 2026-07-31 (Sword damage pipeline session)
+# HANDOFF — 2026-08-01 (Shield block + hit i-frames session)
 Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
 
 ## Done this session
-- Phase D step 3 + partial step 4 committed (1658f9f): deterministic sword-attack
-  pipeline against a minimal real Fang target. Full walkthrough: input -> Envoy
-  `build_commands(tick)` (move always, `attack` on just-pressed) -> `SimWorld.tick`
-  -> `hit`/`died`/`attack_rejected`/`moved` Events -> dev-scaffold prints + presentation
-  sync (position only, never sim-state writes).
-- `SimWorld` gained: facing (horizontal, normalized, never zero — invariant enforced
-  in `_normalize_horizontal`, shared by move-facing-update and aim resolution),
-  `register_combatant(actor_id, max_health, family)`, `register_weapon(weapon_id,
-  damage, damage_type, reach, cone_half_angle_degrees, knockback_distance)`,
-  `set_damage_matrix(families, weak_multiplier, resist_multiplier)`. All three
-  registration methods take plain scalars/dicts — the scene driver resolves
-  `ContentDB` resources and unpacks them; **sim/ still never touches Resource or
-  Node types**, matching the existing `move_speed` pattern.
-- `attack` Command: `params = {weapon_id, aim}` only — reach/damage/cone/knockback
-  are content values, never in the Command. Pipeline order (GAME-RULES §3): validate
-  (dead attacker / unknown weapon -> `attack_rejected`, facing NOT updated) -> aim
-  resolve (explicit aim, else falls back to stored facing) -> facing updates only on
-  acceptance -> hit detect (radius + cone, actor_id-sorted for determinism, self/dead
-  excluded) -> damage-matrix multiplier -> knockback (position offset in sim, no
-  physics impulse) -> death event.
-- New content resources: `DamageMatrix` (`game/content/combat/`) ships **all 6
-  families complete** per GAME-RULES §3 even though only Fang has enemy content yet;
-  `SwordStats` (Force-typed baseline, `game/content/weapons/`); `FangStats`
-  (`game/content/enemies/fang/`). Registered in `ContentDB` under new `weapon`,
-  `enemy`, `combat` families. All numeric values are first-pass/provisional — no
-  playtest date yet, calibrate at the M1 playtest gate.
-- Fang stub actor (`game/actors/enemies/fang/`): position-sync presentation only, no
-  AI/loot/animation — exists solely to give the pipeline a real target.
-- Tests: `tests/test_combat.gd` (23 cases: facing/aim resolution, hit detection,
-  damage matrix, knockback, death, rejection, determinism), `tests/test_damage_matrix.gd`
-  (5-case content-lint asserting the §3 matrix invariants), `test_content_db.gd` +3.
-  **48/48 GUT passing headless** (91 asserts, 1.6s).
-- Verification Gate: all items PASS (fun-impact N/A — pipeline plumbing, not yet the
-  playtest-gated mechanic; no RNG this feature, so PD4 doesn't apply).
-- Explicit note carried forward: the single-hit attack is the first proven step of
-  the LOCKED 3-hit combo + hold-to-charge spec (GAME-RULES §3) — not a scope
-  reduction. Combo/charge will sequence multiple attacks through this same pipeline.
+- Phase D step 5 committed (ba28e4d): shield block + hit i-frames, full design lock
+  captured via AskUserQuestion before implementation (see commit body for the complete
+  rule set — full-absorb block, READY/HELD/BROKEN state machine, fresh-intent recovery).
+- `SimWorld` gained: `register_shield(actor_id, meter_max, regen_per_tick,
+  break_recovery_delay_ticks, knockback_distance)`; `register_combatant` gained a 4th
+  optional param `iframe_ticks_on_hit` (default 0, non-breaking). New `block` Command
+  (`{held: bool}`, sent every tick like `move` — continuous intent, not edge-triggered).
+  New Events: `blocked`, `shield_broken`, `block_rejected(reason)`, `attack_absorbed
+  (reason)`. `_advance_iframes()` decrements once per `tick()` call, independent of
+  which Commands arrive.
+- Shield state machine: READY regenerates each tick; HELD freezes the meter (a
+  commitment); BROKEN withholds regen for `break_recovery_delay_ticks` then flips to
+  READY the instant meter > 0 (no minimum). READY->HELD requires a RISING EDGE of
+  `held` — this is the whole fresh-intent mechanism: holding straight through a break
+  never auto-re-enters HELD, but a real press always does, with no separate "just
+  recovered" flag needed. BROKEN rejects any held block command by name
+  (`block_rejected`, reason `"broken"`), whether it's a continued hold or a fresh press.
+- i-frames: armed ONLY by an unblocked, non-lethal hit (never by a blocked hit, a
+  shield break, or an absorbed swing — one shared timer, trigger is a parameter, dodge
+  will arm the same timer later per ROADMAP P15). Full negation while active: no
+  damage, no knockback, no status.
+- New content: `ShieldStats` (`game/content/shield/`, new `shield` ContentDB family);
+  `FangStats.iframe_ticks_on_hit`. Calibration note added with tick->second
+  conversions at 30Hz (regen 0.4/tick = 1.67s full regen; break delay 30 ticks = 1.0s)
+  — explicitly marked UNVALIDATED PENDING THE STEP 8 PLAYTEST, not "feels right yet."
+- Tests: `tests/test_shield.gd`, 26 cases covering every locked invariant including 4
+  the user specifically re-audited post-hoc: fresh-press-while-broken rejection
+  (distinct from continued-hold rejection), no-auto-resume-after-recovery, a
+  consolidated single-break-event test (no hit/iframe/weapon-knockback also firing),
+  and off-by-one boundary pins for both the break-delay and hit-iframe timers (driven
+  by consecutive real ticks, not just noop counters). **74/74 GUT passing headless.**
+- Scripted headless smoke test run against the REAL (unmodified) dev scaffold scene
+  (`envoy_movement_dev.tscn`) — instantiated it, grabbed its real `sim`/actor refs,
+  disabled its automatic `_physics_process` (own driver would double-tick otherwise),
+  drove a scripted Command sequence, logged tick/state/meter. Confirmed all 6 required
+  behaviors against REAL content values (frozen-while-HELD, regen-while-lowered,
+  break-forces-off, no-auto-reraise, release+press-reraises, i-frame full negation).
+  Driver script was scratchpad-only, deleted after — dev scene file itself untouched.
+  Hit BRAIN-worthy bug twice: knockback from one scripted attack silently moved the
+  target out of the NEXT scripted attack's reach (zero events, no error) — see BRAIN.
+  **This was a headless/scripted check only — the user's own Input-driven visual pass
+  on the dev scene is still outstanding, not yet done.**
+- ROADMAP: P15 (dodge — own input, shares this session's i-frame timer) and P16
+  (timed shield bounce, layers on the recorded `_block_start_tick`) logged.
 
 ## Not done / next action
-1. **Phase D step 5: shield + i-frames.** Hold-to-block with its own break meter that
-   regenerates, knockback on break (GAME-RULES §3); i-frames on dodge/hit, durations
-   in sim ticks — never seconds — from config. Likely needs a `block` Command kind
-   (Input Map binding already exists, unused) and an i-frame/block-state flag per
-   entity in SimWorld, following the same "driver resolves content, sim takes plain
-   scalars" boundary established this session.
-2. Steps 6-10 of Phase D (renumbered): gun, enemies 2&3 (Ooze/Watcher) + Burn status,
-   real arena (retires `game/dev/envoy_movement_dev.tscn`), 10-min playtest gate,
-   itch build. Not started.
+1. **User's manual visual pass on `envoy_movement_dev.tscn`** — hold/release RMB,
+   provoke a break, watch recovery — not yet done by the user (headless above is not
+   a substitute). Do this before further Phase D work.
+2. **Phase D Step 6: gun** — implement a projectile with deterministic travel time
+   through the existing attack pipeline. Aim becomes the shared `params.aim`
+   convention now that sword and gun are its two concrete consumers. Do NOT add
+   homing, spread, ammo, reload, weapon switching, or a generalized weapons framework
+   in this slice.
+3. Steps 7-10 of Phase D (renumbered): enemies 2&3 (Ooze/Watcher) + Burn status, real
+   arena (retires `game/dev/envoy_movement_dev.tscn`), 10-min playtest gate, itch
+   build. Not started.
 
 ## Open tensions
-- ROADMAP P15 (dodge — own input, shares this session's i-frame timer) and P16
-  (timed shield bounce, layers on the recorded block-start tick) added — both
-  explicitly deferred, not part of this session's shield/i-frame scope.
+- Shield/i-frame numbers (meter 20, regen 0.4/tick, break delay 30 ticks, break
+  knockback 1.5) are first-pass and explicitly unvalidated — calibrate at the M1
+  playtest gate alongside the existing sword/Fang/matrix numbers.
 - Pyre name provisional (Temper art direction); Hollow true name unassigned.
 - Palettes provisional pending Umbral/damage-type art pass (channel law holds).
-- Sync-as-meter: default NO (narrative only); annotated in canon.
 - CORE-FANTASY pillars are [YOUR CALL] drafts — developer homework, no deadline.
-- Damage-matrix multipliers (weak x1.5, resist x0.5) and sword/Fang numbers (10 dmg,
-  2.0 reach, 60° cone, 1.0 knockback, 20 HP) are first-pass guesses, not calibrated —
-  flag for the M1 playtest gate.
 
 ## Concepts introduced this session
-- None new — the facing/aim/cone-hit-detection design (horizontal dot-product
-  threshold, radius+cone hit query) came from the user fully specified; no first-use
-  explanation was needed this session.
+- None new — shield state-machine and i-frame design came from the user fully
+  specified via AskUserQuestion answers; no first-use engine-concept explanation
+  needed this session.
 
 ## Do NOT redo
 - Naming re-litigation: slate is LOCKED (LEXICON amendment rule).
 - Do not add Companion/Protocol mechanics before M4 (RISKS #12).
-- Do not rename statuses to lore words (REJECTED — ROADMAP NOT-list).
 - guard.py: do not remove the self-path exemption or scan the guard's own source.
-- ContentDB's lookup method is `get_resource(family, id)`, never `get()` — see BRAIN.
-- Headless GUT runs need a prior `godot --headless --import` whenever a new
-  `class_name` script is added (`DamageMatrix`/`FangStats`/`SwordStats` hit this
-  again this session, 4th occurrence) — see BRAIN "class_name needs editor scan."
-- SimWorld ownership: ONE shared instance per level, owned by a scene-level driver
-  (not an autoload, not one-per-actor); don't generalize into a reusable `SimDriver`
-  until a second concrete scene needs it (rule of two) — still step 8 (real arena).
-- sim/ never references Resource or ContentDB directly — the driver always resolves
-  content and passes plain scalars/dicts into SimWorld registration methods
-  (`add_entity`, `register_combatant`, `register_weapon`, `set_damage_matrix`). Do
-  not "simplify" this by having SimWorld preload/ContentDB.get_resource itself.
-- Command.params carries only per-tick intent (`direction`, `weapon_id`, `aim`) —
-  never authoritative values (damage/reach/cone/cooldown live in registered content).
-- No combo counter, charge-hold, or attack cooldown state exists yet — the single
-  discrete attack is deliberate scope, not an oversight; do not bolt on combo/charge
-  as a second path. Sequence future attacks through `_apply_attack`.
-- Asset intake pattern: extract zips to OS temp (never into the repo), inspect for
-  wrapper folders and license files directly, confirm glb vs external-ref gltf before
-  copying, one commit per intake batch.
+- `godot --headless --import` before any headless GUT run that added a new
+  `class_name` script (`ShieldStats` this session) — see BRAIN.
+- sim/ never references Resource or ContentDB directly — driver resolves content,
+  passes plain scalars into SimWorld registration methods. Do not "simplify" this.
+- Command.params carries only per-tick intent, never authoritative values.
+- Block Command is continuous (`held` sent every tick), never edge-triggered — mirrors
+  `move`. Do not switch it to a `block_start`/`block_stop` pair.
+- HELD is entered from READY only on a rising edge of `held` — do not "simplify" to
+  `state == ready and held` (that's exactly the bug the fresh-intent rule prevents).
+- Dodge is NOT implemented (ROADMAP P15) — do not build it ad hoc inside a future
+  session; it must arm the SAME i-frame timer this session built, never a second one.
+- Knockback can silently move an actor out of another attack's reach with zero events
+  — re-derive positions before trusting reach math in any future scripted sequence or
+  multi-step encounter design (BRAIN).
 
 ## Files touched
 `game/sim/sim_world.gd` · `game/actors/envoy/envoy.gd` · `game/autoload/content_db.gd`
-· `game/dev/envoy_movement_dev.gd`/`.tscn` · `game/actors/enemies/fang/**` (new) ·
-`game/content/combat/damage_matrix.gd`/`.tres` (new) ·
-`game/content/weapons/sword_stats.gd`/`.tres` (new) ·
-`game/content/enemies/fang/fang_stats.gd`/`.tres` (new) ·
-`tests/test_combat.gd` (new) · `tests/test_damage_matrix.gd` (new) ·
-`tests/test_content_db.gd` — all committed in 1658f9f. `HANDOFF.md` (this file,
-committed at closeout).
+· `game/dev/envoy_movement_dev.gd` · `game/content/enemies/fang/fang_stats.gd`/`.tres`
+· `game/content/shield/shield_stats.gd`/`.tres` (new) · `tests/test_shield.gd` (new)
+· `ROADMAP.md` (P15/P16) · `BRAIN.md` (knockback-invalidates-reach lesson) — all
+committed in ba28e4d. `HANDOFF.md` (this file, committed at closeout).

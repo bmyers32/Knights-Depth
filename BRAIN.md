@@ -138,6 +138,28 @@ internally overlaps with itself across sub-packs) and any future KayKit characte
 (Barbarian/Mage/Ranger/Rogue) that bundles its own minimal animation set alongside the
 dedicated Animations pack — diff clip/mesh names before assuming either copy is unique.
 
+### Knockback silently invalidates a scripted sequence's next-step reach assumption
+**Incident (M1, shield/i-frame session):** A headless scripted verification sequence
+had the Envoy attack Fang twice in a row to demonstrate hit i-frames. The first
+swing's own knockback (`weapon.knockback_distance`) pushed Fang from range 1.5 to 2.5
+— outside the sword's 2.0 reach. The second "attack" silently produced zero events
+(not even `attack_rejected`), because `_apply_attack`'s reach/cone check `continue`s
+with no event for an out-of-range target. That looked identical to "i-frames
+correctly absorbed the swing" until inspected closely. Hit again minutes later, same
+session: a shield-break's own knockback moved the Envoy out of range for a
+Fang-attacks-Envoy sequence staged right after it. **Mechanism:** an out-of-range
+target and a correctly-absorbed/blocked attack both emit nothing distinguishable —
+there is no "didn't even reach" event, so a scripted or manual check reading "no
+damage happened, as expected" can be passing for entirely the wrong reason.
+**Failure if ignored:** a verification sequence (headless script or manual playtest
+choreography) silently validates a mechanic that never actually fired, because an
+earlier step's knockback quietly moved a participant out of range. **Applies
+elsewhere:** any future scripted verification or manual playtest chaining multiple
+attacks/hits between the same actors — gun travel-time step, multi-enemy encounters,
+combo sequencing (M1 step 6+). Always re-derive actor positions after a
+knockback-producing event before trusting the next step's reach math, or reset
+positions explicitly between scripted steps.
+
 ### glTF self-containment is per-file, not per-format — verify before copying
 **Incident (M1, asset intake session):** Quaternius's `.gltf` monster files embedded
 buffers and textures as base64 data URIs (fully self-contained despite the "external
