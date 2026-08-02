@@ -12,6 +12,7 @@ const _REGISTRY: Dictionary = {
 	},
 	"weapon": {
 		"sword_A": preload("res://game/content/weapons/sword_stats.tres"),
+		"wand_A": preload("res://game/content/weapons/gun_stats.tres"),
 	},
 	"enemy": {
 		"fang": preload("res://game/content/enemies/fang/fang_stats.tres"),

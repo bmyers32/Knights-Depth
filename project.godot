@@ -14,14 +14,14 @@ config/name="Knights Depth"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+ContentDB="*res://game/autoload/content_db.gd"
+
 [display]
 
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-
-[autoload]
-
-ContentDB="*res://game/autoload/content_db.gd"
 
 [editor_plugins]
 
@@ -60,11 +60,16 @@ block={
 ]
 }
 
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="aimable_targets"
+
 [physics]
 
 common/physics_ticks_per_second=30
-common/physics_interpolation=true
 3d/physics_engine="Jolt Physics"
+common/physics_interpolation=true
 
 [rendering]
 

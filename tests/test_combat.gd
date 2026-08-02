@@ -22,7 +22,10 @@ func _register_fang(position: Vector3, max_health: float = 20.0) -> void:
 
 
 func _attack(aim: Vector3 = Vector3.ZERO, weapon_id: StringName = WEAPON_ID) -> Array[Event]:
-	var command := Command.new(sim.tick_count, ATTACKER_ID, "attack", {"weapon_id": weapon_id, "aim": aim})
+	# Equip state is sim-owned (SimWorld.set_equipped_weapon) — the attack Command
+	# itself carries only per-action intent (aim), never a weapon_id.
+	sim.set_equipped_weapon(ATTACKER_ID, weapon_id)
+	var command := Command.new(sim.tick_count, ATTACKER_ID, "attack", {"aim": aim})
 	return sim.tick([command], 1.0 / 30.0)
 
 
@@ -202,8 +205,10 @@ func test_identical_state_and_commands_produce_identical_results() -> void:
 	sim2.add_entity(TARGET_ID, Vector3(0, 0, -1), 0.0)
 	sim2.register_combatant(TARGET_ID, 20.0, &"fang")
 
-	var command1 := Command.new(sim.tick_count, ATTACKER_ID, "attack", {"weapon_id": WEAPON_ID, "aim": Vector3(0, 0, -1)})
-	var command2 := Command.new(sim2.tick_count, ATTACKER_ID, "attack", {"weapon_id": WEAPON_ID, "aim": Vector3(0, 0, -1)})
+	sim.set_equipped_weapon(ATTACKER_ID, WEAPON_ID)
+	sim2.set_equipped_weapon(ATTACKER_ID, WEAPON_ID)
+	var command1 := Command.new(sim.tick_count, ATTACKER_ID, "attack", {"aim": Vector3(0, 0, -1)})
+	var command2 := Command.new(sim2.tick_count, ATTACKER_ID, "attack", {"aim": Vector3(0, 0, -1)})
 	var events1 := sim.tick([command1], 1.0 / 30.0)
 	var events2 := sim2.tick([command2], 1.0 / 30.0)
 

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="GunStats" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/content/weapons/gun_stats.gd" id="1_stats"]
+
+[resource]
+script = ExtResource("1_stats")
+weapon_class = &"gun"
+base_damage = 6.0
+damage_type = &"force"
+speed = 8.0
+max_lifetime_ticks = 60
+hit_radius = 0.4
+knockback_distance = 0.0
+fire_interval_ticks = 15

@@ -23,6 +23,7 @@ func before_each() -> void:
 	sim = SimWorld.new()
 	sim.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
 	sim.register_weapon(WEAPON_ID, 10.0, &"force", 2.0, 60.0, 1.0)
+	sim.set_equipped_weapon(ATTACKER_ID, WEAPON_ID)
 	sim.set_damage_matrix({}, 1.5, 0.5)
 
 
@@ -40,7 +41,7 @@ func _tick_block(held: bool) -> Array[Event]:
 
 
 func _tick_attack() -> Array[Event]:
-	return sim.tick([Command.new(sim.tick_count, ATTACKER_ID, "attack", {"weapon_id": WEAPON_ID, "aim": Vector3.ZERO})], 1.0 / 30.0)
+	return sim.tick([Command.new(sim.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO})], 1.0 / 30.0)
 
 
 func _tick_noop() -> Array[Event]:
@@ -347,12 +348,13 @@ func test_block_and_attack_sequence_is_deterministic() -> void:
 		var local_sim := SimWorld.new()
 		local_sim.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
 		local_sim.register_weapon(WEAPON_ID, 10.0, &"force", 2.0, 60.0, 1.0)
+		local_sim.set_equipped_weapon(ATTACKER_ID, WEAPON_ID)
 		local_sim.set_damage_matrix({}, 1.5, 0.5)
 		local_sim.add_entity(TARGET_ID, TARGET_POSITION, 0.0)
 		local_sim.register_combatant(TARGET_ID, 100.0, TARGET_FAMILY, 5)
 		local_sim.register_shield(TARGET_ID, 20.0, 1.0, 3, 2.0)
 		local_sim.tick([Command.new(local_sim.tick_count, TARGET_ID, "block", {"held": true})], 1.0 / 30.0)
-		local_sim.tick([Command.new(local_sim.tick_count, ATTACKER_ID, "attack", {"weapon_id": WEAPON_ID, "aim": Vector3.ZERO})], 1.0 / 30.0)
+		local_sim.tick([Command.new(local_sim.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO})], 1.0 / 30.0)
 		local_sim.tick([Command.new(local_sim.tick_count, TARGET_ID, "block", {"held": false})], 1.0 / 30.0)
 		results.append({"meter": local_sim._shield_meter[TARGET_ID], "state": local_sim._shield_state[TARGET_ID], "health": local_sim._health[TARGET_ID]})
 	assert_eq(results[0], results[1], "an identical command sequence must produce identical sim state")

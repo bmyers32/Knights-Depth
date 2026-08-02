@@ -6,6 +6,10 @@ extends Resource
 ## join this resource when Phase D sequences the locked 3-hit + hold-to-charge spec
 ## on top of this same pipeline.
 
+## weapon_class (not `class` — reserved word for inner classes in GDScript) is
+## GAME-RULES §3's required tag on every weapon resource (sword/gun/bomb).
+@export var weapon_class: StringName = &"sword"
+
 ## Provisional first-pass numbers, no playtest date yet (GAME-RULES calibration-note
 ## law) — revisit at the M1 playtest gate.
 @export var base_damage: float = 10.0
