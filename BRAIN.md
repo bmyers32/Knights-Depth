@@ -160,6 +160,44 @@ combo sequencing (M1 step 6+). Always re-derive actor positions after a
 knockback-producing event before trusting the next step's reach math, or reset
 positions explicitly between scripted steps.
 
+**Second occurrence (M1, gun session):** this repeated as a real GAMEPLAY defect, not
+just a scripted-verification artifact — wand_A's own knockback (0.5, sword-scale)
+displaced a stationary Fang sideways off the gun's straight aim line between
+successive shots, at a real ~16-unit range (not out of reach at all — off the firing
+line). Manual playtest caught it; nothing in the sim layer or the earlier scripted
+checks would have, since a displaced-but-still-alive target produces no error, just a
+shot that quietly stops landing. Fixed by giving the gun zero knockback rather than
+tuning the distance down, since ANY nonzero knockback with a component perpendicular
+to a repeat-fire weapon's line eventually walks the target off it. **Applies
+elsewhere:** any future rapid-fire or multi-hit-per-action weapon (later weapon
+classes, DoT-adjacent mechanics) — knockback and repeat-fire cadence are in tension by
+construction; a discrete single-swing weapon (sword) can absorb it, a cadence weapon
+generally can't.
+
+### A ground-plane-only aim ray misses anything above ground level
+**Incident (M1, gun session):** the Envoy's mouse-to-world aim intersected the camera
+ray with a horizontal plane at ground height. Clicking Fang's feet worked; clicking
+its torso or head silently aimed at wherever that ray crossed y=0 instead — which, for
+a raised screen point, is well past the target, not at it. Manual playtest was the
+only thing that caught it; the sim-only combat pipeline can't distinguish "aimed
+correctly and the swing/shot missed" from "computed the wrong aim entirely," so this
+was invisible to every headless test and scripted check written before the fix.
+**Mechanism:** a camera ray through a screen point above a target's on-screen
+silhouette still points somewhat downward (toward the camera's own look direction), so
+it crosses y=0 beyond the target's horizontal position — the higher up the model's
+body the cursor lands, the further past the target the ground intersection drifts.
+Ground-plane-only math is only correct for something that IS at y=0. **Failure if
+ignored:** any top-down/isometric camera project's click-to-target or ability-aim math
+built on ground-plane intersection alone feels randomly unresponsive for anything with
+vertical extent (any enemy taller than a doormat) — reads as a mysterious "hit
+detection is broken" bug rather than the geometric certainty it actually is. **Applies
+elsewhere:** every future aimable entity in this project (Ooze, Watcher, and beyond)
+needs the SAME two-stage treatment (raycast real colliders on the dedicated
+"aimable_targets" physics layer first, ground-plane intersection as fallback only) — an
+enemy added without a collider on that layer, or without a `get_aim_anchor_position()`
+method (on itself or its collider's parent), silently reverts to the broken
+ground-plane-only behavior for any click on its body.
+
 ### glTF self-containment is per-file, not per-format — verify before copying
 **Incident (M1, asset intake session):** Quaternius's `.gltf` monster files embedded
 buffers and textures as base64 data URIs (fully self-contained despite the "external
