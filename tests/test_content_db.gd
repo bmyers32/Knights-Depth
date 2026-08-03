@@ -33,9 +33,58 @@ func test_get_resource_returns_fang_enemy_stats() -> void:
 	assert_not_null(stats)
 
 
+func test_get_resource_returns_ooze_enemy_stats() -> void:
+	var stats: Resource = ContentDB.get_resource(&"enemy", &"ooze")
+	assert_not_null(stats)
+
+
+func test_get_resource_returns_watcher_enemy_stats() -> void:
+	var stats: Resource = ContentDB.get_resource(&"enemy", &"watcher")
+	assert_not_null(stats)
+
+
 func test_get_resource_returns_damage_matrix() -> void:
 	var matrix: Resource = ContentDB.get_resource(&"combat", &"damage_matrix")
 	assert_not_null(matrix)
+
+
+func test_get_resource_returns_burn_status_stats() -> void:
+	var stats: Resource = ContentDB.get_resource(&"status", &"burn")
+	assert_not_null(stats)
+
+
+func test_get_resource_returns_status_priority_table() -> void:
+	var table: Resource = ContentDB.get_resource(&"status", &"priority_table")
+	assert_not_null(table)
+
+
+func test_get_resource_returns_sword_burn_a_weapon_stats() -> void:
+	var stats: Resource = ContentDB.get_resource(&"weapon", &"sword_burn_A")
+	assert_not_null(stats)
+
+
+func test_get_resource_returns_typed_dev_gun_variants() -> void:
+	for weapon_id in [&"gun_pierce_A", &"gun_arc_A", &"gun_umbral_A"]:
+		var stats: Resource = ContentDB.get_resource(&"weapon", weapon_id)
+		assert_not_null(stats, "%s should resolve as a real weapon resource" % weapon_id)
+
+
+## Status proc chance (GAME-RULES §1.3 combat RNG) — sword_A/guns never roll;
+## sword_burn_A's 0.3 is the only M1 content that draws from the stream this session.
+func test_sword_a_has_zero_status_proc_chance() -> void:
+	var stats: SwordStats = ContentDB.get_resource(&"weapon", &"sword_A")
+	assert_eq(stats.status_proc_chance, 0.0)
+
+
+func test_sword_burn_a_has_provisional_proc_chance() -> void:
+	var stats: SwordStats = ContentDB.get_resource(&"weapon", &"sword_burn_A")
+	assert_almost_eq(stats.status_proc_chance, 0.3, 0.001)
+
+
+func test_guns_have_zero_status_proc_chance() -> void:
+	for weapon_id in [&"wand_A", &"gun_pierce_A", &"gun_arc_A", &"gun_umbral_A"]:
+		var stats: GunStats = ContentDB.get_resource(&"weapon", weapon_id)
+		assert_eq(stats.status_proc_chance, 0.0, "%s must default to zero proc chance" % weapon_id)
 
 
 func test_integration_registered_entity_moves_at_content_db_speed() -> void:

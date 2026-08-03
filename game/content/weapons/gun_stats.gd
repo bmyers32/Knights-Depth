@@ -26,3 +26,10 @@ extends Resource
 @export var hit_radius: float = 0.4
 @export var knockback_distance: float = 0.0
 @export var fire_interval_ticks: int = 15
+## Optional status payload (GAME-RULES §3) — see SwordStats.status_id. No M1 gun
+## variant sets this; kept symmetric with SwordStats so both weapon classes carry the
+## same content shape for future weapons.
+@export var status_id: StringName = &""
+## Normal-hit proc chance for status_id (GAME-RULES §1.3 combat RNG) — see
+## SwordStats.status_proc_chance. All M1 gun variants stay 0.0 (guns never proc).
+@export var status_proc_chance: float = 0.0

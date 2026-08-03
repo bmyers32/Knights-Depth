@@ -3,6 +3,8 @@
 [ext_resource type="Script" uid="uid://bifu6i3g88bpo" path="res://game/dev/envoy_movement_dev.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://game/actors/envoy/envoy.tscn" id="2_envoy"]
 [ext_resource type="PackedScene" path="res://game/actors/enemies/fang/fang.tscn" id="3_fang"]
+[ext_resource type="PackedScene" path="res://game/actors/enemies/ooze/ooze.tscn" id="4_ooze"]
+[ext_resource type="PackedScene" path="res://game/actors/enemies/watcher/watcher.tscn" id="5_watcher"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_1"]
 size = Vector3(20, 0.2, 20)
@@ -12,7 +14,7 @@ size = Vector3(20, 0.2, 20)
 
 [node name="EnvoyMovementDev" type="Node3D" unique_id=258390048]
 script = ExtResource("1_script")
-starting_weapon_id = &"wand_A"
+starting_weapon_id = &"SWORD_A"
 
 [node name="Floor" type="StaticBody3D" parent="." unique_id=973366214]
 
@@ -26,6 +28,12 @@ mesh = SubResource("BoxMesh_1")
 
 [node name="Fang" parent="." unique_id=1635596175 instance=ExtResource("3_fang")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1.5)
+
+[node name="Ooze" parent="." unique_id=946402040 instance=ExtResource("4_ooze")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -3)
+
+[node name="Watcher" parent="." unique_id=1485946569 instance=ExtResource("5_watcher")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, -3)
 
 [node name="FixedCamera" type="Camera3D" parent="." unique_id=196320553]
 transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 6, 6)

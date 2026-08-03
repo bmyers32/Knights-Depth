@@ -1,9 +1,6 @@
-[gd_resource type="Resource" script_class="FangStats" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="FangStats" format=3 uid="uid://xyto41wwtyn4"]
 
-[ext_resource type="Script" path="res://game/content/enemies/fang/fang_stats.gd" id="1_stats"]
+[ext_resource type="Script" uid="uid://hqbr0jg83c77" path="res://game/content/enemies/fang/fang_stats.gd" id="1_stats"]
 
 [resource]
 script = ExtResource("1_stats")
-max_health = 20.0
-family = &"fang"
-iframe_ticks_on_hit = 15

@@ -154,6 +154,47 @@ func test_force_remains_neutral() -> void:
 	assert_almost_eq(_hit_events(events)[0].payload["damage"], 10.0, 0.001)
 
 
+func _register_target(family: StringName, position: Vector3, max_health: float = 20.0) -> void:
+	sim.add_entity(TARGET_ID, position, 0.0)
+	sim.register_combatant(TARGET_ID, max_health, family)
+
+
+## Ooze/Watcher (Phase D step 7, HANDOFF) — same weak/resist mechanism proven above
+## against Fang, exercised against the two families added this session so all three
+## M1 damage-matrix rows have a concrete regression test (GAME-RULES §5: "damage-matrix
+## unit tests both directions").
+func test_umbral_receives_oozes_weakness_modifier() -> void:
+	sim.set_damage_matrix({"ooze": {"weak_to": "umbral", "resists": "pierce"}}, 1.5, 0.5)
+	_register_target(&"ooze", Vector3(0, 0, -1))
+	sim.register_weapon(&"umbral_ooze_test", 10.0, &"umbral", 2.0, 60.0, 1.0)
+	var events := _attack(Vector3(0, 0, -1), &"umbral_ooze_test")
+	assert_almost_eq(_hit_events(events)[0].payload["damage"], 15.0, 0.001)
+
+
+func test_pierce_receives_oozes_resistance_modifier() -> void:
+	sim.set_damage_matrix({"ooze": {"weak_to": "umbral", "resists": "pierce"}}, 1.5, 0.5)
+	_register_target(&"ooze", Vector3(0, 0, -1))
+	sim.register_weapon(&"pierce_ooze_test", 10.0, &"pierce", 2.0, 60.0, 1.0)
+	var events := _attack(Vector3(0, 0, -1), &"pierce_ooze_test")
+	assert_almost_eq(_hit_events(events)[0].payload["damage"], 5.0, 0.001)
+
+
+func test_arc_receives_watchers_weakness_modifier() -> void:
+	sim.set_damage_matrix({"watcher": {"weak_to": "arc", "resists": "pierce"}}, 1.5, 0.5)
+	_register_target(&"watcher", Vector3(0, 0, -1))
+	sim.register_weapon(&"arc_watcher_test", 10.0, &"arc", 2.0, 60.0, 1.0)
+	var events := _attack(Vector3(0, 0, -1), &"arc_watcher_test")
+	assert_almost_eq(_hit_events(events)[0].payload["damage"], 15.0, 0.001)
+
+
+func test_pierce_receives_watchers_resistance_modifier() -> void:
+	sim.set_damage_matrix({"watcher": {"weak_to": "arc", "resists": "pierce"}}, 1.5, 0.5)
+	_register_target(&"watcher", Vector3(0, 0, -1))
+	sim.register_weapon(&"pierce_watcher_test", 10.0, &"pierce", 2.0, 60.0, 1.0)
+	var events := _attack(Vector3(0, 0, -1), &"pierce_watcher_test")
+	assert_almost_eq(_hit_events(events)[0].payload["damage"], 5.0, 0.001)
+
+
 # --- Knockback & death ---
 
 func test_knockback_resolves_through_the_sim() -> void:

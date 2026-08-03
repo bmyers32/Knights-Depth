@@ -8,3 +8,6 @@ extends Resource
 @export var max_health: float = 20.0
 @export var family: StringName = &"fang"
 @export var iframe_ticks_on_hit: int = 15
+## Burn contact-spread proximity radius (GAME-RULES §3) — matches the existing
+## collision capsule's radius (fang.tscn), same first-pass/eyeballed status.
+@export var combat_radius: float = 1.0

@@ -12,16 +12,26 @@ const _REGISTRY: Dictionary = {
 	},
 	"weapon": {
 		"sword_A": preload("res://game/content/weapons/sword_stats.tres"),
+		"sword_burn_A": preload("res://game/content/weapons/sword_burn_A.tres"),
 		"wand_A": preload("res://game/content/weapons/gun_stats.tres"),
+		"gun_pierce_A": preload("res://game/content/weapons/gun_pierce_A.tres"),
+		"gun_arc_A": preload("res://game/content/weapons/gun_arc_A.tres"),
+		"gun_umbral_A": preload("res://game/content/weapons/gun_umbral_A.tres"),
 	},
 	"enemy": {
 		"fang": preload("res://game/content/enemies/fang/fang_stats.tres"),
+		"ooze": preload("res://game/content/enemies/ooze/ooze_stats.tres"),
+		"watcher": preload("res://game/content/enemies/watcher/watcher_stats.tres"),
 	},
 	"combat": {
 		"damage_matrix": preload("res://game/content/combat/damage_matrix.tres"),
 	},
 	"shield": {
 		"default": preload("res://game/content/shield/shield_stats.tres"),
+	},
+	"status": {
+		"burn": preload("res://game/content/status/burn_stats.tres"),
+		"priority_table": preload("res://game/content/status/status_priority.tres"),
 	},
 }
 
