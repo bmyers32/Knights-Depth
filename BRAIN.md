@@ -213,3 +213,53 @@ a mesh with no texture and no geometry buffer — silent broken-asset bug that o
 surfaces when Godot tries to load it. **Applies elsewhere:** every future non-KayKit,
 non-Quaternius asset pack (Kenney included) — never assume a `.gltf`'s packaging from
 its sibling pack's convention; parse `images`/`buffers` per file before the copy step.
+
+### A seeded RNG draw must happen before any outcome-dependent branch, not after
+**Incident (M1, Burn contact-spread + combat RNG session):** Burn's proc roll was
+first designed to live inside `_resolve_hit_on_target`'s non-lethal branch, mirroring
+where i-frames get armed — the natural instinct, since arming a DoT on a corpse is
+pointless. The locked spec caught this before it shipped: a lethal hit must still
+consume exactly one roll, or two runs with an identical seed and identical commands
+diverge the instant one of them happens to kill its target one hit earlier than the
+other. **Mechanism:** RNG stream advancement is a property of "a roll was attempted,"
+not "the roll's outcome mattered afterward" — gating the draw itself on a downstream
+outcome (survival, in this case) makes the stream's state depend on gameplay state
+that has nothing to do with randomness. **Failure if ignored:** the exact bug GAME-RULES
+§1.3 seeding exists to prevent — "seed + command log" bug reports become unreliable
+because identical inputs no longer guarantee identical outputs. **Applies elsewhere:**
+any future post-hit RNG consumer (other status procs, crit rolls, loot rolls tied to
+a killing blow) — draw before checking whether the target survived, never after.
+
+### Cooldown/equip state keyed by actor_id silently follows a weapon switch
+**Incident (M1, combat RNG session):** A test armed a long cooldown on a throwaway
+`cooldown_burn` weapon, then switched the attacker back to the real test weapon
+(0.0 fire_interval_ticks) expecting a clean slate — the next attack was rejected
+anyway. `SimWorld._next_fire_tick` is keyed by `actor_id`, not `weapon_id`: cooldown
+state belongs to the ATTACKER, shared across whatever weapon they currently have
+equipped, by original design (predates this session). **Mechanism:** `set_equipped_weapon`
+only changes which weapon's stats resolve an attack; it was never intended to reset
+any of the attacker's other per-actor state (facing, cooldown). **Failure if ignored:**
+any future runtime weapon-switching feature (a real player-facing cycle, a loadout
+swap) will silently inherit whatever cooldown the PREVIOUS weapon armed — a fast
+weapon switched-to right after a slow weapon's swing reads as randomly unresponsive.
+**Applies elsewhere:** the eventual player-facing weapon-switch Command (currently
+deferred, HANDOFF) needs an explicit design decision here — reset cooldown on switch,
+or keep it shared — before it ships, not discovered via a confused playtester.
+
+### The editor can silently rewrite a .tres, dropping fields matching script defaults
+**Incident (M1, Burn/Ooze/Watcher session):** After `godot --headless --import` (run
+to register new `class_name` scripts, per this file's own standing lesson),
+`envoy_stats.tres`, `fang_stats.tres`, and `gun_stats.tres` all showed as modified in
+git — every explicit field whose value equaled the script's own `@export` default had
+been silently removed, leaving only `script = ExtResource(...)`. Values are
+byte-identical in practice (the script default fills the gap), but the diff alone
+looks like data loss. **Mechanism:** Godot's resource saver omits fields at their
+default value as a size optimization; simply opening/scanning the project (even
+`--headless --import`, not a full editor session) can trigger a resave of any `.tres`
+the import step touches. **Failure if ignored:** a future session reviewing `git diff`
+after an import step could mistake this for an accidental revert of tuned content and
+"fix" it by re-adding values that were never actually lost — or worse, panic-revert a
+real change sitting in the same file. **Applies elsewhere:** every `.tres` in the
+project, every time `--headless --import` (or the editor generally) runs — always
+diff the ACTUAL remaining fields against the script's defaults before treating a
+`.tres` change as suspicious; a shrunk resource file is not automatically a bug.
