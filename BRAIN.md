@@ -263,3 +263,51 @@ real change sitting in the same file. **Applies elsewhere:** every `.tres` in th
 project, every time `--headless --import` (or the editor generally) runs — always
 diff the ACTUAL remaining fields against the script's defaults before treating a
 `.tres` change as suspicious; a shrunk resource file is not automatically a bug.
+
+**Second occurrence (M1, Phase D step 8 recon):** `sword_burn_A.tres` showed the
+identical pattern mid-session — `weapon_class`/`base_damage`/`damage_type`/`reach`/
+`cone_half_angle_degrees`/`knockback_distance` all dropped, `uid=` added, values
+unchanged in practice. Confirms the lesson is a standing property of this
+project's workflow, not a one-off from the session that discovered it.
+
+### Instrument before trusting a bug report's hypothesized cause
+**Incident (M1, pre-gate fix pass):** "Ooze retreat bug" arrived with a specific
+hypothesis — sticky BACK_AWAY state — plus an ordered checklist to confirm it.
+Instrumenting and reproducing the exact literal scenario proved the hypothesis
+WRONG: the per-tick decision was already correctly stateless in both directions
+(two new permanent tests confirmed it). The real defect, found by digging one
+layer further instead of stopping at "hypothesis disproven, no bug here," was a
+PRIORITY bug — retreat could pre-empt an attack that could otherwise land,
+letting a player crowd an enemy inside its own minimum_attack_distance and
+suppress its attack indefinitely. **Mechanism:** a human describing a symptom
+("it keeps retreating and never attacks") reaches for the closest-fitting mental
+model (state stuck) even when the real defect is a decision-ORDER problem that
+produces a similar-looking symptom through an entirely different mechanism.
+**Failure if ignored:** fixing the HYPOTHESIZED mechanism (e.g. hysteresis on
+re-entering retreat) would have smoothed the visible jitter while leaving the
+actual exploit live and undiscovered. **Applies elsewhere:** any future bug
+report arriving with a proposed root cause — verify the literal hypothesis first
+(instrument, reproduce exactly as described); a disproven hypothesis is a cue to
+look one layer further, not a reason to close the report as already-correct.
+
+### Reordering a shared decision's priority invalidates test setups, not just assertions
+**Incident (M1, pre-gate fix pass):** making attack-priority outrank movement
+preference (a locked defect fix) broke 3 existing AI tests that had never
+directly asserted anything about attacks — they tested pure retreat/spacing
+behavior, using a long `windup_ticks`/`fire_interval_ticks` to make attacks
+"never happen" so retreat could be observed in isolation. Once cooldown-ready
+started outranking distance, those same setups began attacking on tick 0 instead,
+since a fresh actor's cooldown defaults to "ready" regardless of
+`fire_interval_ticks` (which only gates the NEXT cooldown, after a first attack).
+**Mechanism:** a test's isolation strategy often depends on an implicit
+precondition ("this parameter combination makes behavior X unreachable") living
+in the surrounding code's control flow, not in the test itself — changing that
+flow's priority ORDER can silently invalidate the isolation without touching the
+test's own assertions or looking like an obviously related change. **Failure if
+ignored:** a reordering fix appears clean (few lines changed in one function)
+while quietly breaking test coverage elsewhere in a way that's easy to patch
+mechanically (make the assertion pass again) without noticing the test no longer
+proves what its name claims. **Applies elsewhere:** any future change to a shared
+decision function's condition ORDER in this codebase — re-examine every existing
+test that reaches that function, not just ones whose assertions reference the
+changed behavior directly.
