@@ -16,6 +16,9 @@ const DT := 1.0 / 30.0
 func before_each() -> void:
 	sim = SimWorld.new()
 	sim.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
+	# Ally-filtering (locked defect fix): the attacker needs an allegiance different
+	# from the target's (default "enemy") or every shot below filters as allied.
+	sim.register_combatant(ATTACKER_ID, 999.0, &"envoy", 0, 0.0, &"player")
 	sim.register_gun(GUN_ID, 10.0, &"force", 30.0, 5, 0.5, 1.0)
 	sim.set_equipped_weapon(ATTACKER_ID, GUN_ID)
 	sim.set_damage_matrix({}, 1.5, 0.5)
@@ -165,6 +168,7 @@ func test_identical_state_and_commands_produce_identical_projectile_trajectories
 	for _i in range(2):
 		var local_sim := SimWorld.new()
 		local_sim.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
+		local_sim.register_combatant(ATTACKER_ID, 999.0, &"envoy", 0, 0.0, &"player")
 		local_sim.register_gun(GUN_ID, 10.0, &"force", 30.0, 5, 0.5, 1.0)
 		local_sim.set_equipped_weapon(ATTACKER_ID, GUN_ID)
 		local_sim.set_damage_matrix({}, 1.5, 0.5)

@@ -21,6 +21,9 @@ func before_each() -> void:
 	sim = SimWorld.new()
 	sim.seed_combat_rng(1)  # inert at chance=1.0 below (no draw), but explicit per GAME-RULES §1.3
 	sim.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
+	# Ally-filtering (locked defect fix): the attacker needs an allegiance different
+	# from the target's (default "enemy") or every attack below filters as allied.
+	sim.register_combatant(ATTACKER_ID, 999.0, &"envoy", 0, 0.0, &"player")
 	# status_proc_chance=1.0 -- this file tests apply/DoT/expiry/refresh mechanics,
 	# deliberately deterministic; the proc-chance/combat-RNG mechanism itself is
 	# covered separately in test_status_proc.gd.
@@ -190,6 +193,7 @@ func test_determinism_burn_apply_and_dot_sequence() -> void:
 		var local_sim := SimWorld.new()
 		local_sim.seed_combat_rng(1)
 		local_sim.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
+		local_sim.register_combatant(ATTACKER_ID, 999.0, &"envoy", 0, 0.0, &"player")
 		local_sim.register_weapon(WEAPON_ID, 10.0, &"force", 2.0, 60.0, 1.0, 0, &"burn", 1.0)
 		local_sim.set_equipped_weapon(ATTACKER_ID, WEAPON_ID)
 		local_sim.set_damage_matrix({}, 1.5, 0.5)

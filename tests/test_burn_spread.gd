@@ -202,6 +202,113 @@ func test_contact_pair_marker_clears_on_death() -> void:
 
 # --- Event vocabulary ---
 
+## Duration inheritance (locked, pre-gate fix pass): spread grants the recipient
+## the transmitting source's REMAINING duration at transmission time, capped at the
+## configured full duration -- never a fresh full-duration copy. This block
+## deliberately overrides the shared DURATION(5)/TICK_INTERVAL(100) config with a
+## bigger duration so there's room to observe a genuinely-decayed remaining value.
+
+func test_spread_transmits_at_most_the_sources_remaining_duration() -> void:
+	sim.register_status(&"burn", DAMAGE_PER_TICK, TICK_INTERVAL, 90)
+	_register(1, Vector3.ZERO, 1.0, &"enemy")
+	_register(2, Vector3(100, 0, 0), 1.0, &"enemy")  # far apart -- no contact while ticking down
+	_ignite(1)
+	for i in range(51):  # 1st call is the grace tick (no decrement); 50 further decrements: 90 -> 40
+		_tick_noop()
+	assert_eq(sim._status_instances[1].ticks_remaining, 40, "sanity: source must be at exactly 40 remaining before contact")
+	sim.entities[2] = Vector3(1, 0, 0)  # bring into contact
+	_tick_noop()  # transmits -- source already eligible
+	assert_true(sim._status_instances.has(2))
+	assert_eq(sim._status_instances[2].ticks_remaining, 40, "recipient must inherit the source's remaining duration, not a fresh full-duration copy")
+
+
+func test_spread_transmission_never_alters_the_sources_own_duration() -> void:
+	sim.register_status(&"burn", DAMAGE_PER_TICK, TICK_INTERVAL, 90)
+	_register(1, Vector3.ZERO, 1.0, &"enemy")
+	_register(2, Vector3(100, 0, 0), 1.0, &"enemy")
+	_ignite(1)
+	for i in range(51):
+		_tick_noop()
+	sim.entities[2] = Vector3(1, 0, 0)
+	_tick_noop()  # transmits; source also takes its own normal per-tick decrement THIS tick
+	assert_eq(sim._status_instances[1].ticks_remaining, 39, "the source's own duration must keep decrementing on its own schedule, unaffected by having just transmitted")
+
+
+func test_spread_chain_remaining_duration_is_monotonically_non_increasing() -> void:
+	sim.register_status(&"burn", DAMAGE_PER_TICK, TICK_INTERVAL, 20)
+	_register(1, Vector3.ZERO, 1.0, &"enemy")          # A -- source
+	_register(2, Vector3(1, 0, 0), 1.0, &"enemy")       # B -- overlaps A only
+	_register(3, Vector3(2.5, 0, 0), 1.0, &"enemy")     # C -- overlaps B only
+	_ignite(1)
+	_tick_noop()  # grace for A
+	_tick_noop()  # A -> B transmits
+	assert_true(sim._status_instances.has(2))
+	var hop1_remaining: int = sim._status_instances[2].ticks_remaining
+	assert_true(hop1_remaining <= 20)
+	_tick_noop()  # grace for B
+	_tick_noop()  # B -> C transmits
+	assert_true(sim._status_instances.has(3))
+	var hop2_remaining: int = sim._status_instances[3].ticks_remaining
+	assert_true(hop2_remaining <= hop1_remaining, "each hop's remaining duration must never exceed the previous hop's -- a chain can only lose duration, never gain it")
+
+
+func test_separation_then_recontact_transmits_the_sources_current_remaining_duration() -> void:
+	sim.register_status(&"burn", DAMAGE_PER_TICK, TICK_INTERVAL, 20)
+	_register(1, Vector3.ZERO, 1.0, &"enemy")
+	_register(2, Vector3(1, 0, 0), 1.0, &"enemy")
+	_ignite(1)
+	_tick_noop()  # grace
+	_tick_noop()  # first transmission -- no decrements have occurred yet, so this is a full-duration snapshot
+	assert_true(sim._status_instances.has(2))
+	assert_eq(sim._status_instances[2].ticks_remaining, 20)
+	sim._status_instances.erase(2)  # target becomes unburned again (not via expiry -- isolates from duration bookkeeping)
+	sim.entities[2] = Vector3(100, 0, 0)  # separate
+	for i in range(10):
+		_tick_noop()  # cleanup clears the stale pair marker; source keeps decaying
+	sim.entities[2] = Vector3(1, 0, 0)  # re-contact
+	var events := _tick_noop()  # second transmission
+	assert_eq(_events_of_kind(events, "status_applied").size(), 1, "separation followed by renewed overlap to a currently-unburned target must still transmit")
+	assert_true(sim._status_instances.has(2))
+	assert_lt(sim._status_instances[2].ticks_remaining, 20, "the second transmission must reflect the source's CURRENT (lower) remaining duration, not the first snapshot")
+
+
+func test_spread_chain_duration_is_deterministic() -> void:
+	var results: Array = []
+	for _i in range(2):
+		var local_sim := SimWorld.new()
+		local_sim.register_status(&"burn", DAMAGE_PER_TICK, TICK_INTERVAL, 20)
+		local_sim.set_status_priority({"burn": 0})
+		local_sim.add_entity(1, Vector3.ZERO, 0.0)
+		local_sim.register_combatant(1, 100.0, &"test_family", 0, 1.0, &"enemy")
+		local_sim.add_entity(2, Vector3(1, 0, 0), 0.0)
+		local_sim.register_combatant(2, 100.0, &"test_family", 0, 1.0, &"enemy")
+		local_sim.add_entity(3, Vector3(2.5, 0, 0), 0.0)
+		local_sim.register_combatant(3, 100.0, &"test_family", 0, 1.0, &"enemy")
+		local_sim._apply_status(1, &"burn", "hit", -1, "")
+		for i in range(6):
+			local_sim.tick([], 1.0 / 30.0)
+		results.append(local_sim._status_instances.duplicate(true))
+	assert_eq(results[0], results[1], "identical Burn spread chains must produce identical remaining-duration state")
+
+
+## "Spread never refreshes an already-Burning target" is already-locked spec
+## (contact-model rule 2, enforced by _advance_contact_spread's "recipient already
+## has an active status" check) -- this pins it with a case the OTHER existing tests
+## don't reach: a recipient that has a status from an UNRELATED application (not
+## this pair's own prior transmission, so the pair-marker isn't what's blocking it)
+## and is still within ITS OWN grace, so it isn't yet counted as an eligible source
+## either -- isolating the has()-check itself, not the pair-marker or the
+## both-eligible skip.
+func test_spread_does_not_apply_to_a_target_that_already_has_any_status() -> void:
+	_register(1, Vector3.ZERO, 1.0, &"enemy")
+	_register(2, Vector3(1, 0, 0), 1.0, &"enemy")
+	_ignite(1)
+	_tick_noop()  # grace for 1
+	sim._apply_status(2, &"burn", "hit", 99, "")  # 2 gets Burn from an unrelated source, same tick 1 becomes eligible
+	var events := _tick_noop()
+	assert_eq(_events_of_kind(events, "status_applied").filter(func(e): return e.payload.get("application_source") == "spread").size(), 0, "a target that already has any status must never receive a spread application")
+
+
 func test_spread_applied_status_has_no_source_weapon_id() -> void:
 	_register(1, Vector3.ZERO, 1.0, &"enemy")
 	_register(2, Vector3(1, 0, 0), 1.0, &"enemy")

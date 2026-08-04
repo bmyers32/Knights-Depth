@@ -20,6 +20,9 @@ func _fresh_sim(chance: float = 0.5) -> SimWorld:
 	var s := SimWorld.new()
 	s.seed_combat_rng(SEED)
 	s.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
+	# Ally-filtering (locked defect fix): the attacker needs an allegiance different
+	# from the target's (default "enemy") or every attack below filters as allied.
+	s.register_combatant(ATTACKER_ID, 999.0, &"envoy", 0, 0.0, &"player")
 	s.register_weapon(WEAPON_ID, 10.0, &"force", 2.0, 60.0, 1.0, 0, &"burn", chance)
 	s.set_equipped_weapon(ATTACKER_ID, WEAPON_ID)
 	s.set_damage_matrix({}, 1.5, 0.5)

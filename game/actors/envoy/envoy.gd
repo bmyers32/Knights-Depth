@@ -31,6 +31,11 @@ func build_commands(tick: int) -> Array[Command]:
 	# intent so the sim's rising-edge detection (SimWorld._apply_block) never depends
 	# on a missed edge-triggered press.
 	commands.append(Command.new(tick, actor_id, "block", {"held": Input.is_action_pressed("block")}))
+	if Input.is_action_just_pressed("switch_weapon"):
+		# No weapon_id in params — this only ever advances the sim-owned loadout
+		# array (SimWorld.set_weapon_loadout), it never names a weapon (Prime
+		# Directive 1 boundary-rule comment at sim_world.gd's dispatch site).
+		commands.append(Command.new(tick, actor_id, "switch_weapon"))
 	return commands
 
 

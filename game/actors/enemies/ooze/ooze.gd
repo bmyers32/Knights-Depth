@@ -1,18 +1,26 @@
 extends Node3D
-## Minimal Ooze presentation: mirrors sim position, no AI/behavior yet (Phase D step 7
-## scope — Ooze exists only to prove the content pipeline + damage matrix + Burn
-## contact-spread against a real target). Never mutates sim state (Prime Directive 1).
-## TargetBody (a StaticBody3D on the dedicated "aimable_targets" physics layer) exists
-## purely so the Envoy's mouse-aim raycast can find this enemy — it carries no
-## gameplay collision response of its own. Structural mirror of fang.gd.
+## Minimal Ooze presentation: mirrors sim position, AI decisions live entirely in
+## SimWorld (Phase D step 8 Phase 4) — this script only renders what the sim already
+## decided. Never mutates sim state (Prime Directive 1). TargetBody (a StaticBody3D
+## on the dedicated "aimable_targets" physics layer) exists purely so the Envoy's
+## mouse-aim raycast can find this enemy — it carries no gameplay collision response
+## of its own. Structural mirror of fang.gd.
 
 var actor_id: int = 2
 
 @onready var _aim_anchor: Node3D = $AimAnchor
+@onready var _telegraph: TelegraphIndicator = $TelegraphIndicator
 
 
 func sync_from_sim(sim_position: Vector3) -> void:
 	position = sim_position
+
+
+## GAME-RULES §3 telegraph law — see TelegraphIndicator for the minimum-viable
+## (no shader polish) rendering itself; this is just the actor-scoped entry point
+## the arena driver calls on an "attack_telegraph" Event.
+func show_telegraph(color: Color, duration_seconds: float) -> void:
+	_telegraph.flash(color, duration_seconds)
 
 
 ## A stable point to aim toward (roughly body-center height) — independent of exactly

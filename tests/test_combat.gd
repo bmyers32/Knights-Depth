@@ -12,6 +12,11 @@ const WEAPON_ID := &"sword_A"
 func before_each() -> void:
 	sim = SimWorld.new()
 	sim.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
+	# Ally-filtering (locked defect fix): a valid target must have a DIFFERENT
+	# allegiance than its attacker. Targets below default to "enemy" (register_
+	# combatant's own default), so the attacker needs an explicit, different
+	# allegiance or every attack in this file would filter as an allied contact.
+	sim.register_combatant(ATTACKER_ID, 999.0, &"envoy", 0, 0.0, &"player")
 	sim.register_weapon(WEAPON_ID, 10.0, &"force", 2.0, 60.0, 1.0)
 	sim.set_damage_matrix({"fang": {"weak_to": "pierce", "resists": "arc"}}, 1.5, 0.5)
 
@@ -84,6 +89,16 @@ func test_rejected_attack_does_not_update_facing() -> void:
 
 
 # --- Hit detection ---
+
+## Point-blank melee (locked, pre-gate fix pass): this bypass lives in the shared
+## hit path, not AI-specific code -- the Envoy's own sword has the identical
+## zero-offset cone seam. A zero-vector aim would normally fall back to stored
+## facing, but at true zero separation the cone check doesn't apply at all.
+func test_attack_resolves_at_near_zero_separation() -> void:
+	_register_fang(Vector3.ZERO)  # exact same position as the attacker
+	var events := _attack(Vector3.ZERO)
+	assert_eq(_hit_events(events).size(), 1, "point-blank (near-zero separation) melee must still resolve a hit")
+
 
 func test_target_in_range_and_inside_cone_is_hit() -> void:
 	_register_fang(Vector3(0, 0, -1.5))
@@ -241,6 +256,7 @@ func test_identical_state_and_commands_produce_identical_results() -> void:
 	_register_fang(Vector3(0, 0, -1))
 	var sim2 := SimWorld.new()
 	sim2.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
+	sim2.register_combatant(ATTACKER_ID, 999.0, &"envoy", 0, 0.0, &"player")
 	sim2.register_weapon(WEAPON_ID, 10.0, &"force", 2.0, 60.0, 1.0)
 	sim2.set_damage_matrix({"fang": {"weak_to": "pierce", "resists": "arc"}}, 1.5, 0.5)
 	sim2.add_entity(TARGET_ID, Vector3(0, 0, -1), 0.0)

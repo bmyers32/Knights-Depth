@@ -70,7 +70,8 @@ func test_get_resource_returns_typed_dev_gun_variants() -> void:
 
 
 ## Status proc chance (GAME-RULES §1.3 combat RNG) — sword_A/guns never roll;
-## sword_burn_A's 0.3 is the only M1 content that draws from the stream this session.
+## sword_burn_A's 0.15 is the only M1 content that draws from the stream this
+## session (calibrated down from 0.3 after the clump-burn replay, 2026-08-04).
 func test_sword_a_has_zero_status_proc_chance() -> void:
 	var stats: SwordStats = ContentDB.get_resource(&"weapon", &"sword_A")
 	assert_eq(stats.status_proc_chance, 0.0)
@@ -78,7 +79,7 @@ func test_sword_a_has_zero_status_proc_chance() -> void:
 
 func test_sword_burn_a_has_provisional_proc_chance() -> void:
 	var stats: SwordStats = ContentDB.get_resource(&"weapon", &"sword_burn_A")
-	assert_almost_eq(stats.status_proc_chance, 0.3, 0.001)
+	assert_almost_eq(stats.status_proc_chance, 0.15, 0.001)
 
 
 func test_guns_have_zero_status_proc_chance() -> void:

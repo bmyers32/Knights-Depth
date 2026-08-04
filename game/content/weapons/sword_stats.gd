@@ -5,6 +5,22 @@ extends Resource
 ## fallback" baseline), single discrete attack this session — combo/charge fields
 ## join this resource when Phase D sequences the locked 3-hit + hold-to-charge spec
 ## on top of this same pipeline.
+##
+## SLICE B SPEC (locked, captured pre-build — nothing built yet; spec input for
+## when Slice B planning opens, supersedes any earlier draft):
+## - Combo moves to PER-HIT content profiles — each of the 3 combo steps carries
+##   its OWN damage/reach/knockback/status-proc/timing, not one shared field set
+##   on this resource. sword_burn_A: hits 1-2 proc 0.0, hit 3 gets a configurable
+##   chance (status_proc_chance below keeps meaning "hit 3's chance" for
+##   sword_burn_A once the per-hit split lands — do not repurpose it).
+## - A charge attack SELECTS ITS OWN content profile (the seam requirement) — a
+##   charge is never a hardcoded bigger normal hit.
+## - First charge implementation: ONE charged strike only — independent
+##   geometry/damage/knockback/timing, 100% Burn proc for sword_burn_A.
+## - NOT Slice B baseline: the advancing multi-hit "Brandish" charge (staged
+##   multi-tick attack). That's later content (ROADMAP P5 addendum) with its own
+##   spec — interruption, owner-death, per-pulse status, defense-across-waves —
+##   answered when Brandish becomes real content, not assumed here.
 
 ## weapon_class (not `class` — reserved word for inner classes in GDScript) is
 ## GAME-RULES §3's required tag on every weapon resource (sword/gun/bomb).
@@ -22,9 +38,9 @@ extends Resource
 ## only M1 weapon that sets this, so the baseline sword's proven behavior is untouched.
 @export var status_id: StringName = &""
 ## Normal-hit proc chance for status_id (GAME-RULES §1.3 combat RNG) — default 0.0
-## (sword_A never rolls). sword_burn_A's 0.3 is provisional/unvalidated, flagged for
-## the step 8 playtest gate. HANDOFF carry-forward: future charged attacks (locked
-## combo/charge follow-up, not built this session) may define a separate proc chance
-## of their own — sword_burn_A is meant to apply Burn at 100% on a charged hit; do
-## not overload THIS field with charge semantics when that step lands.
+## (sword_A never rolls). sword_burn_A calibration note (GAME-RULES §3 law):
+## 0.3 dominated group fights during the pre-gate clump-burn replay (2026-08-04) —
+## lowered to 0.15. Revisit again at the real M1 playtest gate. See the SLICE B
+## SPEC note above for how this field's meaning narrows to "hit 3's chance" once
+## per-hit combo profiles land — do not overload it with charge semantics before then.
 @export var status_proc_chance: float = 0.0

@@ -26,6 +26,9 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Timed shield bounce | PROPOSED | Raise-in-window repels the attacker; layers on the recorded block-start tick |
+| P17 | Per-family engagement identities | PROPOSED | Movement/attack personality as content on top of the shared AI; M2 content pass |
+| P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
+| P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
@@ -99,7 +102,25 @@ to exist.
 armor sets as playstyle identities instead of character classes.
 **Reasoning:** The reference game's entire progression skeleton — this is M4's
 crafting/heat loop already in CLAUDE.md, recorded here with the mechanical shape.
+**Addendum — charge-profile differentiation (captured pre-build, Slice B era):**
+weapon lines differentiate by CHARGE PROFILE (the per-hit/charge content-profile
+seam Slice B establishes, see `sword_stats.gd`'s SLICE B SPEC comment), and
+enhancement/upgrade strengthens or REPLACES a profile rather than just scaling
+numbers. Worked example: "Brandish" — a powerful strike PLUS an advancing line of
+pushing, damaging, status-bearing impacts — is the second concrete charge shape
+(sword_burn_A's single charged strike is the first), and needs its own spec
+(interruption, owner-death, per-pulse status, defense-across-waves) once it becomes
+real content.
+**Addendum — weapon slot count (captured pre-build, Phase D step 8):** the reference
+game supports multiple equipped weapon slots (2 base, up to 4) + shield,
+cycle-accessible mid-combat. The current `equipped-weapon` + `switch_weapon`
+Command architecture (`SimWorld.set_weapon_loadout`/`_apply_switch_weapon`) already
+generalizes to N slots — slot *count* is progression content to unlock, not an
+architecture change. Do not redesign cycling to add more slots; just register a
+longer loadout array.
 **Why deferred:** M4 by design; do not front-load progression before fun is proven.
+Charge-profile plumbing itself lands with Slice B (M1); this addendum is only about
+progression differentiating BY that plumbing, which stays M4.
 
 ### P6 — Rotating gate map (arcade)
 **Idea:** Multiple concurrent descent "gates" whose upcoming floors rotate on a
@@ -222,6 +243,84 @@ during the post-break `break_recovery_delay_ticks` window? Can bosses/heavy atta
 bounced, or are some attacks bounce-immune by data flag?
 **Why deferred:** Shield v1 (this session) ships the flat block/break model only;
 bounce is a Treat-Rule-friendly layer once the base mechanic is playtested.
+
+### P17 — Per-family engagement identities
+**Idea:** Movement/attack personality translated from the reference game, layered as
+CONTENT on top of the shared AI (pursue/engage/leash) built in Phase D step 8 — never
+as AI special cases (the locked build-shape rule: attack shape is content, the AI only
+ever decides move + attack-now).
+- **Ooze:** shuffle approach, a visible charge-up, then a hop-attack (windup +
+  self-knockback + a wide/360° cone) — a pull-forward Treat Rule candidate if the M1
+  replay finds the three families feeling too uniform.
+- **Fang:** a pack-call, a reposition beat, and a delayed chomp — needs the
+  deliberately-deferred reposition system (Phase D step 8's engagement-spacing fix
+  shipped only approach/back-away/stop, no tangential reposition).
+- **A slow-advancing undead archetype** with either a charged leap or a ranged
+  status-carrying cone attack. Family TBD — Watcher vs. Hollow gets decided at M2's
+  enemy-content session, not here. The cone itself is M2-gated regardless of family:
+  it needs the first ranged ENEMY attack, the first enemy-applied status, and
+  typed_damage_ramp to all exist first (M1 ships melee-only, Force-only enemies per
+  the onboarding rule).
+- **A turret archetype:** stationary, ranged, tiered (single-shot / tri-cone /
+  seeking). Seeking needs per-tick projectile steering toward a moving target — a new
+  sim capability; today's projectiles travel in a fixed straight line from spawn.
+**Reasoning:** Identities translated from the reference game's roster, same spirit as
+P2's status roster — each family becomes tactically distinct rather than a reskinned
+pursue-and-hit loop, without adding a second AI code path per family.
+**Design questions:** Which family gets Watcher vs. Hollow's true-name slot; how much
+of "personality" is timing/cone-shape data vs. genuinely new AI states (reposition,
+projectile steering); whether the reposition system Fang needs is worth building
+before a second family also wants it (rule of two).
+**Why deferred:** M1's AI ships the minimum viable shared engagement loop only
+(GAME-RULES §5 M1 gate doesn't require distinct enemy personalities); this is M2
+content-pass work once 3+ base enemies are proven fun, per P4's existing "M2 content
+addition" precedent.
+
+### P18 — Idle wander + return-to-post + room territory
+**Idea:** Three related post-disengage behaviors, captured together since they all
+sit on top of the same M1 disengage-in-place mechanic (Phase D step 8 pre-gate fix
+pass — no universal return-to-spawn; an idle enemy just stands at its re-anchored
+position):
+- **Bounded idle wander** — the first AI behavior that needs genuine randomness.
+  Must draw from its OWN dedicated `RandomNumberGenerator` stream per GAME-RULES
+  §1.3, never `_combat_rng` (BRAIN's existing "one draw site" invariant for that
+  stream extends naturally: a new behavior needing randomness gets a new stream,
+  it never reaches for an existing one).
+- **"Return-to-post"** — an authored FAMILY TRAIT (some enemies patrol back to a
+  post-disengage anchor, some don't), not a universal rule reinstated. A natural
+  fit for Watcher/Custodian specifically, per the motion-language law (WORLD-CANON/
+  GAME-RULES §6.8): Claimed states share rhythm/synchronized pacing, and returning
+  to a post reads as disciplined/synchronized in exactly that way.
+- **Room/encounter-based territory bounds** — once M2 floor generation exists,
+  leash/detection radii graduate from "distance from an anchor point" to "bounded
+  by the room/encounter the enemy was placed in." The current anchor-point model is
+  the correct M1 placeholder, not a design to defend past M2.
+**Reasoning:** All three are the natural next layer once M1 proved the minimal
+disengage-in-place model works; none of them belong in M1 (GAME-RULES §5 M1 gate
+doesn't ask for idle personality or floor-aware territory, and M1 has no rooms yet
+for the third item to even attach to).
+**Why deferred:** M2 — wander/return-to-post are content-pass work like P17 (may
+even land in the same session); room-based territory is gated on M2 floor
+generation existing at all.
+
+### P19 — Per-family mass/knockback factor
+**Idea:** A per-family mass/knockback-resistance factor, applied ONLY at the shared
+hit-knockback resolution point in the combat pipeline — never to self-movement,
+scripted movement, or (until deliberately tested) shield-break recoil. A heavy
+family gets pushed less by the same hit; a light one gets pushed more.
+**Reasoning:** Own front door, not folded into an existing proposal, because it's a
+genuinely separate mechanic from engagement AI (P17) or charge profiles (P5
+addendum) even though it shares the combat pipeline with both. Weight binds to
+FAMILY/body archetype, never to entity STATE (Common/Drifted/Claimed) — GAME-RULES
+§6.8's three-axis law: a Claimed Fang is still light. Any future state-based
+displacement resistance is a deliberate state modifier, decided at M2's state-
+content pass, not an accidental side effect of this factor.
+**Design questions:** Where the factor lives in content (per-family stats resource
+vs. a new shared table); whether shield-break recoil ever adopts it, and if so
+under what evidence.
+**Why deferred:** No trigger yet. Build when two enemy bodies need meaningfully
+different push responses, or when Brandish (P5 addendum) lands and its advancing
+impacts need family-aware pushback to feel right.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

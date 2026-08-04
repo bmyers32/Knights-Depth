@@ -22,6 +22,7 @@ var _iframe_ticks_on_hit: Dictionary = {}  # actor_id -> int (combatants only)
 var _iframe_ticks_remaining: Dictionary = {}  # actor_id -> int, counts down once per tick()
 var _weapons: Dictionary = {}  # weapon_id(String) -> Dictionary of resolved weapon stats
 var _equipped_weapon: Dictionary = {}  # actor_id -> weapon_id(String), sim-owned equip state
+var _weapon_loadouts: Dictionary = {}  # actor_id -> Array[String], switch_weapon's fixed cycle order
 var _next_fire_tick: Dictionary = {}  # actor_id -> int, tick_count before which "attack" is rejected
 var _projectiles: Dictionary = {}  # projectile_id(int) -> Dictionary of in-flight shot state
 var _next_projectile_id: int = 0
@@ -44,6 +45,20 @@ var _status_instances: Dictionary = {}
 var _status_config: Dictionary = {}  # status_id(String) -> {damage_per_tick, tick_interval_ticks, duration_ticks}
 var _status_priority: Dictionary = {}  # status_id(String) -> int, higher replaces lower (GAME-RULES §3)
 var _contact_transmitted_pairs: Dictionary = {}  # Vector2i(min_id, max_id) -> bool, current contact episode's transmission state
+## Enemy AI (Phase D step 8 Phase 4) — deterministic, no RNG (a future variance need
+## gets its OWN GAME-RULES §1.3 stream, never combat's). AI only ever decides
+## move_direction/attack-intent by synthesizing the same Command shapes a player
+## would send; it never bypasses _apply_move/_apply_attack.
+var _ai_natural_weapon: Dictionary = {}  # actor_id -> weapon_id(String)
+## actor_id -> Vector3, the leash/detection anchor. Scene-init/encounter-reset data
+## only in the sense that register_ai unconditionally overwrites it on
+## re-registration — at runtime it RE-ANCHORS to the stopped position on disengage
+## (locked behavior, pre-gate fix pass: no universal return-to-spawn).
+var _ai_spawn_position: Dictionary = {}
+var _ai_state: Dictionary = {}  # actor_id -> "idle" | "active"
+var _ai_tuning: Dictionary = {}  # actor_id -> {preferred_attack_distance, minimum_attack_distance, windup_ticks, detection_radius, leash_radius}
+var _ai_attack_start_tick: Dictionary = {}  # actor_id -> int, present only while winding up
+var _ai_attack_fire_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 var tick_count: int = 0
 
 ## The combat RNG stream (GAME-RULES §1.3's first concrete consumer) — its own named
@@ -165,6 +180,20 @@ func set_equipped_weapon(actor_id: int, weapon_id: StringName) -> void:
 	_equipped_weapon[actor_id] = String(weapon_id)
 
 
+## Registers actor_id's fixed weapon-switch order (Phase D step 8) — setup-time
+## configuration, called once from the scene driver, same boundary as every other
+## register_*/set_* call: initialization/configuration goes through a direct call,
+## player intent during gameplay goes through a Command, simulation outcomes come
+## back as Events. "switch_weapon" (below) only ever advances through THIS array —
+## it carries no weapon_id of its own (Command.params stays per-tick intent only,
+## never an id), so it can't equip anything outside the loadout set up here.
+func set_weapon_loadout(actor_id: int, weapon_ids: Array[StringName]) -> void:
+	var ids: Array[String] = []
+	for weapon_id in weapon_ids:
+		ids.append(String(weapon_id))
+	_weapon_loadouts[actor_id] = ids
+
+
 ## Installs the family x damage-type matrix (GAME-RULES §3) — one resource, resolved
 ## by the driver from ContentDB, unpacked here as plain data.
 func set_damage_matrix(families: Dictionary, weak_multiplier: float, resist_multiplier: float) -> void:
@@ -187,6 +216,36 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 	_shield_meter[actor_id] = meter_max
 
 
+## Registers actor_id as AI-controlled (Phase D step 8 Phase 4) — setup-time
+## configuration, same boundary as every other register_*/set_* call (see
+## set_weapon_loadout's comment). natural_weapon_id must already be registered via
+## register_weapon (its reach == preferred_attack_distance, so a settle-in-band enemy
+## can always actually land the attack it fires — content's job to keep those
+## consistent, not sim's to enforce); this call also equips it (mirrors
+## set_equipped_weapon's existing pattern — an enemy only ever has the one natural
+## attack). spawn_position anchors the leash (leash_radius is measured from here,
+## never the actor's drifting current position — though disengage re-anchors this
+## to wherever the actor stopped, see the leash-exceeded branch below). Starts
+## "idle" — no initial aggro;
+## detection_radius (read from _ai_tuning at decide-time) gates first acquisition
+## exactly like re-acquisition. preferred_attack_distance/minimum_attack_distance
+## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
+## than preferred -> approach, closer than minimum -> back away, inside the band ->
+## stop and attack.
+func register_ai(actor_id: int, natural_weapon_id: StringName, spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, windup_ticks: int, detection_radius: float, leash_radius: float) -> void:
+	_ai_natural_weapon[actor_id] = String(natural_weapon_id)
+	_ai_spawn_position[actor_id] = spawn_position
+	_ai_state[actor_id] = "idle"
+	_ai_tuning[actor_id] = {
+		"preferred_attack_distance": preferred_attack_distance,
+		"minimum_attack_distance": minimum_attack_distance,
+		"windup_ticks": windup_ticks,
+		"detection_radius": detection_radius,
+		"leash_radius": leash_radius,
+	}
+	set_equipped_weapon(actor_id, natural_weapon_id)
+
+
 ## Autonomous-phase law (GAME-RULES §2): a phase that scans all actors on its own
 ## (contact spread, status resolution — and future Frost/Venom/Hex/AI behaviors) never
 ## mutates the collection it's iterating. Secondary effects (new spread recipients,
@@ -200,13 +259,22 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# this tick, so spawn and first step of travel always land on separate ticks, same
 	# as a melee swing resolving instantly on its own tick.
 	var events: Array[Event] = _advance_projectiles(dt)
-	for command in commands:
+	# AI (Phase D step 8 Phase 4) decides enemy Commands here, right before dispatch,
+	# so its output (move/attack) feeds through the exact same handlers below a
+	# player's own Commands would — no separate resolution path. It also appends any
+	# "attack_telegraph" Events directly into this tick's events (a side effect of the
+	# DECISION itself, not of a Command being applied, so it can't be an
+	# _apply_*-returned Event like everything else here).
+	var all_commands: Array[Command] = commands + _decide_ai_commands(events)
+	for command in all_commands:
 		if command.kind == "move":
 			events.append(_apply_move(command, dt))
 		elif command.kind == "attack":
 			events.append_array(_apply_attack(command))
 		elif command.kind == "block":
 			events.append_array(_apply_block(command))
+		elif command.kind == "switch_weapon":
+			events.append_array(_apply_switch_weapon(command))
 	# Contact spread reads this tick's post-attack status state (so a hit-applied
 	# status this same tick is visible as a snapshot candidate, but its one-tick grace
 	# keeps it from actually transmitting until a later tick); status ticking then
@@ -237,6 +305,23 @@ func _apply_move(command: Command, dt: float) -> Event:
 	position += direction * speed * dt
 	entities[command.actor_id] = position
 	return Event.new(tick_count, "moved", {"actor_id": command.actor_id, "position": position})
+
+
+## Ally-filtering (locked defect fix, pre-gate pass): same-allegiance actors are
+## never valid attack targets — checked FIRST, at candidacy time, so an allied
+## contact produces no damage, knockback, defenses, status proc/RNG draw, or Events
+## at all (not a null-outcome event; it's simply never a candidate). Applied
+## identically to melee's target scan and a projectile's swept-hit candidates —
+## enemy-vs-enemy and (forward to M3 co-op) player-vs-player are the same case,
+## generalized from allegiance alone, no special-casing per pair. Burn's own
+## contact-spread eligibility is unrelated and untouched (its player<->player
+## rejection lives in _advance_contact_spread, per its own locked rules).
+func _is_valid_target(attacker_id: int, target_id: int) -> bool:
+	if target_id == attacker_id:
+		return false
+	if _health.get(target_id, 0.0) <= 0.0:
+		return false
+	return _allegiance.get(target_id, &"enemy") != _allegiance.get(attacker_id, &"enemy")
 
 
 ## Combat pipeline order (GAME-RULES §3 / CLAUDE.md Core Interfaces, fixed): validate
@@ -275,7 +360,7 @@ func _apply_attack(command: Command) -> Array[Event]:
 		return _spawn_projectile(actor_id, weapon_id, weapon, attacker_position, resolved_aim)
 
 	var events: Array[Event] = []
-	var target_ids: Array = _families.keys().filter(func(id): return id != actor_id and _health.get(id, 0.0) > 0.0)
+	var target_ids: Array = _families.keys().filter(func(id): return _is_valid_target(actor_id, id))
 	target_ids.sort()  # dictionary iteration order must never leak into event order
 
 	for target_id in target_ids:
@@ -290,7 +375,13 @@ func _apply_attack(command: Command) -> Array[Event]:
 			if resolved_aim.dot(normalized_offset) < weapon.cone_threshold:
 				continue
 		# else: attacker and target share a position — hit at zero distance, cone check
-		# doesn't apply (no defined direction to check against).
+		# doesn't apply (no defined direction is well-defined at true zero offset).
+		# Point-blank melee (locked, pre-gate fix pass): this bypass lives HERE, in the
+		# shared hit path used by every melee attacker — the Envoy's own sword has the
+		# identical zero-offset seam swinging from inside a target's radius, not just
+		# AI-driven enemies. Deliberately narrow (near-EXACT position coincidence,
+		# not "combat radii merely overlap" more broadly) — at any nonzero offset the
+		# cone direction is well-defined and the normal check already applies correctly.
 		events.append_array(_resolve_hit_on_target(actor_id, target_id, weapon, resolved_aim, weapon_id))
 
 	return events
@@ -323,6 +414,14 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	_health[target_id] = remaining_health
 	var knocked_position: Vector3 = target_position + resolved_aim * weapon.knockback_distance
 	entities[target_id] = knocked_position
+
+	# Hit-establishes-aggro (locked defect fix): a successful hostile hit FROM THE
+	# PLAYER activates the target's AI regardless of detection_radius — detection is
+	# passive-acquisition only; a landed hit is an unambiguous "the player is right
+	# here." Harmless no-op for a non-AI target (_ai_state.has check) or a lethal hit
+	# (the target dies this same resolution and AI already skips dead actors).
+	if _allegiance.get(attacker_id, &"enemy") == &"player" and _ai_state.has(target_id):
+		_ai_state[target_id] = "active"
 
 	var events: Array[Event] = [Event.new(tick_count, "hit", {
 		"attacker_id": attacker_id,
@@ -443,17 +542,19 @@ func _advance_projectiles(dt: float) -> Array[Event]:
 	return events
 
 
-## Closest-point-on-segment test against every live, targetable combatant except the
-## shooter — earliest intersection along the segment wins; sorted ascending actor_id
-## iteration breaks an exact tie in favor of the lower id (mirrors melee's sorted-
-## target-id determinism rule). Returns -1 for no hit.
+## Closest-point-on-segment test against every live, targetable, HOSTILE combatant
+## except the shooter — earliest intersection along the segment wins; sorted
+## ascending actor_id iteration breaks an exact tie in favor of the lower id (mirrors
+## melee's sorted-target-id determinism rule). Returns -1 for no hit. Ally-filtering
+## (_is_valid_target) means an allied actor is never even a candidate here — a shot
+## passes straight through one with no expiry, no mutual bullet shields between allies.
 func _find_earliest_swept_hit(start: Vector3, end: Vector3, attacker_id: int, hit_radius: float) -> int:
 	var travel: Vector3 = end - start
 	var travel_length_sq: float = travel.length_squared()
 
 	var best_target_id: int = -1
 	var best_t: float = INF
-	var candidate_ids: Array = _families.keys().filter(func(id): return id != attacker_id and _health.get(id, 0.0) > 0.0)
+	var candidate_ids: Array = _families.keys().filter(func(id): return _is_valid_target(attacker_id, id))
 	candidate_ids.sort()
 
 	for target_id in candidate_ids:
@@ -547,6 +648,173 @@ func _apply_block(command: Command) -> Array[Event]:
 	return []
 
 
+## Advances actor_id's equipped weapon to the next id in its registered loadout
+## (set_weapon_loadout), wrapping around — a local "cycle" input, not identity: the
+## Command carries no weapon_id (see set_weapon_loadout's boundary-rule comment).
+## An actor with no registered loadout (e.g. an enemy) silently no-ops.
+func _apply_switch_weapon(command: Command) -> Array[Event]:
+	var actor_id: int = command.actor_id
+	if not _weapon_loadouts.has(actor_id):
+		return []
+	var loadout: Array[String] = _weapon_loadouts[actor_id]
+	if loadout.is_empty():
+		return []
+	var current_index: int = loadout.find(_equipped_weapon.get(actor_id, ""))
+	if current_index == -1:
+		current_index = 0
+	var next_index: int = (current_index + 1) % loadout.size()
+	var next_weapon_id: String = loadout[next_index]
+	_equipped_weapon[actor_id] = next_weapon_id
+	return [Event.new(tick_count, "weapon_switched", {"actor_id": actor_id, "weapon_id": next_weapon_id})]
+
+
+## STANDING RULE (locked, pre-gate fix pass — belongs in GAME-RULES §3 once a human
+## can edit that file; guard.py blocks agent edits to it by design, so it lives here
+## until then): distance preferences (preferred_attack_distance/minimum_attack_
+## distance) govern MOVEMENT ONLY. They never gate attack eligibility. Crowding an
+## enemy triggers a movement response (retreat), never a shutdown of its ability to
+## attack — applies to every current and future engagement AI, melee or ranged alike.
+## See _decide_single_ai_command's attack-priority ordering for the mechanism.
+##
+## Enemy AI top-level decision pass (Phase D step 8 Phase 4) — a CONSUMER of the
+## existing simulation, not a new gameplay system: it only ever decides
+## move_direction/attack-intent, synthesizing the exact same Command shapes a
+## player would send. No RNG (deterministic AI v1). Actors iterate in sorted
+## actor_id order so dictionary iteration order never leaks into decision/event
+## order (same discipline as every other autonomous phase — see tick()'s
+## class-level "Autonomous-phase law" comment). events is mutated in place
+## (Array is a reference type in GDScript) so a telegraph can be appended at the
+## exact moment an enemy commits to a windup, which isn't itself the result of
+## applying any Command.
+func _decide_ai_commands(events: Array[Event]) -> Array[Command]:
+	var commands: Array[Command] = []
+	var player_id: int = _find_living_player_id()
+	if player_id == -1:
+		# No living player: enemies stop acting entirely (locked). Any in-progress
+		# windup simply sits inert — a restart (fresh SimWorld) is the only way play
+		# resumes, per Phase 3's death handling.
+		return commands
+
+	var ai_actor_ids: Array = _ai_state.keys()
+	ai_actor_ids.sort()
+	for actor_id in ai_actor_ids:
+		if _health.get(actor_id, 0.0) <= 0.0:
+			continue  # a dead enemy emits nothing and decides nothing
+		commands.append_array(_decide_single_ai_command(actor_id, player_id, events))
+	return commands
+
+
+func _find_living_player_id() -> int:
+	var actor_ids: Array = _allegiance.keys()
+	actor_ids.sort()
+	for actor_id in actor_ids:
+		if _allegiance[actor_id] == &"player" and _health.get(actor_id, 0.0) > 0.0:
+			return actor_id
+	return -1
+
+
+## One actor_id's idle/active state machine for this tick. "active" covers
+## both pursuing and engaged — attack timing is two nullable tick fields
+## (_ai_attack_start_tick/_ai_attack_fire_tick), not a fourth state; see
+## _decide_attack_commands.
+func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Event]) -> Array[Command]:
+	var tuning: Dictionary = _ai_tuning[actor_id]
+	var spawn_position: Vector3 = _ai_spawn_position[actor_id]
+	var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var player_position: Vector3 = entities.get(player_id, Vector3.ZERO)
+	var state: String = _ai_state.get(actor_id, "idle")
+
+	if state == "idle":
+		var spawn_to_player: Vector3 = player_position - spawn_position
+		spawn_to_player.y = 0.0
+		if spawn_to_player.length() > tuning.detection_radius:
+			return []  # no re-acquisition path except idle -> active (locked)
+		_ai_state[actor_id] = "active"
+		state = "active"
+
+	# state == "active": leash check first (measured from the fixed anchor, not this
+	# actor's current position) — a player who wandered far enough drops pursuit
+	# entirely, even if still technically "in range" of a leash-adjacent position.
+	var spawn_to_player: Vector3 = player_position - spawn_position
+	spawn_to_player.y = 0.0
+	if spawn_to_player.length() > tuning.leash_radius:
+		# Disengage (locked behavior change, pre-gate fix pass): no universal
+		# return-to-spawn. The enemy stops exactly where it is and goes idle
+		# immediately — its leash/detection anchor RE-ANCHORS to this stopped
+		# position, so the NEXT chase is leashed from here, not the original spawn
+		# point (an accepted "chain-drag" consequence for this milestone; noted for
+		# M2's room-bounded territory). Passive re-acquisition still only happens
+		# from idle, using the new anchor — the existing idle->active reset rule is
+		# unchanged. Original scene spawn positions are scene-init/encounter-reset
+		# data only (register_ai unconditionally overwrites this on re-registration).
+		_ai_spawn_position[actor_id] = position
+		_ai_state[actor_id] = "idle"
+		_ai_attack_start_tick.erase(actor_id)
+		_ai_attack_fire_tick.erase(actor_id)
+		return []
+
+	# Attack priority over movement (locked defect fix): preferred/minimum distance
+	# governs MOVEMENT ONLY -- it never gates whether an otherwise-valid attack can
+	# start. The earlier version let retreat pre-empt an attack that could otherwise
+	# land, which meant a player standing inside an enemy's minimum_attack_distance
+	# could suppress that enemy's attack indefinitely (a real exploit, not cosmetic
+	# jitter). Order, evaluated fresh every tick:
+	#   1. A windup already in progress always freezes movement and runs to
+	#      completion, regardless of how distance has changed since it started (no
+	#      more mid-windup distance-based cancellation).
+	#   2. Otherwise, if the weapon's own cooldown has elapsed AND the target is
+	#      within its actual reach (== preferred_attack_distance; content's job to
+	#      keep those equal, see NaturalWeaponStats), stop and start a new windup --
+	#      even at a distance inside minimum_attack_distance. Crowding cannot
+	#      indefinitely suppress an attack.
+	#   3. Only if neither of the above applies does movement preference run:
+	#      closer than minimum -> retreat, farther than preferred -> approach,
+	#      inside the band (here only because the weapon is on cooldown) -> hold.
+	if _ai_attack_fire_tick.has(actor_id):
+		return _decide_attack_commands(actor_id, tuning, player_id, events)
+
+	var to_player: Vector3 = player_position - position
+	to_player.y = 0.0
+	var distance_to_player: float = to_player.length()
+
+	if tick_count >= _next_fire_tick.get(actor_id, 0) and distance_to_player <= tuning.preferred_attack_distance:
+		return _decide_attack_commands(actor_id, tuning, player_id, events)
+
+	if distance_to_player < tuning.minimum_attack_distance:
+		return [Command.new(tick_count, actor_id, "move", {"direction": -to_player.normalized()})]
+
+	if distance_to_player > tuning.preferred_attack_distance:
+		return [Command.new(tick_count, actor_id, "move", {"direction": to_player.normalized()})]
+
+	return []  # in band, weapon on cooldown: hold position and wait
+
+
+## In-range attack timing — two nullable tick fields, not a distinct "windup" state
+## (locked). Reuses the shared per-actor fire-rate gate (_next_fire_tick, the same
+## one _apply_attack already checks) instead of a second AI-owned cooldown dict, so
+## an enemy can't start a new windup before its own weapon's fire_interval_ticks has
+## elapsed from its last actual attack.
+func _decide_attack_commands(actor_id: int, tuning: Dictionary, player_id: int, events: Array[Event]) -> Array[Command]:
+	if _ai_attack_fire_tick.has(actor_id):
+		if tick_count < _ai_attack_fire_tick[actor_id]:
+			return []  # still winding up
+		_ai_attack_start_tick.erase(actor_id)
+		_ai_attack_fire_tick.erase(actor_id)
+		var stored_facing: Vector3 = _facings.get(actor_id, Vector3(0.0, 0.0, -1.0))
+		var aim: Vector3 = _normalize_horizontal(entities.get(player_id, Vector3.ZERO) - entities.get(actor_id, Vector3.ZERO), stored_facing)
+		return [Command.new(tick_count, actor_id, "attack", {"aim": aim})]
+
+	if tick_count < _next_fire_tick.get(actor_id, 0):
+		return []  # weapon's own cooldown from the last attack hasn't elapsed yet
+
+	_ai_attack_start_tick[actor_id] = tick_count
+	_ai_attack_fire_tick[actor_id] = tick_count + int(tuning.windup_ticks)
+	var weapon_id: String = _ai_natural_weapon.get(actor_id, "")
+	var damage_type: String = _weapons.get(weapon_id, {}).get("damage_type", "force")
+	events.append(Event.new(tick_count, "attack_telegraph", {"actor_id": actor_id, "damage_type": damage_type}))
+	return []
+
+
 ## Arms/refreshes target_id's single status slot (GAME-RULES §3: exclusive, never
 ## stacked). Re-applying the SAME status_id always refreshes (a melee weapon hitting
 ## an already-Burning target resets its clock); a DIFFERENT status only overwrites
@@ -555,18 +823,34 @@ func _apply_block(command: Command) -> Array[Event]:
 ## (ROADMAP P2) makes it real, same "ships complete, content catches up" shape as the
 ## damage matrix. applied_tick is the one-tick grace gate: a status armed THIS tick
 ## cannot deal a DoT pulse or act as a contact-spread source until a later tick.
-func _apply_status(target_id: int, status_id: StringName, application_source: String, source_actor_id: int, source_weapon_id: String) -> Event:
+## inherited_duration (locked, pre-gate fix pass): a HIT application (the default,
+## -1) always arms the full configured duration — the existing refresh behavior.
+## Contact spread passes the transmitting source's own remaining duration instead
+## (snapshotted by the caller under the autonomous-phase law) so a chain can never
+## contain more remaining duration than its source had; still capped at the
+## configured duration as a defensive floor/ceiling, never a fresh full copy.
+func _apply_status(target_id: int, status_id: StringName, application_source: String, source_actor_id: int, source_weapon_id: String, inherited_duration: int = -1) -> Event:
 	var new_id: String = String(status_id)
 	var existing: Dictionary = _status_instances.get(target_id, {})
 	var can_apply: bool = existing.is_empty() or existing.id == new_id or _status_priority.get(new_id, 0) >= _status_priority.get(existing.id, 0)
 	if can_apply:
 		var config: Dictionary = _status_config[new_id]
+		var duration: int = config.duration_ticks if inherited_duration < 0 else min(inherited_duration, config.duration_ticks)
 		_status_instances[target_id] = {
 			"id": new_id,
-			"ticks_remaining": config.duration_ticks,
+			"ticks_remaining": duration,
 			"next_tick": tick_count + config.tick_interval_ticks,
 			"applied_tick": tick_count,
 		}
+		# Hit-establishes-aggro (locked defect fix): a status APPLICATION (fresh apply
+		# or refresh) attributable to the player also activates the target's AI,
+		# exactly like a health-hit — covers a hit-triggered proc AND Burn's contact
+		# spread when its immediate source is the player. A later DoT TICK never
+		# reaches this function at all (_advance_status_ticks resolves ticks
+		# directly), so ticking alone can never (re-)establish aggro — only an
+		# application can.
+		if _allegiance.get(source_actor_id, &"enemy") == &"player" and _ai_state.has(target_id):
+			_ai_state[target_id] = "active"
 	var payload: Dictionary = {
 		"target_id": target_id,
 		"status_id": new_id,
@@ -617,11 +901,11 @@ func _advance_contact_spread() -> Array[Event]:
 	var events: Array[Event] = []
 	_cleanup_stale_contact_pairs()
 
-	var eligible_sources: Dictionary = {}  # actor_id -> status_id, snapshot -- never re-read after this loop
+	var eligible_sources: Dictionary = {}  # actor_id -> {status_id, remaining_duration}, snapshot -- never re-read after this loop
 	for actor_id in _status_instances.keys():
 		var instance: Dictionary = _status_instances[actor_id]
 		if instance.applied_tick < tick_count and _health.get(actor_id, 0.0) > 0.0:
-			eligible_sources[actor_id] = instance.id
+			eligible_sources[actor_id] = {"status_id": instance.id, "remaining_duration": instance.ticks_remaining}
 
 	var alive_ids: Array = _families.keys().filter(func(id): return _health.get(id, 0.0) > 0.0)
 	alive_ids.sort()  # determinism -- dictionary iteration order must never leak into event order
@@ -646,12 +930,12 @@ func _advance_contact_spread() -> Array[Event]:
 				continue  # recipient already has an active status -- not "unburned"
 			if _allegiance.get(source_id, &"enemy") == &"player" and _allegiance.get(recipient_id, &"enemy") == &"player":
 				continue  # player -> player spread is explicitly rejected this session
-			collected.append({"recipient": recipient_id, "source": source_id, "status_id": eligible_sources[source_id], "pair_key": pair_key})
+			collected.append({"recipient": recipient_id, "source": source_id, "status_id": eligible_sources[source_id].status_id, "remaining_duration": eligible_sources[source_id].remaining_duration, "pair_key": pair_key})
 
 	collected.sort_custom(func(x, y): return x.recipient < y.recipient if x.recipient != y.recipient else x.source < y.source)
 	for entry in collected:
 		_contact_transmitted_pairs[entry.pair_key] = true
-		events.append(_apply_status(entry.recipient, entry.status_id, "spread", entry.source, ""))
+		events.append(_apply_status(entry.recipient, entry.status_id, "spread", entry.source, "", entry.remaining_duration))
 	return events
 
 

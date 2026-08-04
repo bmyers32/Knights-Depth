@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/actors/enemies/telegraph_indicator.gd" id="1_script"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_1"]
+top_radius = 0.8
+bottom_radius = 0.8
+height = 0.02
+
+[node name="TelegraphIndicator" type="MeshInstance3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 0)
+mesh = SubResource("CylinderMesh_1")
+script = ExtResource("1_script")

@@ -23,6 +23,11 @@ const _REGISTRY: Dictionary = {
 		"ooze": preload("res://game/content/enemies/ooze/ooze_stats.tres"),
 		"watcher": preload("res://game/content/enemies/watcher/watcher_stats.tres"),
 	},
+	"natural_weapon": {
+		"fang_bite": preload("res://game/content/enemies/natural_weapons/fang_bite.tres"),
+		"ooze_slam": preload("res://game/content/enemies/natural_weapons/ooze_slam.tres"),
+		"watcher_pulse": preload("res://game/content/enemies/natural_weapons/watcher_pulse.tres"),
+	},
 	"combat": {
 		"damage_matrix": preload("res://game/content/combat/damage_matrix.tres"),
 	},

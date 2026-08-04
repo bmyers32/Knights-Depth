@@ -22,6 +22,9 @@ const TARGET_POSITION := Vector3(0, 0, -1)  # directly ahead of the attacker's d
 func before_each() -> void:
 	sim = SimWorld.new()
 	sim.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
+	# Ally-filtering (locked defect fix): the attacker needs an allegiance different
+	# from the target's (default "enemy") or every attack below filters as allied.
+	sim.register_combatant(ATTACKER_ID, 999.0, &"envoy", 0, 0.0, &"player")
 	sim.register_weapon(WEAPON_ID, 10.0, &"force", 2.0, 60.0, 1.0)
 	sim.set_equipped_weapon(ATTACKER_ID, WEAPON_ID)
 	sim.set_damage_matrix({}, 1.5, 0.5)
@@ -347,6 +350,7 @@ func test_block_and_attack_sequence_is_deterministic() -> void:
 	for _i in range(2):
 		var local_sim := SimWorld.new()
 		local_sim.add_entity(ATTACKER_ID, Vector3.ZERO, 4.0)
+		local_sim.register_combatant(ATTACKER_ID, 999.0, &"envoy", 0, 0.0, &"player")
 		local_sim.register_weapon(WEAPON_ID, 10.0, &"force", 2.0, 60.0, 1.0)
 		local_sim.set_equipped_weapon(ATTACKER_ID, WEAPON_ID)
 		local_sim.set_damage_matrix({}, 1.5, 0.5)
