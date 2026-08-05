@@ -311,3 +311,36 @@ proves what its name claims. **Applies elsewhere:** any future change to a share
 decision function's condition ORDER in this codebase — re-examine every existing
 test that reaches that function, not just ones whose assertions reference the
 changed behavior directly.
+
+### A same-tick state transition needs "did I cause it," not "did it happen"
+**Incident (M1, lunge/windup pending-attack session):** two validation-pass
+findings in the same feature. (A) `_apply_phased_melee_attack`'s synchronous
+catch-up call checked ambient post-call state (`_melee_hold[actor].state ==
+"executing"`) after calling `_release_melee_hold`, without confirming THIS call
+caused the transition — a mid-swing buffered press's own "released" (its
+`_release_melee_hold` call takes an early-return branch, touching nothing) could
+still see an unrelated already-open "executing" record left by the tick's earlier
+autonomous phase, and double-processed that tick's lunge movement. Fixed by
+capturing pre-call state (`was_charging`) and gating the catch-up call on the
+actual before/after transition, not the post-call snapshot alone. (B) `envoy.gd`
+built the `move` Command before `attack`; on a tap-release tick that transitions
+straight to "executing," ordinary WASD movement applied BEFORE the transition,
+then the synchronous catch-up call ALSO applied the swing's first lunge step —
+one tick blended free input with authored movement, breaking the locked "authored
+movement replaces input" rule. Fixed by reordering `attack` before `move`.
+**Mechanism:** when a sim tick has more than one entry point into the same
+actor-keyed state record (an autonomous per-tick scan phase plus a synchronous
+same-tick call triggered by a Command), logic gating on "is the state now X" must
+distinguish "I just caused this transition" from "this was already true before I
+ran" — otherwise an unrelated second caller reading the same post-state either
+double-processes an effect or silently races against another Command's
+ordering-dependent side effect. **Failure if ignored:** a duplicated one-tick
+effect or a blended authored/input movement tick, both invisible to assertions
+that only check final state — caught here only by a validation pass reasoning
+through call order, not by any test that ran green. **Applies elsewhere:** any
+future sim phase with more than one entry point into the same actor-keyed state
+dict — a buffered input materializing into a state machine an autonomous phase
+already advanced this tick, M2's elevator/floor-transition logic if it ever gets
+a similar dual-trigger shape, and any M3 netcode reconciliation path where a
+server correction and a normal tick advance the same actor's state in the same
+frame.
