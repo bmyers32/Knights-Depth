@@ -12,6 +12,16 @@ extends RefCounted
 ## pattern add_entity already established for move_speed.
 
 const _FACING_EPSILON_SQ: float = 0.000001
+## Manual-pass lunge-clamp addition: the ONE shared epsilon for "authoritative
+## contact distance" (combined combat radii), used by BOTH Burn contact-spread
+## (_actors_overlap) and the melee lunge clamp (_find_earliest_lunge_contact) via
+## _contact_distance -- the two mechanics must never have independently tuned
+## thresholds for the same physical contact concept. 0.0: Burn's existing formula
+## has zero tolerance today (exact `<=`), so this preserves its tested behavior
+## unchanged; no nonzero value is justified without evidence the exact-touching
+## threshold itself is wrong, which is a separate calibration question from this
+## change.
+const _CONTACT_PADDING: float = 0.0
 
 var entities: Dictionary = {}  # actor_id -> Vector3 position
 var _move_speeds: Dictionary = {}  # actor_id -> float
@@ -29,6 +39,47 @@ var _next_projectile_id: int = 0
 var _matrix_families: Dictionary = {}  # family(String) -> {"weak_to": String, "resists": String}
 var _matrix_weak_multiplier: float = 1.0
 var _matrix_resist_multiplier: float = 1.0
+## Slice B (3-hit combo + hold-to-charge, GAME-RULES §3) — weapon_id(String) keyed,
+## populated only by register_melee_profiles. A weapon_id present here routes
+## _apply_attack to the phased press/held/released model (_apply_phased_melee_
+## attack) instead of the original flat instant-resolve path; a weapon never
+## registered this way (guns, sword_A, every enemy natural weapon) is completely
+## unaffected -- these dicts simply stay empty for it.
+var _melee_combo_profiles: Dictionary = {}  # weapon_id(String) -> Array[Dictionary] (resolved profiles, size 3)
+var _melee_charge_profiles: Dictionary = {}  # weapon_id(String) -> Dictionary (resolved profile)
+var _melee_charge_threshold_ticks: Dictionary = {}  # weapon_id(String) -> int
+var _melee_combo_reset_ticks: Dictionary = {}  # weapon_id(String) -> int
+var _melee_input_buffer_ticks: Dictionary = {}  # weapon_id(String) -> int
+## actor_id -> a THREE-STATE pending-attack record (manual-pass lunge/windup,
+## generalizing the original hold-only shape rather than adding a second dict --
+## these states are temporally exclusive phases of one "this actor has an attack in
+## progress" concept):
+##   "charging" — {weapon_id, state, charge_ticks} — button down, pre-release,
+##     unchanged from the original Slice B shape.
+##   "windup"   — {weapon_id, state, profile, attack_profile_id, aim, windup_end_tick}
+##     — charge-only (charge_profile.windup_ticks > 0), entered on a charged
+##     release instead of resolving instantly. aim is locked at release and never
+##     re-tracks. No end_tick yet -- not buffer-eligible (see _begin_melee_hold).
+##   "executing" — {weapon_id, state, profile, attack_profile_id, aim,
+##     execution_start_tick, hit_tick, end_tick, hit_resolved} — the swing is
+##     actively resolving (lunge unfolding, hit pending/resolved, recovery
+##     running). Entered directly from a combo-tap release, or from "windup" once
+##     windup_end_tick arrives (entities[actor_id] is RESAMPLED at that transition
+##     -- "origin moves" -- profile/attack_profile_id/aim carry over unchanged).
+## Erased on natural completion (_advance_melee_execution_tick's end_tick branch),
+## cancellation (_cancel_open_melee_hold: block rising-edge, enemy interrupt), or
+## death/switch (_clear_attack_input_state) -- never left dangling.
+var _melee_hold: Dictionary = {}
+var _combo_index: Dictionary = {}  # actor_id -> int, 0 = next tap swing is hit 1
+var _combo_expire_tick: Dictionary = {}  # actor_id -> int, a "pressed" after this tick starts a fresh sequence (index snapped to 0)
+## actor_id -> {weapon_id: String, released: bool, release_aim: Vector3} -- present
+## ONLY while a "pressed" that arrived during recovery is queued waiting for the
+## cooldown to clear (manual-pass input buffer, GAME-RULES §3). released/release_aim
+## capture an early release that arrived before the buffer materialized, so it can
+## still resolve as a clean tap on the materialization tick instead of a stuck hold
+## (see _advance_buffered_attacks). Erased alongside _melee_hold everywhere that
+## clears it (_clear_attack_input_state, block's rising-edge cancel).
+var _melee_buffered_press: Dictionary = {}
 var _shields: Dictionary = {}  # actor_id -> Dictionary of resolved shield stats
 var _shield_state: Dictionary = {}  # actor_id -> "ready" | "held" | "broken"
 var _shield_meter: Dictionary = {}  # actor_id -> float
@@ -118,17 +169,63 @@ func register_combatant(actor_id: int, max_health: float, family: StringName, if
 ## status_id but zero chance never actually applies it); 0.0/1.0 short-circuit
 ## deterministically without drawing from _combat_rng (see _roll_status_proc).
 func register_weapon(weapon_id: StringName, damage: float, damage_type: StringName, reach: float, cone_half_angle_degrees: float, knockback_distance: float, fire_interval_ticks: int = 0, status_id: StringName = &"", status_proc_chance: float = 0.0) -> void:
-	_weapons[String(weapon_id)] = {
+	_weapons[String(weapon_id)] = _resolve_melee_profile(damage, String(damage_type), reach, cone_half_angle_degrees, knockback_distance, fire_interval_ticks, String(status_id), status_proc_chance)
+
+
+## Shared by register_weapon and register_melee_profiles (rule of two: both build the
+## exact same resolved-profile shape from plain scalars) -- the one place the
+## cone_half_angle_degrees -> cone_threshold conversion happens. Also the one place
+## the hit_active_ticks <= lunge_duration_ticks profile invariant is linted (manual-
+## pass, GAME-RULES §3 damage-matrix-lint precedent): a hit whose offset lands past
+## its own swing's end_tick would otherwise silently never resolve (the end_tick
+## branch erases the record before a later hit_tick could fire) -- clamped and
+## warned, never silently lost. debug_label is cosmetic (warning message only).
+func _resolve_melee_profile(damage: float, damage_type: String, reach: float, cone_half_angle_degrees: float, knockback_distance: float, fire_interval_ticks: int, status_id: String, status_proc_chance: float, interrupt_strength: int = 0, lunge_distance: float = 0.0, lunge_duration_ticks: int = 0, hit_active_ticks: int = 0, windup_ticks: int = 0, debug_label: String = "") -> Dictionary:
+	var resolved_hit_active_ticks: int = hit_active_ticks
+	if resolved_hit_active_ticks > lunge_duration_ticks:
+		var label_suffix: String = (" [%s]" % debug_label) if debug_label != "" else ""
+		push_warning("MeleeAttackProfile%s: hit_active_ticks (%d) > lunge_duration_ticks (%d) -- clamped" % [label_suffix, hit_active_ticks, lunge_duration_ticks])
+		resolved_hit_active_ticks = lunge_duration_ticks
+	return {
 		"resolution": "melee",
 		"damage": damage,
-		"damage_type": String(damage_type),
+		"damage_type": damage_type,
 		"reach": reach,
 		"cone_threshold": cos(deg_to_rad(cone_half_angle_degrees)),
 		"knockback_distance": knockback_distance,
 		"fire_interval_ticks": fire_interval_ticks,
-		"status_id": String(status_id),
+		"status_id": status_id,
 		"status_proc_chance": status_proc_chance,
+		"interrupt_strength": interrupt_strength,
+		"lunge_distance": lunge_distance,
+		"lunge_duration_ticks": lunge_duration_ticks,
+		"hit_active_ticks": resolved_hit_active_ticks,
+		"windup_ticks": windup_ticks,
 	}
+
+
+## Registers a combo/charge-capable melee weapon (GAME-RULES §3 Slice B) -- the
+## alternative to register_weapon for a weapon whose content (SwordStats.
+## combo_profiles) is non-empty. weapon_id stays the real equip identity, never a
+## composite id -- combo/charge profiles live in SimWorld's own tables keyed by it,
+## exactly like set_damage_matrix keys off family names rather than embedding a
+## DamageMatrix Resource in sim/. combo_profiles/charge_profile are plain resolved
+## Dictionaries (the driver unpacks each MeleeAttackProfile Resource before calling
+## this -- Resources never cross into sim/, see class doc). Presence of weapon_id in
+## _melee_combo_profiles after this call is what routes _apply_attack to the phased
+## model; register_weapon's flat path is completely untouched for every other
+## weapon.
+func register_melee_profiles(weapon_id: StringName, combo_profiles: Array[Dictionary], charge_profile: Dictionary, charge_threshold_ticks: int, combo_reset_ticks: int, input_buffer_ticks: int = 0) -> void:
+	var key: String = String(weapon_id)
+	var resolved_combo: Array = []
+	for i in combo_profiles.size():
+		var profile: Dictionary = combo_profiles[i]
+		resolved_combo.append(_resolve_melee_profile(profile.damage, String(profile.damage_type), profile.reach, profile.cone_half_angle_degrees, profile.knockback_distance, profile.fire_interval_ticks, String(profile.status_id), profile.status_proc_chance, int(profile.get("interrupt_strength", 0)), float(profile.get("lunge_distance", 0.0)), int(profile.get("lunge_duration_ticks", 0)), int(profile.get("hit_active_ticks", 0)), int(profile.get("windup_ticks", 0)), "%s combo hit %d" % [key, i + 1]))
+	_melee_combo_profiles[key] = resolved_combo
+	_melee_charge_profiles[key] = _resolve_melee_profile(charge_profile.damage, String(charge_profile.damage_type), charge_profile.reach, charge_profile.cone_half_angle_degrees, charge_profile.knockback_distance, charge_profile.fire_interval_ticks, String(charge_profile.status_id), charge_profile.status_proc_chance, int(charge_profile.get("interrupt_strength", 0)), float(charge_profile.get("lunge_distance", 0.0)), int(charge_profile.get("lunge_duration_ticks", 0)), int(charge_profile.get("hit_active_ticks", 0)), int(charge_profile.get("windup_ticks", 0)), "%s charge" % key)
+	_melee_charge_threshold_ticks[key] = charge_threshold_ticks
+	_melee_combo_reset_ticks[key] = combo_reset_ticks
+	_melee_input_buffer_ticks[key] = input_buffer_ticks
 
 
 ## Registers a ranged weapon (GAME-RULES §3: "projectile with travel time") — same
@@ -246,6 +343,17 @@ func register_ai(actor_id: int, natural_weapon_id: StringName, spawn_position: V
 	set_equipped_weapon(actor_id, natural_weapon_id)
 
 
+## Debug-only, setup-time direct write (arena.gd's debug_force_aggro) -- called ONCE
+## from _ready(), never during ticking. Skips authentic detection_radius gating for
+## manual diagnostic testing; the real gameplay driver never calls this
+## (debug_force_aggro defaults false). Must be called AFTER register_ai for this
+## actor (which unconditionally sets "idle" internally) -- this exists so the one
+## place that ever mutates _ai_state stays inside SimWorld even for a debug hook,
+## instead of arena.gd reaching into the dict directly.
+func debug_set_ai_active(actor_id: int) -> void:
+	_ai_state[actor_id] = "active"
+
+
 ## Autonomous-phase law (GAME-RULES §2): a phase that scans all actors on its own
 ## (contact spread, status resolution — and future Frost/Venom/Hex/AI behaviors) never
 ## mutates the collection it's iterating. Secondary effects (new spread recipients,
@@ -259,6 +367,19 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# this tick, so spawn and first step of travel always land on separate ticks, same
 	# as a melee swing resolving instantly on its own tick.
 	var events: Array[Event] = _advance_projectiles(dt)
+	# Input buffer (manual-pass, GAME-RULES §3): resolve any press that queued during
+	# a prior tick's cooldown BEFORE this tick's Commands process, so if this same
+	# tick also carries this actor's "held"/"released" Command, it lands against the
+	# freshly-opened hold correctly rather than a tick late.
+	events.append_array(_advance_buffered_attacks())
+	# Pending melee attacks (manual-pass lunge/windup) advance here -- after the
+	# buffer (so a press materialized above can still be picked up as "executing"
+	# this same tick), before AI decisions/Commands (so a hit whose hit_tick is THIS
+	# tick resolves, and any resulting combo bookkeeping happens, before this same
+	# tick's block Command could process -- the ordering that makes the shield-
+	# cancel timing rule explicit-by-construction rather than incidental Command-
+	# array order; see _advance_melee_execution_tick).
+	events.append_array(_advance_pending_attacks())
 	# AI (Phase D step 8 Phase 4) decides enemy Commands here, right before dispatch,
 	# so its output (move/attack) feeds through the exact same handlers below a
 	# player's own Commands would — no separate resolution path. It also appends any
@@ -268,6 +389,13 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	var all_commands: Array[Command] = commands + _decide_ai_commands(events)
 	for command in all_commands:
 		if command.kind == "move":
+			# Movement suppression during "executing" (manual-pass, locked):
+			# authored lunge movement REPLACES input by design -- the lunge is
+			# content, never an input-plus-lunge vector blend. This is what lets
+			# weapon lines own their movement identity as pure content. "windup"
+			# and "charging" are unaffected (free movement, explicit locked rule).
+			if _melee_hold.get(command.actor_id, {}).get("state", "") == "executing":
+				continue
 			events.append(_apply_move(command, dt))
 		elif command.kind == "attack":
 			events.append_array(_apply_attack(command))
@@ -325,20 +453,34 @@ func _is_valid_target(attacker_id: int, target_id: int) -> bool:
 
 
 ## Combat pipeline order (GAME-RULES §3 / CLAUDE.md Core Interfaces, fixed): validate
-## -> hit detect -> damage-type matrix -> status -> knockback -> death/events. A single
-## discrete attack this session; the 3-hit combo and hold-to-charge (locked in GAME-RULES §3)
-## will sequence multiple attacks through this same pipeline, not a second path.
-## The equipped weapon (set_equipped_weapon) decides resolution: melee sweeps all
-## qualifying targets instantly; a gun spawns a projectile and resolves later
-## (_advance_projectiles) — both funnel into the same _resolve_hit_on_target tail.
+## -> hit detect -> damage-type matrix -> status -> knockback -> death/events. The
+## 3-hit combo and hold-to-charge (Slice B, GAME-RULES §3) sequence through this
+## exact pipeline too — see _apply_phased_melee_attack, which resolves into the same
+## _resolve_melee_swing/_resolve_hit_on_target tail as this function's flat path,
+## never a second path. The equipped weapon (set_equipped_weapon) decides
+## resolution: melee sweeps all qualifying targets instantly; a gun spawns a
+## projectile and resolves later (_advance_projectiles) — both funnel into the same
+## _resolve_hit_on_target tail.
 func _apply_attack(command: Command) -> Array[Event]:
 	var actor_id: int = command.actor_id
 	if _health.get(actor_id, 1.0) <= 0.0:
 		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "attacker_dead"})]
 
 	var weapon_id: String = _equipped_weapon.get(actor_id, "")
-	if not _weapons.has(weapon_id):
+	var is_phased_melee: bool = _melee_combo_profiles.has(weapon_id)
+	if not is_phased_melee and not _weapons.has(weapon_id):
 		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "invalid_weapon"})]
+
+	# phase defaults to "pressed" -- every pre-Slice-B Command (every existing test,
+	# every gun/enemy attack) carries no phase key at all and falls straight through
+	# to the untouched instant-resolve path below, byte-for-byte (backward-compat
+	# contract, locked spec).
+	var phase: String = String(command.params.get("phase", "pressed"))
+	if is_phased_melee:
+		return _apply_phased_melee_attack(actor_id, weapon_id, phase, command)
+	if phase != "pressed":
+		return []  # held/released are meaningless for a weapon with no charge profile registered
+
 	var weapon: Dictionary = _weapons[weapon_id]
 
 	# Per-weapon rate limit (manual playtest finding: spam-clicking the gun fired a new
@@ -359,7 +501,429 @@ func _apply_attack(command: Command) -> Array[Event]:
 	if weapon.resolution == "projectile":
 		return _spawn_projectile(actor_id, weapon_id, weapon, attacker_position, resolved_aim)
 
+	return _resolve_melee_swing(actor_id, attacker_position, resolved_aim, weapon, weapon_id, "")
+
+
+## Slice B phased attack model (GAME-RULES §3: 3-hit combo + hold-to-charge) — the
+## resolution path for any weapon registered via register_melee_profiles. Continuum
+## model (locked spec): charge is how long you hold the same attack, not a separate
+## mode. A single press -> [held...] -> released cycle always resolves to exactly
+## ONE swing: the current combo step if released before charge_threshold_ticks, the
+## charge_profile instead if released at/after it. Dead-actor rejection already
+## happened in _apply_attack above, uniformly for all three phases.
+func _apply_phased_melee_attack(actor_id: int, weapon_id: String, phase: String, command: Command) -> Array[Event]:
+	match phase:
+		"pressed":
+			return _begin_melee_hold(actor_id, weapon_id)
+		"held":
+			var hold: Dictionary = _melee_hold.get(actor_id, {})
+			# "held" only means anything while still "charging" -- a windup/
+			# executing record has no charge_ticks field at all (shouldn't be
+			# reachable via envoy.gd's own edge-detected input, since "released"
+			# only ever fires on a genuine button-up, but guarded defensively
+			# rather than assumed).
+			if hold.get("weapon_id", "") == weapon_id and hold.get("state", "") == "charging":
+				var threshold: int = _melee_charge_threshold_ticks.get(weapon_id, 0)
+				var was_ready: bool = int(hold.charge_ticks) >= threshold
+				hold.charge_ticks = min(int(hold.charge_ticks) + 1, threshold)  # saturates -- holding past threshold never charges further
+				var is_ready: bool = int(hold.charge_ticks) >= threshold
+				# charge_ready fires exactly once, on the false->true saturation edge
+				# (manual-pass cue, GAME-RULES §3) -- a pure state-transition signal,
+				# never repeated on subsequent held ticks. Presentation listens for
+				# this to turn a persistent tint ON; it never polls charge_ticks/
+				# threshold itself (see SwordStats.charge_ready_tint_color's comment).
+				if is_ready and not was_ready:
+					return [Event.new(tick_count, "charge_ready", {"actor_id": actor_id, "weapon_id": weapon_id})]
+			return []
+		"released":
+			# Post-implementation review catch: checking the AMBIENT post-call state
+			# below (without first confirming THIS call is what produced it) double-
+			# processes an unrelated, already-open "executing" record -- reachable
+			# when a mid-swing buffered press's own "released" arrives while the
+			# original swing is still executing: _release_melee_hold takes its
+			# early-return branch (stashes buffered.released, touches nothing in
+			# _melee_hold), yet the original swing's state still reads "executing"
+			# afterward, triggering a spurious second _advance_melee_execution_tick
+			# call this same tick (double-applies that tick's lunge step). Gating on
+			# was_charging ensures the synchronous catch-up only fires when THIS
+			# call is what transitioned charging -> executing.
+			var was_charging: bool = _melee_hold.get(actor_id, {}).get("state", "") == "charging"
+			var events: Array[Event] = _release_melee_hold(actor_id, weapon_id, command)
+			# Backward-compat/off-by-one fix (manual-pass): a record opened just now
+			# by this Command needs ONE synchronous execution-tick call, since
+			# _advance_pending_attacks already ran earlier this same tick() call and
+			# won't see this brand-new record until the NEXT tick otherwise -- every
+			# existing all-zero-field weapon would resolve its hit one tick late.
+			if was_charging and _melee_hold.get(actor_id, {}).get("state", "") == "executing":
+				events.append_array(_advance_melee_execution_tick(actor_id))
+			return events
+		_:
+			return []
+
+
+## Slice B interruption rule (locked): death and a weapon switch both clear ALL
+## attack-input state (hold + combo index + inactivity timer) -- see both death
+## sites above and _apply_switch_weapon. A block rising-edge is the one interruption
+## that does NOT call this: it only cancels the in-progress hold, deliberately
+## leaving combo_index/expire untouched (locked rule -- block-canceling an
+## unreleased hold doesn't consume/complete a step, so prior progress survives).
+## Returns a "melee_hold_canceled" Event iff a hold was actually open (manual-pass
+## cue: presentation listens for this to clear a persistent charge-ready tint --
+## checked BEFORE erasing, never emitted for a no-op cancel of nothing).
+func _clear_attack_input_state(actor_id: int) -> Array[Event]:
 	var events: Array[Event] = []
+	if _melee_hold.has(actor_id):
+		events.append(Event.new(tick_count, "melee_hold_canceled", {"actor_id": actor_id, "weapon_id": String(_melee_hold[actor_id].weapon_id)}))
+	_melee_hold.erase(actor_id)
+	_combo_index.erase(actor_id)
+	_combo_expire_tick.erase(actor_id)
+	_melee_buffered_press.erase(actor_id)
+	return events
+
+
+## Lunge-clamp death/despawn clearing (manual-pass, locked ordering): "a dead or
+## removed actor cannot block authored movement." Called from BOTH death sites
+## (a lethal hit and a lethal status tick), same tick as the death itself -- since
+## this always runs AFTER that tick's own movement phase already completed (see
+## _advance_melee_execution_tick's call order), the dying tick's forfeited movement
+## is never retroactively applied; whoever was clamped to dead_actor_id simply does
+## a fresh sweep starting the very next tick. Scans every open _melee_hold rather
+## than tracking a reverse index -- this sim has a handful of actors, a linear scan
+## per death is free, and a reverse index would be another parallel dict to keep in
+## sync for no measurable benefit.
+func _clear_clamps_targeting(dead_actor_id: int) -> void:
+	for actor_id in _melee_hold.keys():
+		var hold: Dictionary = _melee_hold[actor_id]
+		if int(hold.get("clamped_target_id", -1)) == dead_actor_id:
+			hold.erase("clamped_target_id")
+
+
+## Input buffer (manual-pass, GAME-RULES §3): materializes any buffered press whose
+## cooldown has now elapsed into a real _melee_hold, exactly as a fresh "pressed"
+## would -- reusing _begin_melee_hold rather than duplicating its logic. A release
+## that arrived early (buffered.released, set by _release_melee_hold's no-open-hold
+## branch) resolves immediately in the same tick via a synthesized Command, so a
+## press that was tapped-and-released before it ever materialized still becomes one
+## clean swing, never a stuck open hold. Autonomous-phase law (see tick()'s class
+## comment): actor_ids sorted before any mutation, since dictionary iteration order
+## must never leak into event order.
+func _advance_buffered_attacks() -> Array[Event]:
+	var events: Array[Event] = []
+	var actor_ids: Array = _melee_buffered_press.keys()
+	actor_ids.sort()
+	for actor_id in actor_ids:
+		var buffered: Dictionary = _melee_buffered_press[actor_id]
+		if tick_count < _next_fire_tick.get(actor_id, 0):
+			continue  # still not ready -- keep waiting
+		_melee_buffered_press.erase(actor_id)
+		var weapon_id: String = buffered.weapon_id
+		events.append_array(_begin_melee_hold(actor_id, weapon_id))
+		if buffered.released:
+			events.append_array(_release_melee_hold(actor_id, weapon_id, Command.new(tick_count, actor_id, "attack", {"aim": buffered.release_aim})))
+	return events
+
+
+## Buffer eligibility (manual-pass, GAME-RULES §3) -- shared by both deadline
+## sources in _begin_melee_hold below (rule of two). Hard fence: at most one queued
+## press per actor -- a press arriving while one is already queued is rejected
+## buffer_full and never modifies the existing entry's aim/release state, regardless
+## of which deadline source it came from.
+func _try_buffer_press(actor_id: int, weapon_id: String, deadline_tick: int, rejection_reason: String) -> Array[Event]:
+	if _melee_buffered_press.has(actor_id):
+		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "buffer_full"})]
+	var remaining: int = deadline_tick - tick_count
+	var buffer_window: int = _melee_input_buffer_ticks.get(weapon_id, 0)
+	if remaining <= buffer_window:
+		_melee_buffered_press[actor_id] = {"weapon_id": weapon_id, "released": false, "release_aim": Vector3.ZERO}
+		return []
+	return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": rejection_reason})]
+
+
+func _begin_melee_hold(actor_id: int, weapon_id: String) -> Array[Event]:
+	if _melee_hold.has(actor_id):
+		var hold: Dictionary = _melee_hold[actor_id]
+		if hold.get("state", "") == "charging":
+			# A "pressed" while already charging shouldn't happen with correctly
+			# edge-detected input (envoy.gd only sends one rising edge per press) --
+			# defensive no-op, not a player action worth an Event.
+			return []
+		if hold.get("state", "") == "windup":
+			# No end_tick exists yet to compute a buffering deadline against -- a
+			# scope cut for M1, not a technical wall (a projected end_tick IS
+			# computable as windup_end_tick + charge_profile.lunge_duration_ticks;
+			# deferred to avoid another branch in an already-complex state machine --
+			# revisit if the manual re-pass finds mid-windup taps feel bad). Always
+			# rejected, never buffered.
+			return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "mid_swing"})]
+		# "executing" -- buffer-eligible against the swing's own end_tick (input
+		# buffer extended to cover mid-swing presses, manual-pass: dropping these
+		# would reintroduce the exact combo dead-zone the cooldown buffer already
+		# fixed, now reachable for the first time since swings span multiple ticks).
+		return _try_buffer_press(actor_id, weapon_id, int(hold.end_tick), "mid_swing")
+	if tick_count < _next_fire_tick.get(actor_id, 0):
+		# Input buffer (manual-pass fix, GAME-RULES §3): a press landing close enough
+		# to the cooldown's end is QUEUED instead of dropped -- diagnosed as the
+		# likely dominant cause of "mush" (a slightly-early click reading as nothing
+		# happening at all). input_buffer_ticks=0 (default) makes "remaining <=
+		# buffer_window" never true while genuinely on cooldown, so this is a true
+		# no-op for every weapon that doesn't opt in -- byte-identical rejection.
+		return _try_buffer_press(actor_id, weapon_id, _next_fire_tick.get(actor_id, 0), "on_cooldown")
+	if tick_count > _combo_expire_tick.get(actor_id, -1):
+		_combo_index[actor_id] = 0  # inactivity window elapsed -- next swing starts a fresh sequence
+	_melee_hold[actor_id] = {"weapon_id": weapon_id, "state": "charging", "charge_ticks": 0}
+	return []
+
+
+## Picks the profile (combo step or charge) and locks aim, then opens "windup"
+## (charge only, when charge_profile.windup_ticks > 0) or "executing" directly (tap,
+## or charge with windup_ticks <= 0 -- special-cased to skip windup entirely, so a
+## weapon with no authored windup keeps resolving exactly as it did before this
+## change). No longer resolves the swing or touches combo state itself -- that all
+## moves to _advance_melee_execution_tick's hit-tick branch (manual-pass refinement,
+## locked: "acceptance finalizes at the hit-active tick, not at press").
+func _release_melee_hold(actor_id: int, weapon_id: String, command: Command) -> Array[Event]:
+	var hold: Dictionary = _melee_hold.get(actor_id, {})
+	if hold.get("weapon_id", "") != weapon_id or hold.get("state", "") != "charging":
+		# No open CHARGING hold for this weapon -- usually switch/death/block already
+		# cleared it. The one real case: the player released before a buffered press
+		# ever materialized (_advance_buffered_attacks). Stash the release so it
+		# resolves as one clean tap the moment the buffer opens, instead of a stuck
+		# hold that envoy will never send a matching "released" for again (it
+		# already told itself locally the button was up).
+		var buffered: Dictionary = _melee_buffered_press.get(actor_id, {})
+		if buffered.get("weapon_id", "") == weapon_id:
+			var stored_facing: Vector3 = _facings.get(actor_id, Vector3(0.0, 0.0, -1.0))
+			buffered.released = true
+			buffered.release_aim = _normalize_horizontal(command.params.get("aim", Vector3.ZERO), stored_facing)
+		return []
+
+	var stored_facing: Vector3 = _facings.get(actor_id, Vector3(0.0, 0.0, -1.0))
+	# Release-time aim (locked spec): a charged strike fires wherever the player is
+	# aiming when they let go, never frozen at the moment they first pressed --
+	# locked from here on, windup/executing never re-read command.params.aim again.
+	var aim: Vector3 = command.params.get("aim", Vector3.ZERO)
+	var resolved_aim: Vector3 = _normalize_horizontal(aim, stored_facing)
+	_facings[actor_id] = resolved_aim
+
+	var threshold: int = _melee_charge_threshold_ticks.get(weapon_id, 0)
+	var charged: bool = int(hold.charge_ticks) >= threshold
+	var profile: Dictionary
+	var attack_profile_id: String
+	if charged:
+		profile = _melee_charge_profiles[weapon_id]
+		attack_profile_id = "charge"
+	else:
+		var combo_profiles: Array = _melee_combo_profiles[weapon_id]
+		var index: int = _combo_index.get(actor_id, 0)
+		profile = combo_profiles[index]
+		attack_profile_id = str(index + 1)
+
+	if charged and int(profile.get("windup_ticks", 0)) > 0:
+		_melee_hold[actor_id] = {
+			"weapon_id": weapon_id,
+			"state": "windup",
+			"profile": profile,
+			"attack_profile_id": attack_profile_id,
+			"aim": resolved_aim,
+			"windup_end_tick": tick_count + int(profile.get("windup_ticks", 0)),
+		}
+		return []
+
+	_melee_hold[actor_id] = {
+		"weapon_id": weapon_id,
+		"state": "executing",
+		"profile": profile,
+		"attack_profile_id": attack_profile_id,
+		"aim": resolved_aim,
+		"execution_start_tick": tick_count,
+		"hit_tick": tick_count + int(profile.get("hit_active_ticks", 0)),
+		"end_tick": tick_count + int(profile.get("lunge_duration_ticks", 0)),
+		"hit_resolved": false,
+	}
+	return []
+
+
+## New autonomous phase (manual-pass lunge/windup) -- tick() order: after
+## _advance_buffered_attacks, before AI decisions/Commands. Handles every actor with
+## an OPEN "windup"/"executing" record that existed before this tick began; a record
+## opened THIS tick by a Command is handled by the synchronous catch-up call at its
+## Command-processing site instead (_apply_phased_melee_attack's "released" branch)
+## -- see _advance_melee_execution_tick's own doc for why calling it unconditionally
+## from both places would double-process a record's first tick. Autonomous-phase law
+## (see tick()'s class comment): sorted actor_ids, re-fetched per actor since an
+## earlier actor's resolution this same pass could in principle affect a later one.
+func _advance_pending_attacks() -> Array[Event]:
+	var events: Array[Event] = []
+	var actor_ids: Array = _melee_hold.keys()
+	actor_ids.sort()
+	for actor_id in actor_ids:
+		var hold: Dictionary = _melee_hold.get(actor_id, {})
+		var state: String = hold.get("state", "")
+		if state == "windup":
+			if tick_count < int(hold.windup_end_tick):
+				continue
+			var profile: Dictionary = hold.profile
+			# Origin moves (locked spec): resample position HERE, at the moment the
+			# strike actually fires, never frozen at release -- free movement during
+			# the windup means this can differ from the release-time position.
+			# Direction (aim) carries over unchanged -- locked at release, never
+			# re-tracks.
+			_melee_hold[actor_id] = {
+				"weapon_id": hold.weapon_id,
+				"state": "executing",
+				"profile": profile,
+				"attack_profile_id": hold.attack_profile_id,
+				"aim": hold.aim,
+				"execution_start_tick": tick_count,
+				"hit_tick": tick_count + int(profile.get("hit_active_ticks", 0)),
+				"end_tick": tick_count + int(profile.get("lunge_duration_ticks", 0)),
+				"hit_resolved": false,
+			}
+			events.append_array(_advance_melee_execution_tick(actor_id))
+		elif state == "executing":
+			events.append_array(_advance_melee_execution_tick(actor_id))
+	return events
+
+
+## Per-actor "executing" tick: lunge-this-tick, hit-tick check+resolve+combo
+## bookkeeping, end-tick natural-completion+cooldown-arm+erase. Called from TWO
+## places (manual-pass backward-compat/off-by-one fix -- see both call sites'
+## comments): _advance_pending_attacks (a record already open before this tick),
+## and synchronously from _apply_phased_melee_attack's "released" branch (a record
+## that just opened THIS tick, after _advance_pending_attacks already ran) -- never
+## both for the same tick's first execution step, or lunge movement/hit-tick checks
+## would double-apply.
+func _advance_melee_execution_tick(actor_id: int) -> Array[Event]:
+	var hold: Dictionary = _melee_hold.get(actor_id, {})
+	if hold.get("state", "") != "executing":
+		return []
+	var events: Array[Event] = []
+	var profile: Dictionary = hold.profile
+
+	# Lunge pass-through fix (manual-pass, locked spec): authored movement clamps to
+	# hostile contact -- this is attack-authored movement semantics, not a general
+	# collision layer (ordinary walking/enemies/walls/bounds stay untouched; ROADMAP
+	# P20 remains fully open). Runs BEFORE hit resolution below, every tick, so the
+	# clamp always sweeps against pre-knockback positions -- knockback (applied
+	# later this same tick, only to the TARGET) can never retroactively place the
+	# clamp through a target, and once clamped, later ticks never re-sweep at all
+	# (frozen), so a subsequent knockback just opens the gap naturally -- no chase,
+	# no attach, no pass-through possible. See _find_earliest_lunge_contact.
+	var lunge_duration_ticks: int = int(profile.get("lunge_duration_ticks", 0))
+	if lunge_duration_ticks > 0 and tick_count < int(hold.end_tick):
+		if hold.has("clamped_target_id"):
+			# Retained clamp: remaining authored distance for this tick is forfeited
+			# -- never redistributed later, never converted into extra time (timing
+			# invariance: this branch never touches hit_tick/end_tick/cooldown/combo
+			# timing, only whether entities[actor_id] gets written this tick).
+			# Defensive fallback (the primary path is _clear_clamps_targeting at both
+			# death sites, which clears this the same tick the target dies/despawns
+			# -- this only catches whatever that misses): if the clamp target is no
+			# longer valid, clear it now but still skip movement THIS tick -- "never
+			# retroactively apply the death tick's forfeited movement," resumption
+			# starts next tick only.
+			if not _is_valid_target(actor_id, int(hold.clamped_target_id)):
+				hold.erase("clamped_target_id")
+		else:
+			var lunge_distance: float = float(profile.get("lunge_distance", 0.0))
+			var step: Vector3 = hold.aim * (lunge_distance / lunge_duration_ticks)
+			var start: Vector3 = entities.get(actor_id, Vector3.ZERO)
+			var end: Vector3 = start + step
+			var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
+			if contact.is_empty():
+				entities[actor_id] = end
+			else:
+				entities[actor_id] = contact.entry_position
+				hold.clamped_target_id = contact.target_id
+
+	if tick_count >= int(hold.hit_tick) and not bool(hold.hit_resolved):
+		hold.hit_resolved = true
+		var attacker_position: Vector3 = entities.get(actor_id, Vector3.ZERO)
+		events.append_array(_resolve_melee_swing(actor_id, attacker_position, hold.aim, profile, hold.weapon_id, hold.attack_profile_id))
+		# Combo bookkeeping moves here from the old synchronous release (manual-pass
+		# refinement, locked): "acceptance finalizes at the hit-active tick, not at
+		# press" -- a swing canceled before this point retroactively never occurred
+		# for combo purposes (see _cancel_open_melee_hold); a swing that reaches
+		# this point and whiffs still advances, per the original lock. Derives the
+		# combo step from the record's OWN attack_profile_id rather than re-reading
+		# _combo_index, so this never depends on that dict having stayed untouched
+		# since release.
+		if hold.attack_profile_id == "charge":
+			_combo_index[actor_id] = 0  # a charged hit ends the sequence (locked amendment)
+		else:
+			var combo_profiles: Array = _melee_combo_profiles[hold.weapon_id]
+			var index: int = int(hold.attack_profile_id) - 1
+			_combo_index[actor_id] = (index + 1) % combo_profiles.size()
+			_combo_expire_tick[actor_id] = tick_count + _melee_combo_reset_ticks.get(hold.weapon_id, 0)
+
+	if tick_count >= int(hold.end_tick):
+		_next_fire_tick[actor_id] = int(hold.end_tick) + int(profile.get("fire_interval_ticks", 0))
+		_melee_hold.erase(actor_id)
+
+	return events
+
+
+## Shared cancellation helper (rule of two: block's rising edge and an enemy hit
+## landing on a winding-up/executing player both need it). State-agnostic -- reads
+## only .weapon_id/.profile, never branches on state explicitly. Emits
+## "melee_hold_canceled" iff a hold was actually open (checked BEFORE erasing).
+## Never touches _combo_index/_combo_expire_tick (locked rule: canceling doesn't
+## consume/reset combo progress -- only a charged hit landing, or death/switch via
+## _clear_attack_input_state, does that). arm_cooldown only actually arms one when
+## hold.has("profile") -- a "charging" hold never has this key (only assigned at
+## release), so canceling a pre-release hold naturally stays cooldown-free, matching
+## the existing tested contract, with no extra state check needed.
+func _cancel_open_melee_hold(actor_id: int, arm_cooldown: bool) -> Array[Event]:
+	var events: Array[Event] = []
+	if _melee_hold.has(actor_id):
+		var hold: Dictionary = _melee_hold[actor_id]
+		events.append(Event.new(tick_count, "melee_hold_canceled", {"actor_id": actor_id, "weapon_id": String(hold.weapon_id)}))
+		if arm_cooldown and hold.has("profile"):
+			_next_fire_tick[actor_id] = tick_count + int(hold.profile.get("fire_interval_ticks", 0))
+		_melee_hold.erase(actor_id)
+	# A queued press is discarded on ANY cancellation, independent of whether a hold
+	# happens to still be open (e.g. a swing already naturally completed and only
+	# the buffered next press remains) -- "cancellation always clears the queue"
+	# (locked spec), never conditional on _melee_hold's own state.
+	_melee_buffered_press.erase(actor_id)
+	return events
+
+
+## Debug-only, read-only snapshot (arena.gd's debug_show_attack_state) -- never
+## called during real gameplay logic, only for manual-pass observability. Public so
+## the driver never reaches into an underscore-prefixed field directly (matches
+## debug_set_ai_active's existing precedent).
+func debug_describe_melee_state(actor_id: int) -> Dictionary:
+	var description: Dictionary = {}
+	if _melee_hold.has(actor_id):
+		var hold: Dictionary = _melee_hold[actor_id]
+		var state: String = hold.get("state", "")
+		description["state"] = state
+		if state == "charging":
+			description["charge_ticks"] = hold.charge_ticks
+		elif state == "windup":
+			description["ticks_to_fire"] = int(hold.windup_end_tick) - tick_count
+		elif state == "executing":
+			description["ticks_to_hit"] = max(0, int(hold.hit_tick) - tick_count)
+			description["recovery_ticks_remaining"] = max(0, int(hold.end_tick) - max(tick_count, int(hold.hit_tick)))
+	if _melee_buffered_press.has(actor_id):
+		var buffered: Dictionary = _melee_buffered_press[actor_id]
+		description["buffered_weapon_id"] = buffered.weapon_id
+		description["buffered_released"] = buffered.released
+	return description
+
+
+## Shared melee target sweep (rule of two: the original single-profile instant path
+## and Slice B's phased release both need it) — GAME-RULES §3's per-weapon hit
+## detection, unchanged from the original _apply_attack body. attack_profile_id is
+## "" for the original flat path (no melee_swing Event, no attack_profile_id key on
+## the resulting hit Events — old payload shapes stay byte-identical) and "1"/"2"/
+## "3"/"charge" for a Slice B swing.
+func _resolve_melee_swing(actor_id: int, attacker_position: Vector3, resolved_aim: Vector3, weapon: Dictionary, weapon_id: String, attack_profile_id: String) -> Array[Event]:
+	var events: Array[Event] = []
+	if attack_profile_id != "":
+		events.append(Event.new(tick_count, "melee_swing", {"actor_id": actor_id, "weapon_id": weapon_id, "attack_profile_id": attack_profile_id}))
+
 	var target_ids: Array = _families.keys().filter(func(id): return _is_valid_target(actor_id, id))
 	target_ids.sort()  # dictionary iteration order must never leak into event order
 
@@ -382,7 +946,7 @@ func _apply_attack(command: Command) -> Array[Event]:
 		# AI-driven enemies. Deliberately narrow (near-EXACT position coincidence,
 		# not "combat radii merely overlap" more broadly) — at any nonzero offset the
 		# cone direction is well-defined and the normal check already applies correctly.
-		events.append_array(_resolve_hit_on_target(actor_id, target_id, weapon, resolved_aim, weapon_id))
+		events.append_array(_resolve_hit_on_target(actor_id, target_id, weapon, resolved_aim, weapon_id, attack_profile_id))
 
 	return events
 
@@ -391,7 +955,22 @@ func _apply_attack(command: Command) -> Array[Event]:
 ## knockback -> death/events) for one attacker/target pair — GAME-RULES §3's pipeline
 ## is the SAME for every weapon class, so melee's per-target loop and a projectile's
 ## arrival (_advance_projectiles) both call this instead of duplicating it.
-func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary, resolved_aim: Vector3, weapon_id: String) -> Array[Event]:
+## Interruption as graded content (manual-pass, GAME-RULES §3) -- called only when an
+## interrupting hit (interrupt_strength > 0) lands on a currently winding-up enemy.
+## Clears the pending windup exactly like a completed attack would have (mirrors
+## _decide_attack_commands' own consume-on-fire step) and arms the SAME cooldown a
+## completed attack would have via _next_fire_tick, so the interrupt doesn't leave
+## the enemy free to instantly re-windup -- "pending fire tick cleared -> cooldown".
+## Uses _equipped_weapon rather than _ai_natural_weapon: register_ai always equips an
+## AI actor's natural weapon internally, so the two are always equal here -- one dict
+## hop instead of two.
+func _cancel_enemy_windup(actor_id: int) -> void:
+	_ai_attack_start_tick.erase(actor_id)
+	_ai_attack_fire_tick.erase(actor_id)
+	_next_fire_tick[actor_id] = tick_count + int(_weapons.get(_equipped_weapon.get(actor_id, ""), {}).get("fire_interval_ticks", 0))
+
+
+func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary, resolved_aim: Vector3, weapon_id: String, attack_profile_id: String = "") -> Array[Event]:
 	# i-frames fully negate a hit: no damage, no knockback, no status, no meter
 	# interaction — the attack simply doesn't land (locked invariant).
 	if _iframe_ticks_remaining.get(target_id, 0) > 0:
@@ -412,8 +991,24 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 
 	var remaining_health: float = _health[target_id] - damage
 	_health[target_id] = remaining_health
-	var knocked_position: Vector3 = target_position + resolved_aim * weapon.knockback_distance
-	entities[target_id] = knocked_position
+
+	# Interruption as graded content (manual-pass, GAME-RULES §3): while target_id is
+	# winding up its own attack, a non-interrupting hit (interrupt_strength <= 0)
+	# neither cancels the windup nor displaces the target -- damage/status below
+	# still resolve normally, only knockback is suppressed (crowding a stunned-
+	# looking enemy shouldn't shove it out of its own windup for free). Otherwise
+	# displacement is a de facto interrupt, so an interrupting hit both knocks back
+	# AND cancels the windup. A target that isn't winding up is completely
+	# unaffected by any of this -- unconditional knockback, exactly as before.
+	var target_is_winding_up: bool = _ai_attack_fire_tick.has(target_id)
+	var interrupt_strength: int = int(weapon.get("interrupt_strength", 0))
+	var interrupts_this_windup: bool = target_is_winding_up and interrupt_strength > 0
+	var knocked_position: Vector3 = target_position
+	if not target_is_winding_up or interrupt_strength > 0:
+		knocked_position = target_position + resolved_aim * weapon.knockback_distance
+		entities[target_id] = knocked_position
+	if interrupts_this_windup:
+		_cancel_enemy_windup(target_id)
 
 	# Hit-establishes-aggro (locked defect fix): a successful hostile hit FROM THE
 	# PLAYER activates the target's AI regardless of detection_radius — detection is
@@ -423,14 +1018,22 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	if _allegiance.get(attacker_id, &"enemy") == &"player" and _ai_state.has(target_id):
 		_ai_state[target_id] = "active"
 
-	var events: Array[Event] = [Event.new(tick_count, "hit", {
+	var hit_payload: Dictionary = {
 		"attacker_id": attacker_id,
 		"target_id": target_id,
 		"damage": damage,
 		"damage_type": weapon.damage_type,
 		"family": family,
 		"position": knocked_position,
-	})]
+	}
+	# Slice B: profile identity never substitutes for weapon identity -- omitted
+	# entirely (not even an empty string) for the original flat path, so every
+	# existing test's exact payload-key expectations stay untouched.
+	if attack_profile_id != "":
+		hit_payload["attack_profile_id"] = attack_profile_id
+	var events: Array[Event] = [Event.new(tick_count, "hit", hit_payload)]
+	if interrupts_this_windup:
+		events.append(Event.new(tick_count, "windup_interrupted", {"actor_id": target_id, "attacker_id": attacker_id}))
 
 	# Roll-consumption rule (locked): the proc roll happens here, UNCONDITIONALLY,
 	# regardless of whether this hit turns out lethal — a weapon with no status_id
@@ -446,6 +1049,8 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 
 	if remaining_health <= 0.0:
 		events.append(Event.new(tick_count, "died", {"actor_id": target_id}))
+		events.append_array(_clear_attack_input_state(target_id))
+		_clear_clamps_targeting(target_id)
 	else:
 		# Lethal hits start no timer (moot for the dead) — non-lethal unblocked hits
 		# are the ONLY i-frame trigger this session (dodge is a future, separately-
@@ -453,6 +1058,16 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		_iframe_ticks_remaining[target_id] = _iframe_ticks_on_hit.get(target_id, 0)
 		if proc_result.get("succeeded", false):
 			events.append(_apply_status(target_id, weapon.status_id, "hit", attacker_id, weapon_id))
+		# M1 simplification: all incoming hits interrupt pending player attacks.
+		# Future: respect interrupt_strength/poise. Unconditional, not graded by the
+		# attacker's interrupt_strength (no enemy content sets that field today --
+		# this is a separate, simpler "getting hit interrupts your own attack" rule,
+		# not an extension of the player-interrupts-enemy-windup mechanic above).
+		# Deliberately excludes "charging" (pre-release hold interruptibility is out
+		# of scope for this change) -- only an open windup/executing record cancels.
+		var target_hold_state: String = _melee_hold.get(target_id, {}).get("state", "")
+		if target_hold_state == "windup" or target_hold_state == "executing":
+			events.append_array(_cancel_open_melee_hold(target_id, true))
 	return events
 
 
@@ -641,6 +1256,20 @@ func _apply_block(command: Command) -> Array[Event]:
 		if held and rising_edge:
 			_shield_state[actor_id] = "held"
 			_block_start_tick[actor_id] = tick_count
+			# Slice B interruption rule (locked): raising block cancels an
+			# in-progress charge hold/windup/executing swing -- no swing (or no
+			# REST of an in-progress one), no charge event, attacking and defensive
+			# blocking never coexist. combo_index/expire deliberately survive (see
+			# _cancel_open_melee_hold's doc) -- this only discards the attack itself.
+			# Shield-cancel timing (manual-pass, locked): because _advance_pending_
+			# attacks already ran earlier this same tick (see tick()), an
+			# "executing" record's hit_resolved is already correctly set one way or
+			# the other by the time this runs -- pre-hit-tick: no hit ever happened
+			# (combo bookkeeping never ran either, since it lives in the hit-tick
+			# branch); same-tick-as-hit: the hit already resolved, only remaining
+			# lunge/recovery is canceled; post-hit (recovery): hit already stands.
+			# One uniform cancel call correctly produces all three outcomes.
+			return _cancel_open_melee_hold(actor_id, true)
 	elif state == "held":
 		if not held:
 			_shield_state[actor_id] = "ready"
@@ -664,8 +1293,15 @@ func _apply_switch_weapon(command: Command) -> Array[Event]:
 		current_index = 0
 	var next_index: int = (current_index + 1) % loadout.size()
 	var next_weapon_id: String = loadout[next_index]
+	# Slice B interruption rule (locked): a switch discards any in-progress hold and
+	# resets the combo sequence -- no tap fires, no charge event, combo state never
+	# survives a weapon swap in M1. _clear_attack_input_state's own "melee_hold_
+	# canceled" Event (if a hold was actually open) is a real observable transition,
+	# distinct from -- and always alongside -- "weapon_switched".
+	var events: Array[Event] = _clear_attack_input_state(actor_id)
 	_equipped_weapon[actor_id] = next_weapon_id
-	return [Event.new(tick_count, "weapon_switched", {"actor_id": actor_id, "weapon_id": next_weapon_id})]
+	events.append(Event.new(tick_count, "weapon_switched", {"actor_id": actor_id, "weapon_id": next_weapon_id}))
+	return events
 
 
 ## STANDING RULE (locked, pre-gate fix pass — belongs in GAME-RULES §3 once a human
@@ -862,6 +1498,66 @@ func _apply_status(target_id: int, status_id: StringName, application_source: St
 	return Event.new(tick_count, "status_applied", payload)
 
 
+## Authoritative contact distance between two actors (combined combat radii + the
+## one shared _CONTACT_PADDING) -- the single source of truth for "physical
+## contact" GAME-RULES §3 leans on twice: Burn's contact-spread (_actors_overlap)
+## and the manual-pass melee lunge clamp (_find_earliest_lunge_contact). Never
+## duplicate this formula at either call site.
+func _contact_distance(a: int, b: int) -> float:
+	return _combat_radius.get(a, 0.0) + _combat_radius.get(b, 0.0) + _CONTACT_PADDING
+
+
+## Manual-pass lunge clamp: sweeps actor_id's intended movement segment [start,end]
+## against every living HOSTILE combatant's authoritative contact distance
+## (_contact_distance -- combined combat radii, GAME-RULES §3), finding the TRUE
+## entry point where the segment first crosses into contact range (proper segment-
+## circle intersection -- NOT merely "closest approach within radius", which is
+## what _find_earliest_swept_hit's projectile math answers; that's a different
+## question, "does this segment ever get close enough," not "where exactly does it
+## first touch"). Earliest entry along the segment wins; exact-t ties break by
+## ascending actor_id for free (candidates are visited in sorted order, and only a
+## STRICTLY earlier t replaces the current best -- mirrors every other sweep's
+## determinism rule in this file). Ally-filtering (_is_valid_target) means an
+## allied actor is never even a candidate -- allies never clamp the lunge. Returns
+## {} if the full segment stays clear of every hostile's contact range.
+func _find_earliest_lunge_contact(start: Vector3, end: Vector3, actor_id: int) -> Dictionary:
+	var travel: Vector3 = end - start
+	travel.y = 0.0
+	var a_coeff: float = travel.length_squared()
+
+	var best_target_id: int = -1
+	var best_t: float = INF
+	var candidate_ids: Array = _families.keys().filter(func(id): return _is_valid_target(actor_id, id))
+	candidate_ids.sort()
+
+	for target_id in candidate_ids:
+		var target_position: Vector3 = entities.get(target_id, Vector3.ZERO)
+		var contact: float = _contact_distance(actor_id, target_id)
+		var f: Vector3 = start - target_position
+		f.y = 0.0
+		var c_coeff: float = f.length_squared() - contact * contact
+
+		var t: float = INF
+		if c_coeff <= 0.0:
+			t = 0.0  # start is already within contact distance -- entry is immediate
+		elif a_coeff > _FACING_EPSILON_SQ:
+			var b_coeff: float = 2.0 * f.dot(travel)
+			var discriminant: float = b_coeff * b_coeff - 4.0 * a_coeff * c_coeff
+			if discriminant >= 0.0:
+				var t_candidate: float = (-b_coeff - sqrt(discriminant)) / (2.0 * a_coeff)
+				if t_candidate >= 0.0 and t_candidate <= 1.0:
+					t = t_candidate
+		# else: a_coeff ~= 0 (no movement this tick) and not already inside -> no entry.
+
+		if t < best_t:
+			best_t = t
+			best_target_id = target_id
+
+	if best_target_id == -1:
+		return {}
+	return {"target_id": best_target_id, "entry_position": start + travel * best_t}
+
+
 ## True if a and b's registered combat_radius circles overlap (horizontal distance —
 ## flattened like melee's reach check, GAME-RULES §3 "spreads on contact"). Pure
 ## SimWorld distance math against `entities`/`_combat_radius` — no Area3D/
@@ -869,8 +1565,8 @@ func _apply_status(target_id: int, status_id: StringName, application_source: St
 func _actors_overlap(a: int, b: int) -> bool:
 	var offset: Vector3 = entities.get(b, Vector3.ZERO) - entities.get(a, Vector3.ZERO)
 	offset.y = 0.0
-	var radius_sum: float = _combat_radius.get(a, 0.0) + _combat_radius.get(b, 0.0)
-	return offset.length_squared() <= radius_sum * radius_sum
+	var contact: float = _contact_distance(a, b)
+	return offset.length_squared() <= contact * contact
 
 
 ## Autonomous-phase law (see tick()): erases a transmitted-pair marker once its actors
@@ -985,6 +1681,8 @@ func _advance_status_ticks() -> Array[Event]:
 			if remaining_health <= 0.0:
 				events.append(Event.new(tick_count, "died", {"actor_id": actor_id}))
 				_status_instances.erase(actor_id)
+				events.append_array(_clear_attack_input_state(actor_id))
+				_clear_clamps_targeting(actor_id)
 				died = true
 		if not died:
 			instance.ticks_remaining -= 1

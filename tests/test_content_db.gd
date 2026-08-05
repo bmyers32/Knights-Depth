@@ -77,9 +77,18 @@ func test_sword_a_has_zero_status_proc_chance() -> void:
 	assert_eq(stats.status_proc_chance, 0.0)
 
 
-func test_sword_burn_a_has_provisional_proc_chance() -> void:
+## Slice B (this session): sword_burn_A's proc chance now lives on hit 3's OWN
+## combo profile, not the flat field on SwordStats -- "each combo step carries its
+## own status-proc, not one shared field set on this resource" (locked spec). The
+## flat status_proc_chance field is unused for any weapon with combo_profiles set.
+func test_sword_burn_a_hit_three_has_provisional_proc_chance() -> void:
 	var stats: SwordStats = ContentDB.get_resource(&"weapon", &"sword_burn_A")
-	assert_almost_eq(stats.status_proc_chance, 0.15, 0.001)
+	assert_eq(stats.combo_profiles.size(), 3)
+	assert_almost_eq(stats.combo_profiles[0].status_proc_chance, 0.0, 0.001, "hits 1-2 never proc")
+	assert_almost_eq(stats.combo_profiles[1].status_proc_chance, 0.0, 0.001, "hits 1-2 never proc")
+	assert_almost_eq(stats.combo_profiles[2].status_proc_chance, 0.15, 0.001)
+	assert_not_null(stats.charge_profile)
+	assert_almost_eq(stats.charge_profile.status_proc_chance, 1.0, 0.001, "the charge attack guarantees Burn")
 
 
 func test_guns_have_zero_status_proc_chance() -> void:

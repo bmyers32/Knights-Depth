@@ -10,23 +10,57 @@ const AIM_RAYCAST_DISTANCE: float = 100.0
 
 var actor_id: int = 0
 var stats: EnvoyStats
+@onready var _telegraph: TelegraphIndicator = $TelegraphIndicator
 
 
 func _ready() -> void:
 	stats = ContentDB.get_resource(&"envoy", &"default")
 
 
+## Slice B charge-ready cue (manual-pass) -- a pure Event LISTENER, never a poll: the
+## arena driver calls these only in direct response to charge_ready/melee_swing/
+## melee_hold_canceled Events. This actor never reads charge_ticks, thresholds, or
+## hold state from the sim -- presentation renders only what Events tell it. This is
+## the precedent for every future persistent indicator (charge bars, status auras,
+## combo counters): land it as a listener, never a poll.
+func show_charge_ready(color: Color) -> void:
+	_telegraph.set_active(color, true)
+
+
+func clear_charge_ready() -> void:
+	_telegraph.set_active(Color.WHITE, false)
+
+
 func build_commands(tick: int) -> Array[Command]:
+	var commands: Array[Command] = []
+	# Attack is built and appended BEFORE move (manual-pass fix, post-implementation
+	# review catch): a "released" that transitions a hold straight into "executing"
+	# does so while THIS Command is processed -- SimWorld's move-suppression check
+	# only sees the transition if attack has already run this tick. With move
+	# first (the original order), the tick's own movement would apply BEFORE the
+	# transition, then the swing's first lunge step would ALSO apply via the
+	# synchronous catch-up call -- one tick blending free input with authored
+	# movement, contradicting "authored movement replaces input, never a blend."
+	# The sim resolves whichever weapon is currently equipped (SimWorld.
+	# set_equipped_weapon) — presentation sends only per-action intent (phase + aim),
+	# never a weapon_id or a tap/charge decision (Slice B, GAME-RULES §3: that
+	# decision is sim-owned, content-driven by whether the equipped weapon has a
+	# charge profile registered — see SimWorld._apply_attack). Zero-vector aim (no
+	# camera in the viewport, or the ray never crosses the ground plane) falls back
+	# to stored facing — see SimWorld._normalize_horizontal. Only one phase is ever
+	# sent per tick, mirroring is_action_just_pressed's old one-Command-per-press
+	# shape for a non-combo weapon (gun/enemy behavior is untouched); a combo/charge
+	# weapon additionally gets "held" every tick the button stays down and
+	# "released" on the falling edge.
+	if Input.is_action_just_pressed("attack"):
+		commands.append(Command.new(tick, actor_id, "attack", {"aim": _compute_mouse_aim(), "phase": "pressed"}))
+	elif Input.is_action_just_released("attack"):
+		commands.append(Command.new(tick, actor_id, "attack", {"aim": _compute_mouse_aim(), "phase": "released"}))
+	elif Input.is_action_pressed("attack"):
+		commands.append(Command.new(tick, actor_id, "attack", {"aim": _compute_mouse_aim(), "phase": "held"}))
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var direction := Vector3(input_dir.x, 0.0, input_dir.y)
-	var commands: Array[Command] = [Command.new(tick, actor_id, "move", {"direction": direction})]
-	if Input.is_action_just_pressed("attack"):
-		# The sim resolves whichever weapon is currently equipped (SimWorld.
-		# set_equipped_weapon) — presentation sends only per-action intent (aim),
-		# never a weapon_id. Zero-vector aim (no camera in the viewport, or the ray
-		# never crosses the ground plane) falls back to stored facing —
-		# see SimWorld._normalize_horizontal.
-		commands.append(Command.new(tick, actor_id, "attack", {"aim": _compute_mouse_aim()}))
+	commands.append(Command.new(tick, actor_id, "move", {"direction": direction}))
 	# held sent every tick, unconditionally — mirrors "move": each tick fully declares
 	# intent so the sim's rising-edge detection (SimWorld._apply_block) never depends
 	# on a missed edge-triggered press.

@@ -37,9 +37,13 @@ extends Resource
 ## aggro — detection_radius gates both first acquisition and re-acquisition (only
 ## while idle, never mid-return). leash_radius is measured from the enemy's spawn
 ## position, not its current position (a fixed home leash, not a drifting one).
-## Unvalidated first-pass numbers, sized generously for the small M1 arena.
+## Widened leash_radius 10.0 -> 18.0 (manual-pass calibration, 2026-08-04): the old
+## 2.0-unit detection-to-leash gap forced running laps in the old 20x20 arena to ever
+## exceed it; sized against the 40x40 arena (arena.tscn) where a straight-line
+## retreat from any plausible re-anchor point gives 30+ units of room. Unvalidated
+## first-pass numbers, revisit at the M1 playtest gate.
 @export var detection_radius: float = 8.0
-@export var leash_radius: float = 10.0
+@export var leash_radius: float = 18.0
 
 ## Telegraph law (GAME-RULES §3): one flat color stands in for a real type->color
 ## palette table until a second reachable enemy damage type exists — M1's enemies are

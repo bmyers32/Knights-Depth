@@ -45,6 +45,26 @@ const _NATURAL_WEAPON_IDS: Dictionary = {
 ## visible — printed in _ready() below, since no real debug overlay exists yet).
 @export var combat_seed: int = 0
 
+## Debug/diagnostic exports (manual-pass convention, this session): every export in
+## this block is named debug_* and defaults to the AUTHENTIC game behavior — "all
+## debug_* exports at default" is therefore the formal /playtest gate's state,
+## mechanically verifiable rather than remembered, matching debug_loadout_override's
+## existing shape above. debug_force_aggro=true skips the AI's own detection_radius
+## gating entirely (every enemy starts "active", not "idle") for rapid mechanics
+## iteration without walking into range each time -- the real driver never sets this.
+@export var debug_force_aggro: bool = false
+## Per-family isolation for a diagnostic pass (a family disabled here is skipped
+## entirely -- no registration, node freed) -- all three true is the real roster.
+@export var debug_enable_fang: bool = true
+@export var debug_enable_ooze: bool = true
+@export var debug_enable_watcher: bool = true
+## Manual-pass tooling: this is the most temporally complex state machine in M1
+## (lunge/windup/buffer) -- prints the Envoy's live pending-attack state
+## (SimWorld.debug_describe_melee_state, a read-only public snapshot; never a
+## direct underscore-field poke from this driver) each tick when on. Pure
+## observability, default off, no gameplay effect either way.
+@export var debug_show_attack_state: bool = false
+
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 var _debug_equipped_index: int = 0
@@ -52,6 +72,11 @@ var _debug_tab_held_prev: bool = false
 ## actor_id -> {"color": Color, "duration_seconds": float}, resolved once at setup
 ## from each enemy's NaturalWeaponStats so _report_events never touches ContentDB.
 var _enemy_telegraphs: Dictionary = {}
+## Resolved once at setup from the loadout's combo/charge-capable SwordStats (Slice B
+## charge-ready cue) — mirrors _enemy_telegraphs' resolve-once pattern, so
+## _report_events never touches ContentDB. Stays Color.WHITE (never used) if no
+## combo/charge weapon is in the loadout.
+var _charge_ready_tint_color: Color = Color.WHITE
 ## Scene-owned run-ended flow flag (Phase D step 8, Phase 3) — presentation state,
 ## not gameplay state; SimWorld's own health dict remains the sole dead/alive
 ## authority (Prime Directive 1), this only gates whether the Envoy is still sent
@@ -73,6 +98,12 @@ func _ready() -> void:
 		_register_weapon_content(weapon_id)
 	sim.set_weapon_loadout(envoy.actor_id, loadout_weapon_ids)
 	sim.set_equipped_weapon(envoy.actor_id, loadout_weapon_ids[0])
+
+	for weapon_id in loadout_weapon_ids:
+		var weapon: Resource = ContentDB.get_resource(&"weapon", weapon_id)
+		if weapon is SwordStats and weapon.combo_profiles.size() > 0:
+			_charge_ready_tint_color = weapon.charge_ready_tint_color
+			break
 
 	if debug_loadout_override:
 		# Loud on purpose (AGENTS.md Invariable #2) -- a silent override would read
@@ -96,18 +127,54 @@ func _ready() -> void:
 
 
 ## Shared by the real loadout registration loop and the debug-carousel registration
-## loop (rule of two: two concrete call sites justify the extraction).
+## loop (rule of two: two concrete call sites justify the extraction). A SwordStats
+## with a non-empty combo_profiles array (Slice B, GAME-RULES §3) registers via
+## register_melee_profiles instead of the flat register_weapon path — sword_A
+## (empty array) is unaffected.
 func _register_weapon_content(weapon_id: StringName) -> void:
 	var weapon: Resource = ContentDB.get_resource(&"weapon", weapon_id)
 	if weapon is GunStats:
 		sim.register_gun(weapon_id, weapon.base_damage, weapon.damage_type, weapon.speed, weapon.max_lifetime_ticks, weapon.hit_radius, weapon.knockback_distance, weapon.fire_interval_ticks, weapon.status_id, weapon.status_proc_chance)
+	elif weapon is SwordStats and weapon.combo_profiles.size() > 0:
+		var combo_dicts: Array[Dictionary] = []
+		for profile in weapon.combo_profiles:
+			combo_dicts.append(_unpack_melee_profile(profile))
+		sim.register_melee_profiles(weapon_id, combo_dicts, _unpack_melee_profile(weapon.charge_profile), weapon.charge_threshold_ticks, weapon.combo_reset_ticks, weapon.input_buffer_ticks)
 	else:
 		sim.register_weapon(weapon_id, weapon.base_damage, weapon.damage_type, weapon.reach, weapon.cone_half_angle_degrees, weapon.knockback_distance, 0, weapon.status_id, weapon.status_proc_chance)
 
 
+## Content resources never cross into sim/ directly (SimWorld class doc) — unpacks
+## one MeleeAttackProfile Resource into the plain Dictionary shape register_melee_
+## profiles expects, same boundary-crossing pattern _register_weapon_content's own
+## calls already follow for every other weapon.
+func _unpack_melee_profile(profile: MeleeAttackProfile) -> Dictionary:
+	return {
+		"damage": profile.damage,
+		"damage_type": profile.damage_type,
+		"reach": profile.reach,
+		"cone_half_angle_degrees": profile.cone_half_angle_degrees,
+		"knockback_distance": profile.knockback_distance,
+		"fire_interval_ticks": profile.fire_interval_ticks,
+		"status_id": profile.status_id,
+		"status_proc_chance": profile.status_proc_chance,
+		"interrupt_strength": profile.interrupt_strength,
+		"lunge_distance": profile.lunge_distance,
+		"lunge_duration_ticks": profile.lunge_duration_ticks,
+		"hit_active_ticks": profile.hit_active_ticks,
+		"windup_ticks": profile.windup_ticks,
+	}
+
+
 func _register_enemies() -> void:
+	# debug_enable_* lookup (rule of two: same shape as _NATURAL_WEAPON_IDS above) --
+	# read once here, never per-tick.
+	var family_enabled: Dictionary = {&"fang": debug_enable_fang, &"ooze": debug_enable_ooze, &"watcher": debug_enable_watcher}
 	for enemy_key: StringName in _enemy_nodes:
 		var actor: Node3D = _enemy_nodes[enemy_key]
+		if not family_enabled[enemy_key]:
+			actor.queue_free()
+			continue
 		var stats: Resource = ContentDB.get_resource(&"enemy", enemy_key)
 		var natural_weapon_id: StringName = _NATURAL_WEAPON_IDS[enemy_key]
 		var natural_weapon: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", natural_weapon_id)
@@ -116,6 +183,8 @@ func _register_enemies() -> void:
 		sim.register_combatant(actor.actor_id, stats.max_health, stats.family, stats.iframe_ticks_on_hit, stats.combat_radius, &"enemy")
 		sim.register_weapon(natural_weapon_id, natural_weapon.damage, natural_weapon.damage_type, natural_weapon.preferred_attack_distance, natural_weapon.cone_half_angle_degrees, natural_weapon.knockback_distance, natural_weapon.fire_interval_ticks)
 		sim.register_ai(actor.actor_id, natural_weapon_id, actor.position, natural_weapon.preferred_attack_distance, natural_weapon.minimum_attack_distance, natural_weapon.windup_ticks, natural_weapon.detection_radius, natural_weapon.leash_radius)
+		if debug_force_aggro:
+			sim.debug_set_ai_active(actor.actor_id)
 
 		_enemies[actor.actor_id] = actor
 		_enemy_telegraphs[actor.actor_id] = {
@@ -143,6 +212,10 @@ func _physics_process(delta: float) -> void:
 		var actor: Node3D = _enemies[actor_id]
 		actor.sync_from_sim(sim.entities.get(actor_id, actor.position))
 	_report_events(events)
+	if debug_show_attack_state:
+		var description: Dictionary = sim.debug_describe_melee_state(envoy.actor_id)
+		if not description.is_empty():
+			print("attack state: ", description)
 
 
 ## Dev-only debug input, deliberately NOT an InputMap action — edge-detected raw
@@ -167,8 +240,24 @@ func _process_debug_weapon_cycle() -> void:
 func _report_events(events: Array[Event]) -> void:
 	for event in events:
 		match event.kind:
+			"melee_swing":
+				print("melee swing: ", event.payload)
+				# Slice B charge-ready cue (pure listener): a release closing any hold
+				# -- tap or charge -- clears the tint; harmless no-op if it wasn't lit.
+				if event.payload.get("actor_id") == envoy.actor_id:
+					envoy.clear_charge_ready()
+			"charge_ready":
+				print("charge ready: ", event.payload)
+				if event.payload.get("actor_id") == envoy.actor_id:
+					envoy.show_charge_ready(_charge_ready_tint_color)
+			"melee_hold_canceled":
+				print("melee hold canceled: ", event.payload)
+				if event.payload.get("actor_id") == envoy.actor_id:
+					envoy.clear_charge_ready()
 			"hit":
 				print("hit: ", event.payload)
+			"windup_interrupted":
+				print("windup interrupted: ", event.payload)
 			"died":
 				print("died: ", event.payload)
 				var actor_id: int = event.payload.get("actor_id")

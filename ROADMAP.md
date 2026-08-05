@@ -29,6 +29,10 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P17 | Per-family engagement identities | PROPOSED | Movement/attack personality as content on top of the shared AI; M2 content pass |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
+| P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
+| P21 | Arena camera-follow | PROPOSED | Fixed camera doesn't track the Envoy; noted repositioning Watcher for visibility |
+| P22 | Buffer eligibility during charge windup | PROPOSED | Scope cut, not canon — a projected `end_tick` is already computable |
+| P23 | Graded player poise | PROPOSED | Mirrors `interrupt_strength`; M1 ships unconditional cancel only |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
@@ -121,6 +125,17 @@ longer loadout array.
 **Why deferred:** M4 by design; do not front-load progression before fun is proven.
 Charge-profile plumbing itself lands with Slice B (M1); this addendum is only about
 progression differentiating BY that plumbing, which stays M4.
+**Addendum — M3 delivery requirement for phased attack Commands (Slice B, built this
+session):** the sword's combo/charge model sends explicit `attack` phases
+(`pressed`/`held`/`released`) rather than inferring transitions from a missing
+per-tick Command. That avoids one class of ambiguity, but does NOT by itself solve
+transport loss — a dropped `released` (or `pressed`) is still a dropped transition
+and would leave `SimWorld._melee_hold` open with no way to resolve it. M3's
+server-authoritative model (GAME-RULES §4) must provide reliable delivery/sequencing
+for these edge-bearing phases, or a periodic input-state reconciliation mechanism, so
+a lost network message can never leave an actor's attack state stuck mid-hold. Not a
+concern for M1 (single offline driver, no packet loss) — flagged here so M3 netcode
+work doesn't discover it late.
 
 ### P6 — Rotating gate map (arcade)
 **Idea:** Multiple concurrent descent "gates" whose upcoming floors rotate on a
@@ -321,6 +336,82 @@ under what evidence.
 **Why deferred:** No trigger yet. Build when two enemy bodies need meaningfully
 different push responses, or when Brandish (P5 addendum) lands and its advancing
 impacts need family-aware pushback to feel right.
+
+### P20 — Sim movement collision/bounds
+**Idea:** Authoritative movement collision in sim/ — arena bounds (walls) and
+body-blocking between actors. Confirmed by direct read this session: `_apply_move`
+is unconditional `position += direction * speed * dt`, and nothing in the codebase
+(sim or presentation — the Envoy's CharacterBody3D never calls `move_and_slide`/
+`move_and_collide`) constrains movement at all today.
+**Reasoning:** Manual-pass forward lunge (GAME-RULES §3) inherits and exposes this
+directly — a lunge is authored displacement with the exact same lack of constraints
+ordinary walking has, so it can carry an actor through a wall or through another
+actor's body just as easily as walking already can. Recorded explicitly as a known
+M1 limitation rather than solved inline (see HANDOFF).
+**Update (2026-08-05):** the lunge-vs-hostile-contact pass-through case specifically
+is now fixed (`SimWorld._find_earliest_lunge_contact`/`_contact_distance`) —
+authored attack movement clamps to a living hostile's combined-combat-radii contact
+distance, sharing one formula/epsilon with Burn's contact-spread. This is
+attack-authored movement semantics, not a general collision layer: ordinary
+walking, enemy movement, walls, and actor-vs-actor separation in general remain
+exactly as unconstrained as before. **P20 stays fully open** for all of that — this
+was a narrow, lunge-specific fix, not a down payment on general collision.
+**Design questions:** Wall bounds first (arena is currently a flat 40x40 box with no
+interior geometry, so this is moot until M2 floor generation adds walls) vs.
+body-blocking first (relevant now, three enemies + Envoy can already overlap);
+whether this lives as a generic sim-side collision pass or per-system clamping
+(movement, lunge, knockback each currently free-write `entities[actor_id]`).
+**Ally-separation question (open, raised by the lunge-clamp fix):** the lunge clamp
+deliberately never targets allies (`_find_earliest_lunge_contact` is hostile-only,
+matching the existing hit-detection ally filter). Whether allies should ever push
+apart from each other — a co-op-relevant question once multiple players share the
+arena in M3 — is undecided and NOT answered by this fix; it's a separate future
+design call, not folded into general body-blocking above by default.
+**Why deferred:** No wall geometry exists yet to make bounds meaningful (M2 floor
+generation gates that half); body-blocking has no trigger yet beyond "it looks odd"
+— revisit if playtesting finds overlap actively hurts readability/fairness, or when
+M2 floor generation lands and walls become real.
+
+### P21 — Arena camera-follow
+**Idea:** The M1 arena's `FixedCamera` doesn't track the Envoy — noted this session
+while repositioning Watcher's station specifically because its old position sat
+outside the fixed camera's forward view entirely.
+**Reasoning:** A camera that doesn't follow the player becomes a real usability
+problem the moment the arena is large enough for the player to walk off-frame (the
+40x40 geometry fix already makes this plausible at the perimeter stations).
+**Why deferred:** M1's fixed framing is sufficient for the current combat-slice
+testing footprint; not worth the scope now. Revisit if the manual re-pass finds
+perimeter-station movement walking the Envoy off-frame.
+
+### P22 — Buffer eligibility during charge windup
+**Idea:** Extend the mid-swing input buffer (built alongside the lunge/windup
+pending-attack record) to cover the `windup` state too, buffering a press against a
+PROJECTED `end_tick` (`windup_end_tick + charge_profile.lunge_duration_ticks`)
+rather than today's rule where any press during windup is unconditionally rejected
+`mid_swing`.
+**Reasoning:** The projected deadline is already computable with existing fields —
+this is a scope cut for engineering-complexity reasons (another branch in an
+already-dense state machine), not a technical wall. Recorded explicitly so "charge
+windup can't buffer" is never mistaken for a design law later.
+**Why deferred:** No evidence yet that it's needed — the third manual-pass round's
+re-pass found no complaints about mid-windup presses feeling dropped. Revisit if a
+future playtest surfaces windup-press frustration specifically.
+
+### P23 — Graded player poise
+**Idea:** Mirror the existing player-interrupts-enemy `interrupt_strength` mechanic
+in the other direction — enemy attacks would need a threshold to interrupt a
+player's pending windup/executing attack, instead of today's M1 rule where ANY
+non-lethal hit cancels unconditionally.
+**Reasoning:** The lunge/windup pending-attack system (third manual-pass round)
+ships player poise as a deliberate M1 simplification, not a permanent design law —
+see `SimWorld._resolve_hit_on_target`'s interrupt-site comment and HANDOFF's
+"Manual-pass follow-up session" note. **Trading-feel evidence:** the manual re-pass
+on this round (2026-08-05) explicitly watched for "trading during lunge feels
+terrible" and reported no new findings — no complaint surfaced. That's one data
+point against urgency, not a verdict; a longer/less scripted playtest could still
+surface it.
+**Why deferred:** No evidence of a problem yet (see above); building graded poise
+speculatively would be exactly the kind of future-proofing AGENTS.md warns against.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

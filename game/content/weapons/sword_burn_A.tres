@@ -1,8 +1,77 @@
-[gd_resource type="Resource" script_class="SwordStats" format=3 uid="uid://b122hcu6i2o46"]
+[gd_resource type="Resource" script_class="SwordStats" load_steps=7 format=3 uid="uid://b122hcu6i2o46"]
 
 [ext_resource type="Script" uid="uid://dttioosyjk36c" path="res://game/content/weapons/sword_stats.gd" id="1_stats"]
+[ext_resource type="Script" path="res://game/content/weapons/melee_attack_profile.gd" id="2_profile"]
+
+[sub_resource type="Resource" script_class="MeleeAttackProfile" id="MeleeAttackProfile_hit1"]
+script = ExtResource("2_profile")
+damage = 8.0
+damage_type = &"force"
+reach = 2.0
+cone_half_angle_degrees = 60.0
+knockback_distance = 1.0
+fire_interval_ticks = 2
+status_id = &""
+status_proc_chance = 0.0
+interrupt_strength = 0
+lunge_distance = 0.5
+lunge_duration_ticks = 4
+hit_active_ticks = 2
+windup_ticks = 0
+
+[sub_resource type="Resource" script_class="MeleeAttackProfile" id="MeleeAttackProfile_hit2"]
+script = ExtResource("2_profile")
+damage = 8.0
+damage_type = &"force"
+reach = 2.0
+cone_half_angle_degrees = 60.0
+knockback_distance = 1.0
+fire_interval_ticks = 1
+status_id = &""
+status_proc_chance = 0.0
+interrupt_strength = 0
+lunge_distance = 1.0
+lunge_duration_ticks = 5
+hit_active_ticks = 2
+windup_ticks = 0
+
+[sub_resource type="Resource" script_class="MeleeAttackProfile" id="MeleeAttackProfile_hit3"]
+script = ExtResource("2_profile")
+damage = 10.0
+damage_type = &"force"
+reach = 2.0
+cone_half_angle_degrees = 60.0
+knockback_distance = 1.5
+fire_interval_ticks = 5
+status_id = &"burn"
+status_proc_chance = 0.15
+interrupt_strength = 1
+lunge_distance = 1.2
+lunge_duration_ticks = 5
+hit_active_ticks = 3
+windup_ticks = 0
+
+[sub_resource type="Resource" script_class="MeleeAttackProfile" id="MeleeAttackProfile_charge"]
+script = ExtResource("2_profile")
+damage = 20.0
+damage_type = &"force"
+reach = 2.5
+cone_half_angle_degrees = 60.0
+knockback_distance = 2.5
+fire_interval_ticks = 5
+status_id = &"burn"
+status_proc_chance = 1.0
+interrupt_strength = 1
+lunge_distance = 2.5
+lunge_duration_ticks = 8
+hit_active_ticks = 4
+windup_ticks = 8
 
 [resource]
 script = ExtResource("1_stats")
-status_id = &"burn"
-status_proc_chance = 0.15
+combo_profiles = Array[MeleeAttackProfile]([SubResource("MeleeAttackProfile_hit1"), SubResource("MeleeAttackProfile_hit2"), SubResource("MeleeAttackProfile_hit3")])
+charge_profile = SubResource("MeleeAttackProfile_charge")
+charge_threshold_ticks = 48
+combo_reset_ticks = 45
+input_buffer_ticks = 6
+charge_ready_tint_color = Color(0.2, 0.85, 0.9, 1)

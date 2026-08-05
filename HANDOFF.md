@@ -10,17 +10,11 @@ Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
   windup/attack timing reusing the existing combat pipeline entirely.
   `debug_loadout_override` brings back the old 6-weapon TAB carousel for
   diagnosis only (default false — must stay false for `/playtest`/itch build).
-- Pre-gate fix pass (multiple rounds, replayed by user): ally-filtering
-  (same-allegiance never a valid target, checked first in the shared hit path —
-  melee excludes allies, projectiles pass through); hit-establishes-aggro (a
-  landed player hit/status activates AI regardless of detection_radius);
-  attack-priority reorder fixing a real exploit — crowding an enemy inside
-  minimum_attack_distance could previously suppress its attack indefinitely;
-  distance preferences now govern movement only, never attack eligibility;
-  disengagement rewritten — no universal return-to-spawn, an enemy that loses
-  aggro stops in place, goes idle, and RE-ANCHORS its leash to the stop point;
-  Burn contact-spread now transmits the source's REMAINING duration (snapshotted,
-  capped at full), which alone fixed clump lethality, no number changes needed.
+- Pre-gate fix pass (multiple rounds, replayed by user): ally-filtering; hit-
+  establishes-aggro; attack-priority-beats-movement-preference (closed a real
+  crowding exploit); disengage-in-place with leash re-anchor (no return-to-spawn);
+  Burn contact-spread transmits the source's REMAINING duration (fixed clump
+  lethality). See git history for full detail — all still-locked invariants.
 - Calibration: sword_burn_A proc chance 0.3 -> 0.15 post clump-burn replay
   (dated note in `sword_stats.gd`).
 - Slice B (combo/charge) fully spec'd, NOT built — locked in `sword_stats.gd`'s
@@ -34,10 +28,9 @@ Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
   5 existing files updated for ally-allegiance + attack-priority reorder.
 
 ## Not done / next action
-1. **Slice B planning** opens next session — usual fork questions before code,
-   locked spec above as input. Last M1 gate item before playtest is reachable.
-2. Then: `/playtest` gate (log result) + itch.io build — both explicitly blocked
-   on Slice B (GAME-RULES §5: "combo/charge/shield/i-frames in sim ticks").
+Superseded by the three manual-pass rounds below (Slice B is built; see those
+sections for current status) — `/playtest` gate + itch.io build remain the next
+real action once the manual re-pass on this round's lunge-clamp addition lands.
 
 ## Open tensions
 - Per-run combat-seed derivation: still open M2 run-structure question (carried).
@@ -47,10 +40,6 @@ Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
 - GAME-RULES §3 needs two new locked rules added by hand (guard.py blocks agent
   edits): "distance preferences govern movement only" (`sim_world.gd`'s STANDING
   RULE comment) and Burn's duration-inheritance rule.
-
-## Concepts introduced this session
-- None explained fresh — this session was spec execution from the user's own
-  fully-specified technical direction throughout.
 
 ## Do NOT redo
 - `game/dev/envoy_movement_dev.*` is gone; `game/arena/arena.tscn` is the real
@@ -65,6 +54,61 @@ Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
   shared hit path — any future attacker type gets it for free; never duplicate
   the check per-weapon.
 - sword_burn_A's 0.15 proc chance and all engagement-AI numbers are provisional.
+
+## Manual-pass follow-up session (2026-08-05, after this file was last written)
+Two rounds of manual-pass follow-up landed on top of Slice B: (1) interrupt-as-
+graded-content, input buffer, charge-ready cue, arena geometry/debug exports —
+5-item round, complete, 226/226 green; (2) forward lunge + charge windup + extended
+mid-swing input buffer — the first multi-tick pending-attack execution window on the
+player side (`SimWorld._melee_hold`'s 3-state charging/windup/executing record),
+complete, 263/263 green. Full details in the conversation/plan file
+(`four-changes-from-the-resilient-piglet.md`); two facts specifically flagged for
+GAME-RULES-adjacent recording (guard.py blocks agent edits to GAME-RULES.md itself,
+same STANDING-RULE workaround as before):
+- **Player poise, M1 simplification**: player windup/executing attacks have NO
+  poise in M1 — any non-lethal enemy hit cancels them unconditionally, never graded
+  by `interrupt_strength` (no enemy content sets that field). Graded player poise
+  (mirroring the player-interrupts-enemy mechanic) is future content work. Watch for
+  "trading during lunge feels terrible" in the re-pass — the fix is future poise
+  content, not a change to this slice.
+- **Known limitation (updated by the third manual-pass round below)**: no
+  authoritative movement collision exists anywhere in the sim — walking, enemy
+  movement, and actor-vs-actor separation in general can still overlap and cross
+  intended arena boundaries. The one exception: lunge's own contact pass-through
+  is now fixed (see "Lunge pass-through fix" section below) — authored attack
+  movement clamps to hostile contact; this is attack-authored movement semantics,
+  not general collision. "Sim collision/bounds" (ROADMAP P20) stays open for
+  everything else.
+- Also captured to ROADMAP (deferred, not built): camera-follow (the fixed arena
+  camera doesn't track the Envoy — noted when repositioning Watcher for visibility).
+- `debug_show_attack_state` (arena.gd) prints the Envoy's live pending-attack state
+  each tick when on — useful for the manual re-pass on buffer-boundary/materialization
+  timing feel checks.
+- **Confirmed, no code change**: the wand's lack of charge is already expressed as
+  "no charge profile registered" content, not a weapon-type branch —
+  `_apply_attack`'s `is_phased_melee = _melee_combo_profiles.has(weapon_id)` is a
+  pure presence check. Future caveat: today's phased resolution machinery assumes a
+  melee sweep; a future wand charge would still need the resolution layer taught to
+  branch on resolution type (melee sweep vs. projectile spawn) via the same
+  profile-driven pattern — not a Command-layer change, but not literally zero-code.
+
+## Lunge pass-through fix (2026-08-05, third manual-pass round)
+Authored melee lunge movement now clamps to hostile contact — a swept
+segment-vs-circle check against the authoritative combined-combat-radii contact
+distance (`SimWorld._contact_distance`, one shared formula/epsilon with Burn's own
+`_actors_overlap`, `_CONTACT_PADDING=0.0` since Burn's existing formula has zero
+tolerance today and nonzero padding isn't justified against it). 280/280 green.
+Two records, both explicit per this round's spec:
+- **Refinement to the lunge-constraints rule**: lunge still shares walking's world
+  movement constraints exactly (both remain fully unconstrained — no walls, no
+  bounds, no general body-blocking). Target-contact clamping is the *attack's own
+  authored movement semantics*, not a collision layer — walking has no target, so
+  there is no inconsistency between "lunge is now constrained by contact" and
+  "walking still isn't."
+- **ROADMAP P20 (sim movement collision/bounds) stays fully open** — walls, bounds,
+  and general actor separation are untouched by this fix, which resolves only the
+  lunge-specific pass-through defect (with the test suite as evidence, pending
+  manual playtest confirmation).
 
 ## Files touched
 `game/sim/sim_world.gd` · `game/arena/{arena.tscn,.gd}` (new) ·
