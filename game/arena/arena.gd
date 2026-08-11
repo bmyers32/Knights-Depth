@@ -17,14 +17,6 @@ extends Node3D
 }
 @onready var _failure_overlay: FailureOverlay = $FailureOverlay
 
-## Maps each locked M1 enemy family to its natural-attack ContentDB id (Phase D
-## step 8 Phase 4) — content, not a hardcoded weapon choice in sim/.
-const _NATURAL_WEAPON_IDS: Dictionary = {
-	&"fang": &"fang_bite",
-	&"ooze": &"ooze_slam",
-	&"watcher": &"watcher_pulse",
-}
-
 ## Real M1 loadout (CLAUDE.md M1 row: sword+gun+shield) — fixed switch order,
 ## advanced only via the sim-owned switch_weapon Command (Phase D step 8 Phase 2),
 ## never a direct driver call. sword_burn_A carries M1's one status effect (Burn);
@@ -95,7 +87,7 @@ func _ready() -> void:
 	_register_enemies()
 
 	for weapon_id in loadout_weapon_ids:
-		_register_weapon_content(weapon_id)
+		ContentRegistrar.register_weapon(sim, weapon_id)
 	sim.set_weapon_loadout(envoy.actor_id, loadout_weapon_ids)
 	sim.set_equipped_weapon(envoy.actor_id, loadout_weapon_ids[0])
 
@@ -112,7 +104,7 @@ func _ready() -> void:
 		print("!!! DEV CAROUSEL ACTIVE — not the shipped loadout !!!")
 		for weapon_id in debug_weapon_ids:
 			if not weapon_id in loadout_weapon_ids:
-				_register_weapon_content(weapon_id)
+				ContentRegistrar.register_weapon(sim, weapon_id)
 
 	var matrix: DamageMatrix = ContentDB.get_resource(&"combat", &"damage_matrix")
 	sim.set_damage_matrix(matrix.families, matrix.weak_multiplier, matrix.resist_multiplier)
@@ -126,63 +118,18 @@ func _ready() -> void:
 	sim.register_shield(envoy.actor_id, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance)
 
 
-## Shared by the real loadout registration loop and the debug-carousel registration
-## loop (rule of two: two concrete call sites justify the extraction). A SwordStats
-## with a non-empty combo_profiles array (Slice B, GAME-RULES §3) registers via
-## register_melee_profiles instead of the flat register_weapon path — sword_A
-## (empty array) is unaffected.
-func _register_weapon_content(weapon_id: StringName) -> void:
-	var weapon: Resource = ContentDB.get_resource(&"weapon", weapon_id)
-	if weapon is GunStats:
-		sim.register_gun(weapon_id, weapon.base_damage, weapon.damage_type, weapon.speed, weapon.max_lifetime_ticks, weapon.hit_radius, weapon.knockback_distance, weapon.fire_interval_ticks, weapon.status_id, weapon.status_proc_chance)
-	elif weapon is SwordStats and weapon.combo_profiles.size() > 0:
-		var combo_dicts: Array[Dictionary] = []
-		for profile in weapon.combo_profiles:
-			combo_dicts.append(_unpack_melee_profile(profile))
-		sim.register_melee_profiles(weapon_id, combo_dicts, _unpack_melee_profile(weapon.charge_profile), weapon.charge_threshold_ticks, weapon.combo_reset_ticks, weapon.input_buffer_ticks)
-	else:
-		sim.register_weapon(weapon_id, weapon.base_damage, weapon.damage_type, weapon.reach, weapon.cone_half_angle_degrees, weapon.knockback_distance, 0, weapon.status_id, weapon.status_proc_chance)
-
-
-## Content resources never cross into sim/ directly (SimWorld class doc) — unpacks
-## one MeleeAttackProfile Resource into the plain Dictionary shape register_melee_
-## profiles expects, same boundary-crossing pattern _register_weapon_content's own
-## calls already follow for every other weapon.
-func _unpack_melee_profile(profile: MeleeAttackProfile) -> Dictionary:
-	return {
-		"damage": profile.damage,
-		"damage_type": profile.damage_type,
-		"reach": profile.reach,
-		"cone_half_angle_degrees": profile.cone_half_angle_degrees,
-		"knockback_distance": profile.knockback_distance,
-		"fire_interval_ticks": profile.fire_interval_ticks,
-		"status_id": profile.status_id,
-		"status_proc_chance": profile.status_proc_chance,
-		"interrupt_strength": profile.interrupt_strength,
-		"lunge_distance": profile.lunge_distance,
-		"lunge_duration_ticks": profile.lunge_duration_ticks,
-		"hit_active_ticks": profile.hit_active_ticks,
-		"windup_ticks": profile.windup_ticks,
-	}
-
-
 func _register_enemies() -> void:
-	# debug_enable_* lookup (rule of two: same shape as _NATURAL_WEAPON_IDS above) --
-	# read once here, never per-tick.
+	# debug_enable_* lookup -- read once here, never per-tick.
 	var family_enabled: Dictionary = {&"fang": debug_enable_fang, &"ooze": debug_enable_ooze, &"watcher": debug_enable_watcher}
 	for enemy_key: StringName in _enemy_nodes:
 		var actor: Node3D = _enemy_nodes[enemy_key]
 		if not family_enabled[enemy_key]:
 			actor.queue_free()
 			continue
-		var stats: Resource = ContentDB.get_resource(&"enemy", enemy_key)
-		var natural_weapon_id: StringName = _NATURAL_WEAPON_IDS[enemy_key]
-		var natural_weapon: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", natural_weapon_id)
-
-		sim.add_entity(actor.actor_id, actor.position, natural_weapon.move_speed)
-		sim.register_combatant(actor.actor_id, stats.max_health, stats.family, stats.iframe_ticks_on_hit, stats.combat_radius, &"enemy")
-		sim.register_weapon(natural_weapon_id, natural_weapon.damage, natural_weapon.damage_type, natural_weapon.preferred_attack_distance, natural_weapon.cone_half_angle_degrees, natural_weapon.knockback_distance, natural_weapon.fire_interval_ticks)
-		sim.register_ai(actor.actor_id, natural_weapon_id, actor.position, natural_weapon.preferred_attack_distance, natural_weapon.minimum_attack_distance, natural_weapon.windup_ticks, natural_weapon.detection_radius, natural_weapon.leash_radius)
+		# Sim registration goes through the shared ContentRegistrar so headless
+		# fixtures exercise the SAME path this driver does (see that class's doc).
+		var natural_weapon: NaturalWeaponStats = ContentRegistrar.register_enemy_body(sim, actor.actor_id, enemy_key, actor.position)
+		ContentRegistrar.register_enemy_ai(sim, actor.actor_id, enemy_key, actor.position)
 		if debug_force_aggro:
 			sim.debug_set_ai_active(actor.actor_id)
 

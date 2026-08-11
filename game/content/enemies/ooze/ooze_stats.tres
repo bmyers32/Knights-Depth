@@ -6,5 +6,5 @@
 script = ExtResource("1_stats")
 max_health = 20.0
 family = &"ooze"
-iframe_ticks_on_hit = 15
+iframe_ticks_on_hit = 5
 combat_radius = 0.7

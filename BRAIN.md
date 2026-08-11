@@ -13,6 +13,52 @@ overlapping entries, delete anything a law in GAME-RULES already covers.
 
 ## Wisdom
 
+### A defensive timer tuned in isolation becomes an offensive cadence cap
+**Incident (M1, pre-gate i-frame probe, 2026-08-11):** every M1 enemy shipped
+`iframe_ticks_on_hit = 15` — a defensive value chosen when the only question was "how
+long is a target invulnerable after a hit." The sword's 3-hit combo, tuned separately,
+resolves its hits 6 and 7 ticks apart. Probing the real content through the production
+registration path showed hit 1 landing (8 damage, i-frames → 15), then hit 2 at +6 and
+hit 3 at +7 both returning `attack_absorbed/iframes`. Forty-eight ticks of maximal
+spam-tapping dealt 24 damage — three repeats of hit 1 — instead of 26 per combo. The
+combo mechanic named in the M1 exit gate effectively did not exist, and nothing failed.
+**Mechanism:** health i-frames gate INDEPENDENT SEQUENTIAL hits, so the same number that
+reads as "defensive mercy window" is silently also the maximum rate at which ANY attacker
+may land hits. Two teams of tuning — enemy defense and weapon cadence — write to one
+shared variable from opposite directions, and neither authoring site mentions the other.
+**Failure if ignored:** an authored attack sequence quietly loses most of its hits;
+because an absorbed hit and a missed hit produce different-but-equally-silent outcomes
+during play, this reads as vague "mush" rather than a defect with an address. Worse, the
+value is invisible in the direction that matters — the Envoy is registered with
+`iframe_ticks_on_hit = 0`, so in the shipped build this timer only ever regulates the
+PLAYER'S damage output, never protects them. **Applies elsewhere:** every future rapid
+or multi-hit weapon (Brandish-style staged charges, bombs, rapid-fire guns), the same
+tension knockback already has with repeat-fire cadence (see the knockback entry below —
+same shape, different variable), and the M2 typed_damage_ramp if defense values ever
+scale per stratum. Any defensive duration must be written down alongside the fastest
+offensive cadence it will ever gate: here, `iframe_ticks_on_hit < smallest authored
+inter-hit gap`, now enforced by `tests/test_combo_cadence_fixture.gd`. Corollary: this
+timer is also an implicit sampling rate for anything that accumulates per landed hit —
+the M1 batch's flinch-pressure model inherits it directly.
+
+### Convenience-zeroed defenses in tests hide the interactions worth testing
+**Incident (M1, same probe):** the i-frame/combo defect survived 280 green tests because
+EVERY combo and charge test registered its target with `iframe_ticks_on_hit = 0` and
+hand-built its own attack profiles — a reasonable isolation choice per test, and a
+structural blind spot in aggregate. No test in the suite ever put the real sword against
+a target carrying real authored defenses. A parallel unpack of content into sim shapes
+inside the tests made the divergence permanent: production and tests were reading the
+same `.tres` files through two different code paths. **Mechanism:** unit isolation
+deliberately removes the very interactions that only appear when two independently-tuned
+subsystems meet; if no fixture ever re-assembles them, "all tests pass" measures each
+part in a world where the other part is switched off. **Failure if ignored:** a mechanic
+listed in a milestone exit gate can be fully implemented, fully tested, and
+non-functional at the same time. **Applies elsewhere:** any combat seam where live
+defensive values can suppress authored offensive cadence — keep at least ONE named
+integration fixture per such seam, driving the production registration path with real
+content. Deliberately NOT a mandate that every combat seam grow an integration fixture;
+the trigger is specifically "a defensive value can cancel an offensive one."
+
 ### A configured hook is not a working hook — trigger it to know
 **Incident (M0):** `.claude/settings.json` wired the IP guard to `python3 scripts/guard.py`.
 This machine's PATH only has `python`. The hook command failed to spawn, so `guard.py`
@@ -344,3 +390,65 @@ already advanced this tick, M2's elevator/floor-transition logic if it ever gets
 a similar dual-trigger shape, and any M3 netcode reconciliation path where a
 server correction and a normal tick advance the same actor's state in the same
 frame.
+
+## Candidate Principles (pre-lock)
+Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
+(no incident produced them) and NOT law yet. Governance ladder — the only path to
+GAME-RULES.md: reference evidence → candidate principle here → repo inspection +
+implementation need → batch playtest → GAME-RULES lock. Exception: rules required as
+architectural invariants (determinism/authority class) may enter GAME-RULES without
+playtest validation.
+
+1. **Moveset coherence.** Sequential/multi-stage attacks are judged by the state each
+   stage creates for the next. Under baseline conditions — the target takes no
+   independent action between stages beyond consequences the attack itself authored —
+   one successful stage must leave the next reasonably attainable, unless
+   contact-breaking is explicitly authored weapon identity. Enemy evasion, spacing, and
+   repositioning are legitimate counterplay, never a coherence violation. (Guard against
+   misuse: this must never become "enemies hold still for combos.")
+2. **Sequence economy.** A weapon's basic chain, finisher, charge transition, cancels,
+   and reset/exit paths are competing exits from shared input state, balanced as ONE
+   economy, never tuned independently. At every decision node, "why choose A over B?"
+   must have an answer in both directions.
+3. **Charge choice.** Every weapon line with a charge must answer both "why use the basic
+   attack here?" and "why charge here?" No answer to either = structural defect. A charge
+   is not mandatory content; add one only when it creates a real decision.
+4. **Independence.** Flinch-trigger capability, pressure-contribution eligibility,
+   knockback, damage, and status are independent authored dimensions. Never derive one
+   from another.
+5. **Expressible susceptibility.** The flinch system must stay able to express highly
+   susceptible enemies that knowledgeable players can repeatedly manipulate.
+6. **Test philosophy.** Mechanical tests protect simulation laws; a small number of NAMED
+   content fixtures protect exemplar behaviors; tuning is validated by playtest, never
+   encoded wholesale as arithmetic assertions across profiles.
+7. **Commitment vs cancelable recovery.** Irreversible attack commitment and cancelable
+   recovery are distinct. Shield/switch cancellation may end only execution authored as
+   cancelable; a spawned projectile or a landed hit does not automatically erase
+   remaining balance-bearing cost. **FENCE:** this does NOT authorize adding commitment
+   locks to attacks that do not already need them. Commitment is content-authored risk,
+   not a mandatory phase every attack must possess. The sword's existing post-hit shield
+   cancel is authored-cancelable by design and stands; the gun's fire→spawn→free
+   timeline needs nothing added (verified, recon 7.9).
+8. **Switch persistence.** Switching changes the active weapon; it never IMPLICITLY
+   resets weapon-owned state (cooldown, sequence step, charge, future ammo/heat/marks).
+   Every persistent weapon-owned state CATEGORY has defined holstered semantics from a
+   system-level default, with explicit content override where a weapon differs (default:
+   cooldown CONTINUE, charge CANCEL; sword sequence may author RESET). Unequipping is
+   never the hidden reason state changed. Any authored reset-on-switch stays subject to
+   principle 2 and the bypass invariant: attack→switch→attack must never reach privileged
+   sequence states more cheaply than the normal economy permits.
+9. **Content-first escalation.** When observed play shows a problem: flip/tune cheap
+   authored dimensions first; tune the content that OWNS the problem second; escalate to
+   structural change only when existing seams demonstrably cannot express the result.
+   Corollary: if an A/B comparison of authored content is expensive to run, fix the
+   content seam before debating the content.
+10. **A feature freeze does not freeze the thing being measured.** A pre-gate fence
+   ("no new implementation before the playtest") never prohibits narrow fixes for
+   CONFIRMED defects that invalidate the mechanics the gate exists to measure —
+   otherwise the gate certifies a build whose headline mechanic does not function, and
+   its verdict is worthless. Such a fix must preserve existing architecture, prefer
+   content/data correction where sufficient, and re-run the full suite before the gate.
+   Established when the M1 gate was about to measure a combo whose hits 2 and 3 were
+   being absorbed. Generalizes to every future milestone gate and code freeze:
+   distinguish "don't add scope" (always binding) from "don't repair the instrument"
+   (never intended).

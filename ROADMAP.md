@@ -33,6 +33,10 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P21 | Arena camera-follow | PROPOSED | Fixed camera doesn't track the Envoy; noted repositioning Watcher for visibility |
 | P22 | Buffer eligibility during charge windup | PROPOSED | Scope cut, not canon — a projected `end_tick` is already computable |
 | P23 | Graded player poise | PROPOSED | Mirrors `interrupt_strength`; M1 ships unconditional cancel only |
+| P24 | Reactions beyond flinch + enemy action phases | PROPOSED | Knockdown, player-side reactions, punishable recoveries; second consumer decides shared infra |
+| P25 | Weapon-owned state & switch semantics | PROPOSED | Holstered-state categories, switch-reset tech, ammo/heat — all gated on a real consumer |
+| P26 | Ranged weapon identity futures | PROPOSED | Distance bands, committed burst, hazards, marks; identity = changed decision, not new numbers |
+| P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
@@ -122,6 +126,18 @@ Command architecture (`SimWorld.set_weapon_loadout`/`_apply_switch_weapon`) alre
 generalizes to N slots — slot *count* is progression content to unlock, not an
 architecture change. Do not redesign cycling to add more slots; just register a
 longer loadout array.
+**Addendum — combo length is a flinch-economy decision, not a weapon-feel decision
+(2026-08-11, combat-advisory arc):** under the batch's pressure model, sequence length ×
+per-hit damage × cadence × the SHARED pressure window jointly determine how often a
+player can access enemy control. A second sword family cannot pick its combo length
+freely; it inherits that economy. Content-authoring constraint to apply BEFORE any
+second sword line is authored. Keep the pressure window shared/global — per-weapon
+windows only if multiple real weapons prove the shared model cannot support their rhythm
+(§1.4). Related constraints recorded at the same time: attack-speed modifiers must not
+silently alter authored movement or reach (snapshot vs dynamic vs authored timing
+semantics get locked before modifiers ship); split/multi-channel damage must not
+double-dip generic bonuses; and status value is evaluated in the geometry and timing of
+the exact weapon applying it — there is no fixed "status = −X% damage" formula.
 **Why deferred:** M4 by design; do not front-load progression before fun is proven.
 Charge-profile plumbing itself lands with Slice B (M1); this addendum is only about
 progression differentiating BY that plumbing, which stays M4.
@@ -333,9 +349,17 @@ content pass, not an accidental side effect of this factor.
 **Design questions:** Where the factor lives in content (per-family stats resource
 vs. a new shared table); whether shield-break recoil ever adopts it, and if so
 under what evidence.
-**Why deferred:** No trigger yet. Build when two enemy bodies need meaningfully
-different push responses, or when Brandish (P5 addendum) lands and its advancing
-impacts need family-aware pushback to feel right.
+**Update (2026-08-11, combat-advisory arc): SECOND CONSUMER CONFIRMED** — knockback
+resistance/weight is now wanted by two independent mechanics, which satisfies this
+entry's own trigger condition: (1) melee sequence coherence — knockback from an early
+combo hit can push a target out of reach of the next authored hit, and (2) ranged
+follow-up range — the same displacement walks a target off a repeat-fire weapon's line
+(the shipped `wand_A.knockback_distance = 0.0` is that problem already solved by
+deletion rather than by weight). Still NOT in the post-gate combat batch — recorded so
+the trigger isn't re-litigated later. No family-specific hacks in the meantime.
+**Why deferred:** trigger met, but sequencing puts flinch first — flinch changes how
+often knockback even matters, so tuning weight before it would be tuning against a
+baseline about to move.
 
 ### P20 — Sim movement collision/bounds
 **Idea:** Authoritative movement collision in sim/ — arena bounds (walls) and
@@ -412,6 +436,107 @@ point against urgency, not a verdict; a longer/less scripted playtest could stil
 surface it.
 **Why deferred:** No evidence of a problem yet (see above); building graded poise
 speculatively would be exactly the kind of future-proofing AGENTS.md warns against.
+
+### P24 — Reactions beyond flinch + enemy action-phase structure
+**Idea:** Everything in the reaction space the post-M1 combat batch deliberately does NOT
+build, kept together because they all wait on the same evidence (does flinch prove fun?):
+- **Knockdown** — the next reaction after flinch. Its arrival is the SECOND consumer that
+  triggers evaluating shared reaction infrastructure; until then flinch stays a concrete
+  actor state, not a framework (§1.4 rule of two).
+- **Player-side reactions** — future design space. Do NOT generalize the enemy FLINCHED
+  state to cover the player now; player poise is its own proposal (P23).
+- **Enemy action-phase structure, incl. punishable recoveries** — M1 enemies have exactly
+  ONE authored phase: a windup (`_ai_attack_start_tick`/`_ai_attack_fire_tick`), then an
+  instant resolve. There is no recovery phase to make vulnerable, no multi-phase action
+  object, and no authored displacement inside an action. The batch's per-action
+  VULNERABLE window therefore lands as an offset pair inside the windup only; "bait the
+  attack, punish the recovery" needs this proposal first.
+- **Two disjoint vulnerability windows** in one action — deferred until an enemy needs it;
+  the batch ships base-mode-outside / interval-overrides-to-VULNERABLE, which already
+  expresses protected-early/vulnerable-late as base PROTECTED + a late interval.
+**Reasoning:** the batch's flinch system is the first reaction this project has ever had.
+Every item here is a second or third instance of a pattern with exactly one instance.
+**Why deferred:** all of it is gated on the batch playtest answering "is being able to
+control an enemy's actions fun, and at what frequency?"
+
+### P25 — Weapon-owned state & switch semantics
+**Idea:** The general form of a question M1 currently answers by accident. Today
+`_next_fire_tick` is actor-keyed (cooldown CONTINUES across a switch), `_melee_hold` is
+cleared (charge CANCELS), and `_combo_index` is cleared (sequence RESETS) — which happens
+to match the intended defaults exactly, but nothing states them as a contract. Covers:
+- **Declared holstered semantics per state CATEGORY**, with content override where a
+  weapon differs, rather than per-state authoring on every content entry.
+- **Switch-reset tech** — investigate-only. Adopt only if switching ever carries real
+  commitment. Any M1 conclusion is provisional with an explicit revalidation trigger when
+  the loadout expands toward four weapons + shield (P5's slot-count addendum).
+- **Universal switch transition time/cost** — a legal future LOADOUT-system decision if
+  ever wanted. Explicitly NOT derivable from the commitment/recovery principle; no global
+  switching restriction now.
+- **Ammo / reload / magazine state** — only when a concrete weapon's decision loop needs
+  resource cycling. Holstered semantics must be settled BEFORE any resource whose
+  behavior depends on unequipping. Magazine state is weapon-owned; no universal
+  switch-refill; no generic persistence framework ahead of a consumer.
+- **Per-weapon combo state** — `_combo_index` is per-actor, not per-weapon. Correct today
+  only because a switch wipes it. A second combo weapon that should REMEMBER its step
+  while holstered forces this.
+**Invariant that survives all of it:** attack→switch→attack must never reach privileged
+sequence states more cheaply than the normal economy permits.
+**Why deferred:** one combo weapon and one gun cannot demonstrate a switch economy.
+
+### P26 — Ranged weapon identity futures
+**Idea:** Ranged depth arrives through content-authored projectile / commitment / control
+behavior, never a universal projectile behavior graph. Identity = a CHANGED COMBAT
+DECISION; one new lifecycle behavior at a time. The M1 wand is deliberately the simple
+baseline. Candidates: distance-band transformation · committed burst · ricochet/geometry
+(needs authoritative walls, so M2 at the earliest) · heavy recoil cannon (needs
+displacement + re-hit maturity) · persistent hazard + displacement (damage collision ≠
+movement collision ≠ AI-nav influence, all explicit — a damaging field is not
+automatically navigation-blocking) · setup/detonation marks (snapshot-vs-resolution
+semantics, lifecycle cleanup, cross-player permission, no recursive chains; the solo loop
+must be complete without allies) · owner-relative/return projectiles (explicit
+authoritative compound state, never invisible helper actors).
+**First advanced consumer note (not scheduled):** committed burst / simple charge gun —
+composes with the existing charge input, flinch vulnerability, and the commitment
+principle without needing walls or persistent state.
+**Also parked here:** direct charge access for future charge guns (hold begins charge, no
+sacrificial precursor shot) · charge chaining (HOLD_TO_CHAIN vs FRESH_PRESS) only when a
+weapon needs it · shield bump/displacement as a ranged-loadout spacing tool (revisit after
+flinch validation and P19) · delayed-effect snapshot semantics · explicit projectile
+defense-interaction traits (blockable / pierces / terrain / friendly-fire) as authored
+data, never subclass accidents · **target-facing displacement**, which first requires
+DEFINING authoritative gameplay facing (movement heading vs aim vs attack-facing vs
+AI-facing vs a dedicated sim orientation — these currently disagree); that is its own
+design/authority fork at the first consumer and must never be smuggled into a knockback
+helper · **co-op obstruction as a first-class balance metric** ("does optimal use
+repeatedly invalidate teammates' correct decisions?" — priced or redesigned) ·
+generalist/Force damage needs a POSITIVE identity once typed loadouts matter ("neutral"
+≠ specialist-without-upside) · environmental utility axis (destructibles, switches,
+hazard triggering) when levels consume it.
+**Why deferred:** the M1 gun proves the projectile pipeline; every item above is a second
+weapon's job, and several are gated on M2 geometry existing at all.
+
+### P27 — Multi-hit / attack-instance model
+**Idea:** Attack-instance hit legality is a SEPARATE question from global health
+i-frames. M1 has no multi-hit mechanic at all — verified by probe (2026-08-11): one swing
+produces exactly one hit per target, a projectile hits once and expires, and a status DoT
+bypasses i-frames entirely. So one i-frame value currently does exactly one job. Covers:
+- **Re-hit eligibility** for staged multi-hit charges (the Brandish-style line, P5
+  addendum): per-stage i-frame policy, per-stage knockback/flinch/status eligibility (NO
+  naive independent per-stage proc rolls — 5×30% ≈ 83%), shield-break and death
+  mid-sequence, attacker cancel commitment.
+- **Cross-attacker i-frame/pressure suppression** — i-frames are target-global and
+  source-agnostic today, so in M3 co-op two players' hits would suppress each other, and
+  one player's hit would eat another's pressure contribution. No current consumer (single
+  player), and the fix is explicitly NOT attacker-scoped i-frames by default — that's the
+  decision this proposal exists to make deliberately.
+- **Attack-instance identity** — `projectile_id` exists; nothing else has an instance id.
+- **Co-op pressure attribution** — M1 records pressure contributions with no attacker
+  attribution (no shares, no assists). Any future attribution rides here.
+**Reasoning:** own front door because "how often may a target be hit" is a different
+question from "how long is a target merciful after being hit," and conflating them is
+exactly what produced the M1 combo-cadence defect (BRAIN).
+**Why deferred:** defined by the first real multi-hit consumer; constrained until then
+only by the recorded audit above. Do not pre-build.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
