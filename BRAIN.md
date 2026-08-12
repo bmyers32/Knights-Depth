@@ -13,6 +13,47 @@ overlapping entries, delete anything a law in GAME-RULES already covers.
 
 ## Wisdom
 
+### Never stamp a verdict the human hasn't rendered
+**Incident (M1, playtest gate, 2026-08-11):** the user finished the ten-minute gate
+saying "overall combat feels good... nothing else felt gate-blocking," then asked to
+proceed to the itch build. Since the itch build is only reachable after a PASS, the
+agent inferred PASS and wrote "verdict PASS" into ten content resources' calibration
+notes. The actual verdict, delivered next message, was **ITERATE** — combat was fair
+and legible but had no encounter decisions and no available failure. Ten files now
+carried a false claim about a judgment only the player can make, in exactly the place
+future tuning sessions look for authority. **Mechanism:** a verdict is a human
+judgment, but its *consequences* (build, close-out, next milestone) look procedural,
+so an agent tracking the procedure reconstructs the verdict from the next step being
+requested rather than waiting for the words. The inference is often right, which is
+what makes it dangerous — it fails silently and only in the cases that matter.
+**Failure if ignored:** the project's own records assert a fun-verdict nobody gave,
+and GAME-RULES §1.5's whole point (a mechanic earns budget only by passing a real
+playtest) is defeated by a plausible guess. **Applies elsewhere:** every human-only
+judgment in this project — /playtest verdicts, "is this fun," friend-playtest results
+(M2+), the M4 auth design session. Record what the human said verbatim; if the verdict
+itself is missing, the correct output is a blank marked "not yet rendered," never an
+inference. **Shared root with the entry below:** an authoritative source was available
+and a proxy was consulted instead.
+
+### A line-count cap needs a counter that counts blank lines
+**Incident (M1, same session):** HANDOFF.md has a hard 120-line cap. The agent checked
+it with PowerShell's `(Get-Content f | Measure-Object -Line).Lines`, which does not
+count empty strings — so ~11 blank lines vanished from every measurement. Reported
+"118" and "106" were really ~128 and ~116; the file was silently over a HARD cap while
+being reported as comfortably under it, across several trim cycles. Caught only by
+running `wc -l` for an unrelated reason and seeing 131 where 121 was expected.
+**Mechanism:** the cap is defined on physical lines, but the convenient tool measured a
+subtly different quantity that agrees with the real one on most inputs — a proxy that
+is correct until the exact moment precision matters. **Failure if ignored:** a "hard"
+constraint erodes into an approximate one, and the erosion is invisible because the
+measurement always reports success. **Applies elsewhere:** any enforced numeric limit
+in this project (HANDOFF's cap, ROADMAP's 20-entry Index trigger, M2's <100 ms/floor
+gen budget, future file-size or tick-budget limits) — verify the measurement tool
+counts the thing the rule names, once, deliberately, before trusting it. Corollary
+already learned the hard way here: PowerShell's `Get-Content` also mis-decodes UTF-8 as
+ANSI, so console mojibake is not evidence of a corrupted file. **Shared root with the
+entry above:** don't substitute a proxy measurement for the authoritative one.
+
 ### A defensive timer tuned in isolation becomes an offensive cadence cap
 **Incident (M1, pre-gate i-frame probe, 2026-08-11):** every M1 enemy shipped
 `iframe_ticks_on_hit = 15` — a defensive value chosen when the only question was "how
