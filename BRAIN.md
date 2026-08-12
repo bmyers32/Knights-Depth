@@ -13,6 +13,47 @@ overlapping entries, delete anything a law in GAME-RULES already covers.
 
 ## Wisdom
 
+### Quiescence: "stopped acting" is not "idle"
+**Incident (M1, flinch dev-target validation):** three of four test failures in one
+session shared a cause. A fixture drove combo taps, stopped, then measured pressure and
+deadlines — but the input buffer had a press QUEUED, which materialized on its own ticks
+later and landed a surprise hit that banked fresh pressure and broke an expiry
+assertion. Separately, the tap driver ended mid-cycle leaving an open `charging` hold,
+so the next test's `pressed` hit `_begin_melee_hold`'s already-charging **silent no-op**
+branch and the charge it was trying to measure never armed at all. **Mechanism:** an
+input system with buffering and multi-tick execution has state that outlives the last
+Command sent, and every one of its quiet failure modes is silent — a swallowed press and
+a press that simply hasn't materialized yet look identical from outside.
+**Failure if ignored:** measurements are taken against a sim still mid-action, and the
+resulting assertions pass or fail for reasons unrelated to what they claim to test —
+the most expensive kind of green suite. **The invariant:** before measuring post-action
+combat state, establish that the actor has (1) no open attack execution or hold, (2) no
+queued buffered press, and (3) passed any relevant attack-eligibility deadline. That is
+`CombatTestHelpers.settle()`, deliberately one shared location — per-file copies are how
+a timing rule drifts between fixtures. **Applies elsewhere:** rearm (if it lands),
+switch-reset tech, charge sequencing, the deferred multi-hit model, and every M3
+networking/replay test, where "has this actor finished acting?" becomes a question asked
+across a wire.
+
+### Events carry the authoritative timestamp, not tick_count
+**Incident (M1, same session):** a fixture recorded `sim.tick_count` immediately after
+`sim.tick()` returned and asserted a flinch deadline equalled `hit_tick +
+recovery_ticks`. It failed by exactly one. `SimWorld.tick()` advances `tick_count` as
+its final statement, so a read afterwards describes the sim AFTER advancement — one tick
+later than the Events produced during that tick. **Mechanism:** the sim has two
+legitimate notions of "now" — the tick being simulated, and the tick about to be
+simulated — and the convenient one to reach for from outside is the wrong one for
+describing something that already happened. **Failure if ignored:** every exact-deadline
+or exact-expiry assertion is silently skewed by one tick, which reads as an off-by-one in
+the MECHANIC rather than in the measurement, sending you to debug correct code.
+**The convention:** `Event.tick` is the authoritative occurrence timestamp; use it for
+anything asserting when something happened. Recorded here, in `SimWorld.tick()`'s own
+comment, and in `CombatTestHelpers` — findable from all three directions, because a
+convention that lives only in a commit message is not findable at all.
+**Applies elsewhere:** every future timing assertion (status expiry, cooldown windows,
+M2 elevator/floor transitions) and any M3 replay or reconciliation log, where an
+off-by-one in event stamping corrupts the comparison itself.
+
 ### Never stamp a verdict the human hasn't rendered
 **Incident (M1, playtest gate, 2026-08-11):** the user finished the ten-minute gate
 saying "overall combat feels good... nothing else felt gate-blocking," then asked to

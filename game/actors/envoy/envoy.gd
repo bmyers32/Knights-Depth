@@ -47,16 +47,30 @@ func build_commands(tick: int) -> Array[Command]:
 	# decision is sim-owned, content-driven by whether the equipped weapon has a
 	# charge profile registered — see SimWorld._apply_attack). Zero-vector aim (no
 	# camera in the viewport, or the ray never crosses the ground plane) falls back
-	# to stored facing — see SimWorld._normalize_horizontal. Only one phase is ever
-	# sent per tick, mirroring is_action_just_pressed's old one-Command-per-press
-	# shape for a non-combo weapon (gun/enemy behavior is untouched); a combo/charge
-	# weapon additionally gets "held" every tick the button stays down and
-	# "released" on the falling edge.
-	if Input.is_action_just_pressed("attack"):
+	# to stored facing — see SimWorld._normalize_horizontal. A combo/charge weapon gets
+	# "held" every tick the button stays down and "released" on the falling edge.
+	#
+	# BOTH EDGES ARE FORWARDED (locked fix, step-4 recon): this runs once per PHYSICS
+	# tick (arena.gd._physics_process, 30 Hz), and in a physics context both
+	# is_action_just_pressed and is_action_just_released report true when a click
+	# opened AND closed since the previous tick -- i.e. any click shorter than ~33 ms,
+	# which fast clicks and gaming mice produce routinely. The former if/elif chain
+	# forwarded only "pressed" and DISCARDED the release, which stranded
+	# SimWorld._melee_hold in "charging" forever: the next tick has no edges and no
+	# held state, so nothing ever closed it, and every later press hit
+	# _begin_melee_hold's already-charging silent no-op branch -- the Envoy's attack
+	# stayed dead until a weapon switch, a block rising edge, or death cleared it.
+	# Sending both phases in order resolves such a click as one clean tap, which is
+	# also what the player asked for.
+	var just_pressed: bool = Input.is_action_just_pressed("attack")
+	var just_released: bool = Input.is_action_just_released("attack")
+	if just_pressed:
 		commands.append(Command.new(tick, actor_id, "attack", {"aim": _compute_mouse_aim(), "phase": "pressed"}))
-	elif Input.is_action_just_released("attack"):
+	if just_released:
 		commands.append(Command.new(tick, actor_id, "attack", {"aim": _compute_mouse_aim(), "phase": "released"}))
-	elif Input.is_action_pressed("attack"):
+	elif not just_pressed and Input.is_action_pressed("attack"):
+		# "held" only on ticks carrying no edge at all -- a press tick already declared
+		# intent, and charge accumulation starts from the tick after it.
 		commands.append(Command.new(tick, actor_id, "attack", {"aim": _compute_mouse_aim(), "phase": "held"}))
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var direction := Vector3(input_dir.x, 0.0, input_dir.y)

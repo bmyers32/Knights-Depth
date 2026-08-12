@@ -74,23 +74,12 @@ func _land_hits(count: int, max_ticks: int = 200) -> Array:
 	return landed
 
 
-## Ticks until the attacker is genuinely IDLE: no open hold, no queued buffered press,
-## and off cooldown. _land_hits alternates pressed/released and routinely leaves one of
-## those live -- an open "charging" hold makes a later "pressed" hit the already-charging
-## no-op branch, and a QUEUED press materializes on its own ticks later, landing a
-## surprise extra hit. Both silently corrupt any measurement taken afterwards.
-func _settle(max_ticks: int = 60) -> void:
-	for _i in range(max_ticks):
-		var state: Dictionary = sim.debug_describe_melee_state(ATTACKER_ID)
-		var off_cooldown: bool = sim.tick_count >= int(sim._next_fire_tick.get(ATTACKER_ID, 0))
-		if state.is_empty() and off_cooldown:
-			return
-		# Only a "charging" hold needs an explicit release; everything else resolves by
-		# simply letting ticks pass.
-		if state.get("state", "") == "charging":
-			_attack("released")
-		else:
-			_tick()
+## Delegates to the ONE shared quiescence helper (see BRAIN: "stopped acting" is not
+## "idle"), then restores the dev target's health, since settling costs ticks during
+## which a Burn DoT or a materializing buffered press can still damage it.
+func _settle() -> void:
+	CombatTestHelpers.settle(sim, ATTACKER_ID, AIM, DT)
+	sim.debug_override_health(TARGET_ID, VALIDATION_HEALTH)
 
 
 func _pressure() -> float:

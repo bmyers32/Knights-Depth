@@ -487,6 +487,10 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# advances, per the locked Burn contact-episode design.
 	events.append_array(_advance_contact_spread())
 	events.append_array(_advance_status_ticks())
+	# tick_count advances LAST, so any read of it after tick() returns describes the sim
+	# AFTER advancement -- one tick later than the Events produced during this call.
+	# Event.tick is the authoritative occurrence timestamp; assert timing against that,
+	# never against tick_count sampled by the caller afterwards (BRAIN).
 	tick_count += 1
 	return events
 
