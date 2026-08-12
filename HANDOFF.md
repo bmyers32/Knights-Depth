@@ -13,22 +13,37 @@ overrides on arena.tscn's root — checked, not remembered). Verbatim answers:
 4. All damage readable and fair. No unseen damage.
 5. Nothing felt unavailable within current mechanics.
 
-**Reading:** fairness and legibility (#4) PASS and must be preserved. #2 and #3 are
-what fail. The batch must honestly flip both.
-
-**Named tuning axis so it isn't missed: enemy OUTPUT (damage, attack cadence,
-aggression).** Finding #3 shows durability tuning ALONE only lengthens fights
-without making failure available — do not answer this with HP alone.
+**Reading:** fairness/legibility (#4) PASS and must be preserved; #2 and #3 are what
+fail, and the batch must honestly flip both. **Named tuning axis so it isn't missed:
+enemy OUTPUT (damage, attack cadence, aggression)** — #3 shows durability tuning
+ALONE only lengthens fights without making failure available; not HP alone.
 
 ### Findings carried (post-gate, NOT fixed on the frozen build)
-- **G-1 possible lunge-clamp/presentation mismatch:** the Envoy visually appears to
-  phase into enemies around melee contact. Classify post-gate via an
-  authoritative-position vs presentation check BEFORE any fix. Discriminator:
-  ordinary walking has no collision at all (`_apply_move` is unconditional; ROADMAP
-  P20 open) and a killing blow releases the clamp the same tick, so only phasing
-  against a SURVIVING target mid-combo indicts the clamp. Clamp distance is summed
-  `combat_radius` (Envoy 0.4 + Fang 1.0 / Watcher 0.8 / Ooze 0.7), all documented as
-  eyeballed against the models.
+- **G-1 CLASSIFIED (2026-08-12): combat-geometry vs rendered-scale mismatch. NO
+  clamp defect.** Sim rests the Envoy exactly at the authored contact distance
+  (`test_lunge_clamp.gd:96` asserts it); `_contact_distance` is just summed
+  `combat_radius`. Three extents authored independently, all disagreeing —
+  `combat_radius` 0.40/1.00/0.70/0.80 (Envoy/Fang/Ooze/Watcher); scene capsules
+  0.50/1.00/1.00/1.00 (uniform 1.0×3.0 on all three enemies = copied default);
+  measured model half-extents 0.97 / 2.33×1.04 / 1.75×2.30 / 2.19×1.43 (glTF
+  accessor bounds, `root_scale=1.0`, node scales ~1.0). ~2 units of overlap are
+  authored in. Caveats: bboxes include weapons/attachments and these bodies aren't
+  circular — but even the NARROWER axis exceeds the authored radius every time.
+  **`combat_radius`/`reach`/Burn spread are UNTOUCHABLE (coupling):** model-accurate
+  contact ≈3.2 vs sword reach 2.0/2.5 — raising radii would stop the lunge outside
+  the Envoy's own reach and every hit would whiff.
+  **Resolution = EXPERIMENT LADDER, not a settled decision:** (1) batch start —
+  presentation-only model scaling PER MODEL, calibrated by eye so contact distance
+  reads as plausible proximity; NOT radius-matching (false precision). Fang's
+  nose/tail may need little correction, Ooze likely the most; judge the Envoy's own
+  scale against the combat space too. (2) FALSIFICATION — if scaled models read
+  toy-scale, the real defect is GLOBAL combat scale, and only then consider the
+  coupled reach/radius/spread retune as its own deliberate pass. (3) Stylization is
+  REFUTED by the gate observation itself.
+  **Recording requirement:** scale factors are tuning values — record per model with
+  date, PROVISIONAL/UNVALIDATED, judge at the re-gate. **No silent scene-file magic
+  numbers** (proposed: a `model_scale` field on each stats resource applied by the
+  actor at `_ready`, so the value lives in content with a calibration note).
 - **G-2 knockback lacks temporal consequence:** displaced enemies immediately
   re-evaluate to APPROACH and walk back in. AI is rule-correct (fresh-geometry
   re-evaluation); the unnatural feel is the ABSENCE of a reaction layer between
@@ -41,40 +56,30 @@ without making failure available — do not answer this with HP alone.
   tick and walks forward while disarmed.
 
 ## SEQUENCING AMENDMENT (supersedes "gate → itch → M1 closed")
-1. **M1 is NOT closed.** ITERATE is a legitimate gate outcome; the prior sequence
-   lacked this branch.
-2. **Web export of d1dbab0 proceeds NOW as PIPELINE VALIDATION only** — itch upload
-   as draft/private, to debug HTML5 quirks against a small frozen tested build.
-   **This does NOT satisfy the M1 itch criterion.**
-3. **The post-gate combat batch IS the ITERATE response.** Scope unchanged
-   (flinch/pressure, vulnerability windows, charge retune, continuation window,
-   enemy-by-enemy HP+threshold tuning from 3.7 evidence) PLUS the enemy-output axis.
-4. **Batch exit criterion: RE-GATE.** Same `/playtest`, same five questions, same
-   no-fixes discipline, on a frozen post-batch build. M1 closes on PASS —
-   specifically honest flips of #2 (decisions exist) and #3 (failure realistically
-   available) with #4 (fairness) preserved. That passing build becomes the public
-   itch build and satisfies the M1 criterion.
-5. **Treat Rule: the batch loses treat status** (it is now required M1 work). The
-   rule fires at actual M1 closure instead.
-6. **G-1 verification runs at the START of the batch, before flinch implementation**
-   — a clamp regression would qualify as a defect fix under the fence amendment.
+1. **M1 is NOT closed.** ITERATE is a legitimate outcome the prior sequence lacked.
+2. **Web export of d1dbab0 = PIPELINE VALIDATION only**, does NOT satisfy the M1
+   itch criterion. Lane: templates+preset (user) → headless export + local HTTP
+   validation (agent) → draft/private page (user) → quirks write-up → back to combat.
+3. **The batch IS the ITERATE response.** Scope unchanged (flinch/pressure,
+   vulnerability windows, charge retune, continuation window, enemy-by-enemy
+   HP+threshold tuning) PLUS the enemy-output axis and the G-1 scaling experiment.
+4. **Batch exit criterion: RE-GATE** — same `/playtest`, five questions, no-fixes
+   discipline, frozen build. M1 closes on honest flips of #2 and #3 with #4 intact;
+   that build becomes the public itch build.
+5. **Treat Rule: batch loses treat status** (required M1 work now); fires at closure.
 
 ## Next action
-Web export (pipeline validation, draft upload) → batch recon incl. G-1 → batch.
-Full batch design: `.claude/plans/advisory-decision-consolidated-swirling-flamingo.md`
-+ advisory v3. Committed pre-gate work: `d1dbab0` (i-frame/combo cadence fix — its
-commit message holds the full probe narrative and consumer audit).
+Web export (pipeline validation) → batch recon incl. G-1 → batch. Design:
+`.claude/plans/advisory-decision-consolidated-swirling-flamingo.md` + advisory v3.
+Pre-gate work `d1dbab0`; its commit message holds the probe narrative + i-frame audit.
 
 ## Open tensions (carried)
-- **26-vs-20:** a full 1→2→3 deals 26 to a 20 HP enemy. Now decided from gate
-  evidence: HP is a lever but NOT the first or only one (see the output axis above).
-  HP and each enemy's flinch threshold stay ONE co-authored decision per enemy.
-- Burn's 12-total ratio shifts against any raised HP — re-feel in the batch.
-- **Wand cadence (7.8 audit, recorded only, no tuning):** `fire_interval_ticks=15`
-  vs the OLD i-frame 15 meant arrivals landed exactly at the boundary vs a
-  stationary target, and every other shot was ABSORBED vs a target closing at
-  3.0 u/s. At i-frame 5 those absorbs disappear, raising effective wand damage vs
-  approaching enemies.
+- **26-vs-20:** a full 1→2→3 deals 26 to a 20 HP enemy. HP is a lever but NOT the
+  first or only one (see the output axis); HP and each enemy's flinch threshold stay
+  ONE co-authored decision. Burn's 12-total ratio shifts against any raised HP.
+- **Wand cadence (7.8 audit, recorded only, no tuning):** at i-frame 5 the absorbs
+  that used to eat every other shot vs an approaching target are gone, raising
+  effective wand damage. Full numbers in `d1dbab0`'s commit message.
 - All AI numbers, lunge/windup values, and i-frame 5 are unrefuted, never confirmed
   — the gate judged the loop as a whole, not any individual threshold.
 - **GAME-RULES §3 needs THREE rules added by hand** (guard.py blocks agent edits):
@@ -99,19 +104,17 @@ per-family gating) rests on the boot alone. Not made worse; not claimed as cover
 - `iframe_ticks_on_hit` is a CADENCE CAP, not just a mercy window; don't "fix" the
   fixture by relaxing its assertion. Why: BRAIN + `fang_stats.gd`.
 - Integration fixtures stay scoped to defensive-vs-offensive seams, not every seam.
-- Authored attack movement (`executing`) REPLACES input, never blends; verified by
+- Authored attack movement (`executing`) REPLACES input, never blends; why:
   `envoy.gd`'s attack-before-move order + BRAIN's same-tick-transition entry.
-- The lunge clamp is attack-authored movement, not collision; see ROADMAP P20.
-- `windup` is never buffer-eligible (ROADMAP P22) — scope cut, not canon.
-- Player poise is unconditional-cancel-on-any-hit in M1 (ROADMAP P23).
-- Ally-filtering lives in `_is_valid_target`; never duplicate per-weapon.
-- The `"returning"` AI state doesn't exist; disengage is instantaneous re-anchor.
+- Scope cuts, NOT canon: lunge clamp is attack-authored movement, not collision
+  (P20); `windup` never buffer-eligible (P22); player poise unconditional-cancel (P23).
+- Ally-filtering lives in `_is_valid_target`, never per-weapon; the `"returning"` AI
+  state doesn't exist (disengage is an instantaneous re-anchor).
 
 ## Concepts introduced (learning ledger)
-A playtest gate can PASS on fairness and legibility while FAILING on decisions and
-consequence — "feels good" and "is a game" are separate verdicts, which is why the
-five questions are asked individually rather than as one overall impression.
+A gate can PASS on fairness/legibility while FAILING on decisions and consequence:
+"feels good" and "is a game" are separate verdicts — hence five questions, answered
+individually, never collapsed into one overall impression.
 
 ## Files touched
-10 × `game/content/**/*_stats.gd` + `damage_matrix.gd` (gate date/verdict stamped
-into calibration notes per GAME-RULES §3) · `HANDOFF.md`
+10 × `game/content/**/*_stats.gd` + `damage_matrix.gd` (gate verdict stamped into calibration notes, §3) · `HANDOFF.md`
