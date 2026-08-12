@@ -26,7 +26,7 @@ const NATURAL_WEAPON_IDS: Dictionary = {
 static func register_weapon(sim: SimWorld, weapon_id: StringName) -> void:
 	var weapon: Resource = ContentDB.get_resource(&"weapon", weapon_id)
 	if weapon is GunStats:
-		sim.register_gun(weapon_id, weapon.base_damage, weapon.damage_type, weapon.speed, weapon.max_lifetime_ticks, weapon.hit_radius, weapon.knockback_distance, weapon.fire_interval_ticks, weapon.status_id, weapon.status_proc_chance)
+		sim.register_gun(weapon_id, weapon.base_damage, weapon.damage_type, weapon.speed, weapon.max_lifetime_ticks, weapon.hit_radius, weapon.knockback_distance, weapon.fire_interval_ticks, weapon.status_id, weapon.status_proc_chance, String(weapon.flinch_capability), weapon.contributes_pressure)
 	elif weapon is SwordStats and weapon.combo_profiles.size() > 0:
 		var combo_dicts: Array[Dictionary] = []
 		for profile in weapon.combo_profiles:
@@ -54,6 +54,8 @@ static func unpack_melee_profile(profile: MeleeAttackProfile) -> Dictionary:
 		"lunge_duration_ticks": profile.lunge_duration_ticks,
 		"hit_active_ticks": profile.hit_active_ticks,
 		"windup_ticks": profile.windup_ticks,
+		"flinch_capability": profile.flinch_capability,
+		"contributes_pressure": profile.contributes_pressure,
 	}
 
 
@@ -75,6 +77,10 @@ static func register_enemy_body(sim: SimWorld, actor_id: int, enemy_key: StringN
 
 	sim.add_entity(actor_id, position, natural_weapon.move_speed)
 	sim.register_combatant(actor_id, stats.max_health, stats.family, stats.iframe_ticks_on_hit, stats.combat_radius, &"enemy")
+	# Registering a flinch profile is what makes an actor part of the reaction layer
+	# at all -- the Envoy deliberately gets none in M1 (player reactions: ROADMAP P23).
+	sim.register_flinch_profile(actor_id, stats.flinch_threshold)
+	sim.register_action_susceptibility(natural_weapon_id, natural_weapon.windup_flinch_mode, natural_weapon.vulnerable_start_tick, natural_weapon.vulnerable_end_tick)
 	sim.register_weapon(natural_weapon_id, natural_weapon.damage, natural_weapon.damage_type, natural_weapon.preferred_attack_distance, natural_weapon.cone_half_angle_degrees, natural_weapon.knockback_distance, natural_weapon.fire_interval_ticks)
 	return natural_weapon
 

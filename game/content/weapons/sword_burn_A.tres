@@ -18,6 +18,8 @@ lunge_distance = 0.5
 lunge_duration_ticks = 4
 hit_active_ticks = 2
 windup_ticks = 0
+flinch_capability = &"exploit"
+contributes_pressure = true
 
 [sub_resource type="Resource" script_class="MeleeAttackProfile" id="MeleeAttackProfile_hit2"]
 script = ExtResource("2_profile")
@@ -34,6 +36,8 @@ lunge_distance = 1.0
 lunge_duration_ticks = 5
 hit_active_ticks = 2
 windup_ticks = 0
+flinch_capability = &"exploit"
+contributes_pressure = true
 
 [sub_resource type="Resource" script_class="MeleeAttackProfile" id="MeleeAttackProfile_hit3"]
 script = ExtResource("2_profile")
@@ -50,6 +54,8 @@ lunge_distance = 1.2
 lunge_duration_ticks = 5
 hit_active_ticks = 3
 windup_ticks = 0
+flinch_capability = &"pressure"
+contributes_pressure = true
 
 [sub_resource type="Resource" script_class="MeleeAttackProfile" id="MeleeAttackProfile_charge"]
 script = ExtResource("2_profile")
@@ -66,6 +72,8 @@ lunge_distance = 2.5
 lunge_duration_ticks = 8
 hit_active_ticks = 4
 windup_ticks = 8
+flinch_capability = &"pressure"
+contributes_pressure = true
 
 [resource]
 script = ExtResource("1_stats")

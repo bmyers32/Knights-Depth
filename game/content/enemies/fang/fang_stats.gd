@@ -14,6 +14,12 @@ extends Resource
 ## (GAME-RULES calibration-note law).
 @export var max_health: float = 20.0
 @export var family: StringName = &"fang"
+## FLINCH threshold (batch, PROVISIONAL/UNVALIDATED 2026-08-12): post-mitigation HP
+## damage that must accumulate inside the shared pressure window before a
+## pressure-capable hit can cash it out. 16.0 = the sword's hits 1+2 (8+8), so Fang
+## teaches the BASELINE lesson: land the whole combo, the finisher pays off. Tuned
+## jointly with max_health -- the two are ONE decision per enemy, never separately.
+@export var flinch_threshold: float = 16.0
 ## CADENCE CONSTRAINT (locked as an invariant, value PROVISIONAL/UNVALIDATED):
 ## health-hit i-frames gate INDEPENDENT SEQUENTIAL hits, so this value doubles as a
 ## cap on any attacker's authored hit cadence. At 15 it silently absorbed sword_burn_A's

@@ -15,6 +15,11 @@ extends Resource
 ## (GAME-RULES calibration-note law).
 @export var max_health: float = 20.0
 @export var family: StringName = &"watcher"
+## FLINCH threshold (batch, PROVISIONAL/UNVALIDATED 2026-08-12): deliberately HIGH --
+## Watcher's lesson is not pressure but the authored VULNERABLE window on its windup
+## (watcher_pulse.tres), so raw damage is the expensive route and timing is the cheap
+## one. Tuned jointly with max_health; the two are ONE decision per enemy.
+@export var flinch_threshold: float = 24.0
 ## Cadence constraint + derivation: see FangStats.iframe_ticks_on_hit. Same value for
 ## the same reason (this is a combat-wide invariant, not a per-family identity yet);
 ## PROVISIONAL/UNVALIDATED, revisit at the re-gate.

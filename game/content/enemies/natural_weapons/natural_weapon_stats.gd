@@ -57,3 +57,26 @@ extends Resource
 ## Force-only (onboarding rule above), so a whole mapping table has nothing else to
 ## map yet.
 @export var telegraph_color: Color = Color(0.9, 0.4, 0.1)
+
+## ACTION SUSCEPTIBILITY (flinch batch) — how flinchable this enemy is DURING its own
+## attack windup. Per-action authoring is enemy identity: a generous window on one
+## family and none at all on another can both be correct. Never respond to a balance
+## problem by globally shrinking every window (GAME-RULES §3 telegraph/identity law).
+##
+## windup_flinch_mode applies OUTSIDE the interval below:
+##   &"normal"    — ordinary susceptibility (threshold and vulnerability rules apply).
+##   &"protected" — rejects ALL flinch; the answer is to shield or disengage, not to
+##                  interrupt. Reserved for authored heavy commitments.
+## The interval OVERRIDES to VULNERABLE. So "protected early, punishable late" is
+## already expressible as base &"protected" + a late interval; two DISJOINT windows in
+## one action are deferred until an enemy actually needs them (ROADMAP P24).
+##
+## vulnerable_start_tick / vulnerable_end_tick are offsets from WINDUP START (not from
+## the attack landing), inclusive, in sim ticks. -1/-1 = never vulnerable.
+## M1 authoring (PROVISIONAL): only Watcher carries a window — the final third of its
+## ranged windup, i.e. committed and telegraph-visible, so a well-timed weaker hit
+## punishes it. Fang and Ooze stay -1 so the batch can tell "no window authored" apart
+## from "window mistuned" during the playtest.
+@export var windup_flinch_mode: StringName = &"normal"
+@export var vulnerable_start_tick: int = -1
+@export var vulnerable_end_tick: int = -1

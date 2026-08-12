@@ -14,6 +14,11 @@ extends Resource
 ## (GAME-RULES calibration-note law).
 @export var max_health: float = 20.0
 @export var family: StringName = &"ooze"
+## FLINCH threshold (batch, PROVISIONAL/UNVALIDATED 2026-08-12): Ooze teaches
+## SUSCEPTIBILITY VARIATION -- deliberately lower than Fang's 16.0, so it flinches
+## earlier and can be manipulated repeatedly by a player who notices. Tuned jointly
+## with max_health; the two are ONE decision per enemy.
+@export var flinch_threshold: float = 12.0
 ## Cadence constraint + derivation: see FangStats.iframe_ticks_on_hit. Same value for
 ## the same reason (this is a combat-wide invariant, not a per-family identity yet);
 ## PROVISIONAL/UNVALIDATED, revisit at the re-gate.

@@ -50,3 +50,24 @@ extends Resource
 ## origin (for its own reach/cone sweep) is the actor's position at the moment it
 ## fires, resampled then, not frozen at release ("direction locked, origin moves").
 @export var windup_ticks: int = 0
+
+## FLINCH (batch, GAME-RULES §3 reaction layer) — two INDEPENDENT authored dimensions.
+## Never derive one from the other, and never from damage/knockback/status.
+##
+## flinch_capability: what this hit can TRIGGER.
+##   &"none"     — never triggers a flinch (may still build pressure).
+##   &"exploit"  — flinches only when it lands during an enemy action authored
+##                 VULNERABLE; never cashes stored pressure.
+##   &"pressure" — cashes stored pressure at/above the target's threshold, AND
+##                 exploits a VULNERABLE window like &"exploit".
+## Locked M1 sword mapping: hits 1-2 = exploit, hit 3 = pressure (the finisher holds
+## the cash-out monopoly). Threshold readiness is NOT cash-out: an exploit hit that
+## pushes pressure past the threshold banks it for the next pressure-capable hit
+## rather than flinching. That is intended behavior, not a tuning gap.
+@export var flinch_capability: StringName = &"none"
+## contributes_pressure: whether this hit's post-mitigation HP damage is RECORDED
+## toward the target's pressure. Independent of capability above — a hit may
+## contribute while being incapable of ever cashing out. Baseline M1 direct weapon
+## hits default true; blocked/absorbed damage and all status/DoT damage never
+## contribute (enforced in sim, not here).
+@export var contributes_pressure: bool = true

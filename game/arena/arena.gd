@@ -109,6 +109,9 @@ func _ready() -> void:
 	var matrix: DamageMatrix = ContentDB.get_resource(&"combat", &"damage_matrix")
 	sim.set_damage_matrix(matrix.families, matrix.weak_multiplier, matrix.resist_multiplier)
 
+	var flinch: FlinchTuning = ContentDB.get_resource(&"combat", &"flinch_tuning")
+	sim.set_flinch_tuning(flinch.pressure_window_ticks, flinch.flinch_recovery_ticks)
+
 	var burn: BurnStats = ContentDB.get_resource(&"status", &"burn")
 	sim.register_status(burn.status_id, burn.damage_per_tick, burn.tick_interval_ticks, burn.duration_ticks)
 	var priority_table: StatusPriorityTable = ContentDB.get_resource(&"status", &"priority_table")
@@ -205,6 +208,8 @@ func _report_events(events: Array[Event]) -> void:
 				print("hit: ", event.payload)
 			"windup_interrupted":
 				print("windup interrupted: ", event.payload)
+			"flinched":
+				print("FLINCHED: ", event.payload)
 			"died":
 				print("died: ", event.payload)
 				var actor_id: int = event.payload.get("actor_id")

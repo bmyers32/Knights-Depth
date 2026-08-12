@@ -40,3 +40,18 @@ extends Resource
 ## Normal-hit proc chance for status_id (GAME-RULES §1.3 combat RNG) — see
 ## SwordStats.status_proc_chance. All M1 gun variants stay 0.0 (guns never proc).
 @export var status_proc_chance: float = 0.0
+
+## FLINCH — see MeleeAttackProfile.flinch_capability for the full enum and the
+## independence law. wand_A ships contributes + &"exploit" (PROVISIONAL): it punishes
+## VULNERABLE windows at range but never cashes pressure, so the sword finisher keeps
+## the cash-out monopoly. Framing: this is LOADOUT/SYSTEM identity — the wand's family
+## identity stays "simple reliable ranged weapon." If exploit proves unearned, compare
+## against &"none" FIRST; do not build compensating gun features.
+##
+## SEAM NOTE (recorded deliberately): these fields sit on GunStats because a gun is
+## currently one weapon = one attack = one hit identity — there is no per-attack
+## profile layer beneath it, unlike SwordStats.combo_profiles. They MIGRATE to
+## per-attack profiles when guns gain basic/charge/burst distinctions (ROADMAP P26).
+## Do not invent a profile layer for two fields now.
+@export var flinch_capability: StringName = &"exploit"
+@export var contributes_pressure: bool = true

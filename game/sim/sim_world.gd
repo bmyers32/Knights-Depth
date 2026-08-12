@@ -110,6 +110,29 @@ var _ai_state: Dictionary = {}  # actor_id -> "idle" | "active"
 var _ai_tuning: Dictionary = {}  # actor_id -> {preferred_attack_distance, minimum_attack_distance, windup_ticks, detection_radius, leash_radius}
 var _ai_attack_start_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 var _ai_attack_fire_tick: Dictionary = {}  # actor_id -> int, present only while winding up
+## FLINCH reaction layer (batch, GAME-RULES §3). FLINCHED is an actor/AI REACTION
+## STATE, deliberately NOT a status instance -- it must never use the single-slot
+## status/spread architecture (three-axis law, §6.8: statuses are a combat method,
+## reactions are what a body does).
+## actor_id -> int, an ABSOLUTE tick deadline (same convention as _next_fire_tick /
+## _combo_expire_tick, never a per-tick countdown). Absolute is what makes §3's
+## "effective denial is max(recovery, cooldown), never the sum" fall out for free:
+## both deadlines run concurrently in the same tick space.
+var _flinched_until_tick: Dictionary = {}
+## actor_id -> Array of {damage: float, expiry_tick: int}. A ROLLING per-contribution
+## queue, never a refreshed timer -- late damage must not revive early damage. Pruned
+## LAZILY at record/read time; there is deliberately no per-tick scan (§3: pressure is
+## stored opportunity, and flinch is evaluated ONLY inside hit resolution).
+## Contributions are recorded FACTS: never recomputed from HP, so healing can't erase
+## them. No attacker attribution in M1 -- no shares, no assists (ROADMAP P27).
+var _pressure_contributions: Dictionary = {}
+var _flinch_thresholds: Dictionary = {}  # actor_id -> float; presence = "this actor can flinch"
+## weapon_id(String) -> {mode: String, vulnerable_start: int, vulnerable_end: int},
+## resolved from NaturalWeaponStats. Read against _ai_attack_start_tick to derive the
+## target's CURRENT action mode -- no new state, the windup start tick already exists.
+var _action_susceptibility: Dictionary = {}
+var _pressure_window_ticks: int = 0
+var _flinch_recovery_ticks: int = 0
 var tick_count: int = 0
 
 ## The combat RNG stream (GAME-RULES §1.3's first concrete consumer) — its own named
@@ -180,7 +203,7 @@ func register_weapon(weapon_id: StringName, damage: float, damage_type: StringNa
 ## its own swing's end_tick would otherwise silently never resolve (the end_tick
 ## branch erases the record before a later hit_tick could fire) -- clamped and
 ## warned, never silently lost. debug_label is cosmetic (warning message only).
-func _resolve_melee_profile(damage: float, damage_type: String, reach: float, cone_half_angle_degrees: float, knockback_distance: float, fire_interval_ticks: int, status_id: String, status_proc_chance: float, interrupt_strength: int = 0, lunge_distance: float = 0.0, lunge_duration_ticks: int = 0, hit_active_ticks: int = 0, windup_ticks: int = 0, debug_label: String = "") -> Dictionary:
+func _resolve_melee_profile(damage: float, damage_type: String, reach: float, cone_half_angle_degrees: float, knockback_distance: float, fire_interval_ticks: int, status_id: String, status_proc_chance: float, interrupt_strength: int = 0, lunge_distance: float = 0.0, lunge_duration_ticks: int = 0, hit_active_ticks: int = 0, windup_ticks: int = 0, debug_label: String = "", flinch_capability: String = "none", contributes_pressure: bool = true) -> Dictionary:
 	var resolved_hit_active_ticks: int = hit_active_ticks
 	if resolved_hit_active_ticks > lunge_duration_ticks:
 		var label_suffix: String = (" [%s]" % debug_label) if debug_label != "" else ""
@@ -201,7 +224,22 @@ func _resolve_melee_profile(damage: float, damage_type: String, reach: float, co
 		"lunge_duration_ticks": lunge_duration_ticks,
 		"hit_active_ticks": resolved_hit_active_ticks,
 		"windup_ticks": windup_ticks,
+		"flinch_capability": _lint_flinch_capability(flinch_capability, debug_label),
+		"contributes_pressure": contributes_pressure,
 	}
+
+
+## Registration-time lint (mirrors the hit_active_ticks clamp above): an unknown enum
+## value is content that would otherwise fail SILENTLY as "never flinches." Rejected to
+## the safe default and warned, never silently accepted. Deliberately does NOT infer
+## validity from damage/knockback/status -- a zero-damage pressure cash-out profile is
+## schema-legal; whether it is GOOD content is a separate design question.
+func _lint_flinch_capability(capability: String, debug_label: String) -> String:
+	if capability in ["none", "exploit", "pressure"]:
+		return capability
+	var label_suffix: String = (" [%s]" % debug_label) if debug_label != "" else ""
+	push_warning("flinch_capability%s: unknown value '%s' -- expected none/exploit/pressure, defaulting to none" % [label_suffix, capability])
+	return "none"
 
 
 ## Registers a combo/charge-capable melee weapon (GAME-RULES §3 Slice B) -- the
@@ -220,9 +258,9 @@ func register_melee_profiles(weapon_id: StringName, combo_profiles: Array[Dictio
 	var resolved_combo: Array = []
 	for i in combo_profiles.size():
 		var profile: Dictionary = combo_profiles[i]
-		resolved_combo.append(_resolve_melee_profile(profile.damage, String(profile.damage_type), profile.reach, profile.cone_half_angle_degrees, profile.knockback_distance, profile.fire_interval_ticks, String(profile.status_id), profile.status_proc_chance, int(profile.get("interrupt_strength", 0)), float(profile.get("lunge_distance", 0.0)), int(profile.get("lunge_duration_ticks", 0)), int(profile.get("hit_active_ticks", 0)), int(profile.get("windup_ticks", 0)), "%s combo hit %d" % [key, i + 1]))
+		resolved_combo.append(_resolve_melee_profile(profile.damage, String(profile.damage_type), profile.reach, profile.cone_half_angle_degrees, profile.knockback_distance, profile.fire_interval_ticks, String(profile.status_id), profile.status_proc_chance, int(profile.get("interrupt_strength", 0)), float(profile.get("lunge_distance", 0.0)), int(profile.get("lunge_duration_ticks", 0)), int(profile.get("hit_active_ticks", 0)), int(profile.get("windup_ticks", 0)), "%s combo hit %d" % [key, i + 1], String(profile.get("flinch_capability", "none")), bool(profile.get("contributes_pressure", true))))
 	_melee_combo_profiles[key] = resolved_combo
-	_melee_charge_profiles[key] = _resolve_melee_profile(charge_profile.damage, String(charge_profile.damage_type), charge_profile.reach, charge_profile.cone_half_angle_degrees, charge_profile.knockback_distance, charge_profile.fire_interval_ticks, String(charge_profile.status_id), charge_profile.status_proc_chance, int(charge_profile.get("interrupt_strength", 0)), float(charge_profile.get("lunge_distance", 0.0)), int(charge_profile.get("lunge_duration_ticks", 0)), int(charge_profile.get("hit_active_ticks", 0)), int(charge_profile.get("windup_ticks", 0)), "%s charge" % key)
+	_melee_charge_profiles[key] = _resolve_melee_profile(charge_profile.damage, String(charge_profile.damage_type), charge_profile.reach, charge_profile.cone_half_angle_degrees, charge_profile.knockback_distance, charge_profile.fire_interval_ticks, String(charge_profile.status_id), charge_profile.status_proc_chance, int(charge_profile.get("interrupt_strength", 0)), float(charge_profile.get("lunge_distance", 0.0)), int(charge_profile.get("lunge_duration_ticks", 0)), int(charge_profile.get("hit_active_ticks", 0)), int(charge_profile.get("windup_ticks", 0)), "%s charge" % key, String(charge_profile.get("flinch_capability", "none")), bool(charge_profile.get("contributes_pressure", true)))
 	_melee_charge_threshold_ticks[key] = charge_threshold_ticks
 	_melee_combo_reset_ticks[key] = combo_reset_ticks
 	_melee_input_buffer_ticks[key] = input_buffer_ticks
@@ -234,9 +272,11 @@ func register_melee_profiles(weapon_id: StringName, combo_profiles: Array[Dictio
 ## convention); max_lifetime_ticks is a sim-tick count (§3: durations in sim ticks,
 ## never seconds in code) so an unfired shot always despawns deterministically.
 ## status_id/status_proc_chance: see register_weapon.
-func register_gun(weapon_id: StringName, damage: float, damage_type: StringName, speed: float, max_lifetime_ticks: int, hit_radius: float, knockback_distance: float, fire_interval_ticks: int = 0, status_id: StringName = &"", status_proc_chance: float = 0.0) -> void:
+func register_gun(weapon_id: StringName, damage: float, damage_type: StringName, speed: float, max_lifetime_ticks: int, hit_radius: float, knockback_distance: float, fire_interval_ticks: int = 0, status_id: StringName = &"", status_proc_chance: float = 0.0, flinch_capability: String = "none", contributes_pressure: bool = true) -> void:
 	_weapons[String(weapon_id)] = {
 		"resolution": "projectile",
+		"flinch_capability": _lint_flinch_capability(flinch_capability, String(weapon_id)),
+		"contributes_pressure": contributes_pressure,
 		"damage": damage,
 		"damage_type": String(damage_type),
 		"speed": speed,
@@ -289,6 +329,33 @@ func set_weapon_loadout(actor_id: int, weapon_ids: Array[StringName]) -> void:
 	for weapon_id in weapon_ids:
 		ids.append(String(weapon_id))
 	_weapon_loadouts[actor_id] = ids
+
+
+## Installs the shared flinch clocks (FlinchTuning resource) — same driver-unpacks-a
+## resource boundary as set_damage_matrix. Shared deliberately: per-enemy variation is
+## expressed by flinch_threshold (register_flinch_profile), never by private clocks.
+func set_flinch_tuning(pressure_window_ticks: int, flinch_recovery_ticks: int) -> void:
+	_pressure_window_ticks = pressure_window_ticks
+	_flinch_recovery_ticks = flinch_recovery_ticks
+
+
+## Marks actor_id as FLINCHABLE and sets how much recent post-mitigation HP damage a
+## pressure-capable hit must find to cash out. An actor with no profile registered can
+## never flinch and accumulates no pressure — that is how the Envoy stays out of the
+## reaction layer in M1 (player-side reactions are ROADMAP P23/P24, not this batch).
+func register_flinch_profile(actor_id: int, flinch_threshold: float) -> void:
+	_flinch_thresholds[actor_id] = flinch_threshold
+
+
+## Authored per-ACTION susceptibility for a natural weapon's windup (see
+## NaturalWeaponStats). mode applies outside [vulnerable_start, vulnerable_end]; the
+## interval overrides to VULNERABLE. Offsets are from windup START, inclusive.
+func register_action_susceptibility(weapon_id: StringName, mode: StringName, vulnerable_start_tick: int, vulnerable_end_tick: int) -> void:
+	_action_susceptibility[String(weapon_id)] = {
+		"mode": String(mode),
+		"vulnerable_start": vulnerable_start_tick,
+		"vulnerable_end": vulnerable_end_tick,
+	}
 
 
 ## Installs the family x damage-type matrix (GAME-RULES §3) — one resource, resolved
@@ -591,6 +658,13 @@ func _clear_attack_input_state(actor_id: int) -> Array[Event]:
 ## than tracking a reverse index -- this sim has a handful of actors, a linear scan
 ## per death is free, and a reverse index would be another parallel dict to keep in
 ## sync for no measurable benefit.
+## Reaction records die WITH the actor (§3) — pressure is stored opportunity against a
+## living body, never a ledger that outlives it or transfers to a respawn.
+func _clear_reaction_state(actor_id: int) -> void:
+	_flinched_until_tick.erase(actor_id)
+	_pressure_contributions.erase(actor_id)
+
+
 func _clear_clamps_targeting(dead_actor_id: int) -> void:
 	for actor_id in _melee_hold.keys():
 		var hold: Dictionary = _melee_hold[actor_id]
@@ -913,6 +987,26 @@ func debug_describe_melee_state(actor_id: int) -> Dictionary:
 	return description
 
 
+## Dev-only, read-only flinch/pressure snapshot (§5.26 observability) — never called by
+## gameplay logic. Exposes the two clocks SEPARATELY (retained combo step lives in
+## debug_describe_melee_state) because the two-clock rule is exactly the thing a player
+## can't see and a developer must. No player-facing meter.
+func debug_describe_flinch_state(actor_id: int) -> Dictionary:
+	if not _flinch_thresholds.has(actor_id):
+		return {}  # not a flinchable actor at all -- distinct from "zero pressure"
+	var contributions: Array = []
+	for contribution in _pressure_contributions.get(actor_id, []):
+		contributions.append({"damage": contribution.damage, "ticks_left": int(contribution.expiry_tick) - tick_count})
+	return {
+		"pressure": _pressure_sum(actor_id),
+		"threshold": _flinch_thresholds[actor_id],
+		"threshold_reached": _pressure_sum(actor_id) >= float(_flinch_thresholds[actor_id]),
+		"contributions": contributions,
+		"action_mode": _flinch_mode_of(actor_id),
+		"flinched_ticks_left": max(0, int(_flinched_until_tick.get(actor_id, -1)) - tick_count),
+	}
+
+
 ## Shared melee target sweep (rule of two: the original single-profile instant path
 ## and Slice B's phased release both need it) — GAME-RULES §3's per-weapon hit
 ## detection, unchanged from the original _apply_attack body. attack_profile_id is
@@ -970,6 +1064,71 @@ func _cancel_enemy_windup(actor_id: int) -> void:
 	_next_fire_tick[actor_id] = tick_count + int(_weapons.get(_equipped_weapon.get(actor_id, ""), {}).get("fire_interval_ticks", 0))
 
 
+## target_id's CURRENT action mode, derived from the windup it is actually in — no new
+## state (the windup start tick already exists). Returns "normal" when not winding up,
+## so §5.13b's action-scoped cleanup is free: _cancel_enemy_windup erases the start
+## tick, and the vulnerability derived from it disappears with it. A FLINCHED enemy
+## therefore never inherits the canceled action's susceptibility.
+func _flinch_mode_of(actor_id: int) -> String:
+	if not _ai_attack_start_tick.has(actor_id):
+		return "normal"
+	var susceptibility: Dictionary = _action_susceptibility.get(_equipped_weapon.get(actor_id, ""), {})
+	if susceptibility.is_empty():
+		return "normal"
+	var start: int = int(susceptibility.get("vulnerable_start", -1))
+	var end: int = int(susceptibility.get("vulnerable_end", -1))
+	if start >= 0 and end >= start:
+		var elapsed: int = tick_count - int(_ai_attack_start_tick[actor_id])
+		if elapsed >= start and elapsed <= end:
+			return "vulnerable"  # the interval always OVERRIDES the base mode
+	return String(susceptibility.get("mode", "normal"))
+
+
+## Records one contribution as a FACT (§3): never recomputed from HP, so healing can't
+## erase it, and a successful flinch never consumes it — contributions only ever leave
+## by expiring on their own tick.
+func _record_pressure(target_id: int, amount: float) -> void:
+	if amount <= 0.0 or not _flinch_thresholds.has(target_id):
+		return
+	var queue: Array = _pressure_contributions.get(target_id, [])
+	queue.append({"damage": amount, "expiry_tick": tick_count + _pressure_window_ticks})
+	_pressure_contributions[target_id] = queue
+
+
+## Live pressure total, pruning expired contributions lazily as it reads (there is no
+## per-tick scan anywhere — §3 forbids per-tick threshold monitoring).
+func _pressure_sum(target_id: int) -> float:
+	var queue: Array = _pressure_contributions.get(target_id, [])
+	var live: Array = []
+	var total: float = 0.0
+	for contribution in queue:
+		if int(contribution.expiry_tick) > tick_count:
+			live.append(contribution)
+			total += float(contribution.damage)
+	if not queue.is_empty():
+		_pressure_contributions[target_id] = live
+	return total
+
+
+## Picks the flinch route for one landed hit. Fixed short-circuit order with
+## VULNERABILITY FIRST (§3): when both routes qualify, vulnerability wins as the
+## REPORTED reason, while the hit's pressure contribution is still recorded normally by
+## the caller and expires on its own tick. PROTECTED rejects everything.
+## Threshold readiness is NOT cash-out: an "exploit" hit that pushes pressure past the
+## threshold banks it for the next pressure-capable hit rather than flinching.
+func _select_flinch_route(target_id: int, capability: String) -> String:
+	if not _flinch_thresholds.has(target_id) or capability == "none":
+		return ""
+	var mode: String = _flinch_mode_of(target_id)
+	if mode == "protected":
+		return ""
+	if mode == "vulnerable":
+		return "exploit"
+	if capability == "pressure" and _pressure_sum(target_id) >= float(_flinch_thresholds[target_id]):
+		return "pressure"
+	return ""
+
+
 func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary, resolved_aim: Vector3, weapon_id: String, attack_profile_id: String = "") -> Array[Event]:
 	# i-frames fully negate a hit: no damage, no knockback, no status, no meter
 	# interaction — the attack simply doesn't land (locked invariant).
@@ -989,8 +1148,25 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	if _shield_state.get(target_id, "ready") == "held":
 		return [_resolve_blocked_hit(target_id, target_position, resolved_aim, attacker_id, damage)]
 
-	var remaining_health: float = _health[target_id] - damage
+	var hp_before: float = _health[target_id]
+	var remaining_health: float = hp_before - damage
 	_health[target_id] = remaining_health
+
+	# Pressure bookkeeping runs BEFORE route selection (locked): a finisher whose own
+	# damage crosses the threshold must cash out on THIS hit, not the next one. An
+	# overkill hit contributes min(damage, hp_before) so accounting stays deterministic
+	# and a corpse can't bank more than it had left. Blocked/absorbed hits never reach
+	# here at all, and status/DoT damage never routes through this function -- both are
+	# excluded structurally rather than by a flag.
+	if bool(weapon.get("contributes_pressure", true)):
+		_record_pressure(target_id, min(damage, hp_before))
+
+	# Route selection must read the windup while it is STILL LIVE -- the cancel below
+	# erases the start tick that the vulnerability window is derived from. Death
+	# supersedes flinch (§3): a dead actor is never functionally flinched.
+	var flinch_reason: String = ""
+	if remaining_health > 0.0:
+		flinch_reason = _select_flinch_route(target_id, String(weapon.get("flinch_capability", "none")))
 
 	# Interruption as graded content (manual-pass, GAME-RULES §3): while target_id is
 	# winding up its own attack, a non-interrupting hit (interrupt_strength <= 0)
@@ -1007,7 +1183,13 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	if not target_is_winding_up or interrupt_strength > 0:
 		knocked_position = target_position + resolved_aim * weapon.knockback_distance
 		entities[target_id] = knocked_position
-	if interrupts_this_windup:
+	# ATOMICITY (locked): the enemy's current action is canceled EXACTLY ONCE, here at
+	# hit resolution -- windup clear, cooldown arming, the interruption Event, and the
+	# action-scoped susceptibility cleanup are ONE combat consequence, whether the cause
+	# was graded interrupt_strength, a flinch, or both. Nothing downstream re-cancels:
+	# the AI phase only OBSERVES FLINCHED and never mutates combat state.
+	var cancels_windup: bool = target_is_winding_up and (interrupt_strength > 0 or flinch_reason != "")
+	if cancels_windup:
 		_cancel_enemy_windup(target_id)
 
 	# Hit-establishes-aggro (locked defect fix): a successful hostile hit FROM THE
@@ -1032,8 +1214,23 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	if attack_profile_id != "":
 		hit_payload["attack_profile_id"] = attack_profile_id
 	var events: Array[Event] = [Event.new(tick_count, "hit", hit_payload)]
-	if interrupts_this_windup:
+	if cancels_windup:
 		events.append(Event.new(tick_count, "windup_interrupted", {"actor_id": target_id, "attacker_id": attacker_id}))
+	if flinch_reason != "":
+		# Re-flinch (PROVISIONAL default): a qualifying flinch on an ALREADY-flinched
+		# enemy fully registers damage/pressure/knockback/interruption but does NOT
+		# extend the deadline. The batch playtest decides non-extension vs refresh --
+		# deliberately not a content flag until that evidence exists.
+		var already_flinched: bool = tick_count < int(_flinched_until_tick.get(target_id, -1))
+		if not already_flinched:
+			_flinched_until_tick[target_id] = tick_count + _flinch_recovery_ticks
+		events.append(Event.new(tick_count, "flinched", {
+			"actor_id": target_id,
+			"attacker_id": attacker_id,
+			"reason": flinch_reason,
+			"until_tick": int(_flinched_until_tick.get(target_id, tick_count)),
+			"extended": not already_flinched,
+		}))
 
 	# Roll-consumption rule (locked): the proc roll happens here, UNCONDITIONALLY,
 	# regardless of whether this hit turns out lethal — a weapon with no status_id
@@ -1051,6 +1248,7 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		events.append(Event.new(tick_count, "died", {"actor_id": target_id}))
 		events.append_array(_clear_attack_input_state(target_id))
 		_clear_clamps_targeting(target_id)
+		_clear_reaction_state(target_id)
 	else:
 		# Lethal hits start no timer (moot for the dead) — non-lethal unblocked hits
 		# are the ONLY i-frame trigger this session (dodge is a future, separately-
@@ -1354,6 +1552,16 @@ func _find_living_player_id() -> int:
 ## (_ai_attack_start_tick/_ai_attack_fire_tick), not a fourth state; see
 ## _decide_attack_commands.
 func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Event]) -> Array[Command]:
+	# FLINCHED: pure OBSERVATION (locked). This branch mutates nothing and emits
+	# nothing -- the cancel, the cooldown arming, and the Event all happened once, at
+	# hit resolution. A flinched enemy simply yields no Command: no new attack, and no
+	# ordinary approach/retreat movement. Its cooldown deadline keeps running in the
+	# same absolute tick space, so effective attack denial is max(recovery, cooldown),
+	# never the sum. In-flight projectiles are untouched -- flinch cancels ACTION state,
+	# not combat entities that already exist.
+	if tick_count < int(_flinched_until_tick.get(actor_id, -1)):
+		return []
+
 	var tuning: Dictionary = _ai_tuning[actor_id]
 	var spawn_position: Vector3 = _ai_spawn_position[actor_id]
 	var position: Vector3 = entities.get(actor_id, Vector3.ZERO)

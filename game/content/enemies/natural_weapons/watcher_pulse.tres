@@ -16,3 +16,6 @@ knockback_distance = 0.5
 detection_radius = 8.0
 leash_radius = 18.0
 telegraph_color = Color(0.9, 0.4, 0.1, 1)
+windup_flinch_mode = &"normal"
+vulnerable_start_tick = 13
+vulnerable_end_tick = 20

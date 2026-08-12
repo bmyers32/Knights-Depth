@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="FlinchTuning" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/content/combat/flinch_tuning.gd" id="1_tuning"]
+
+[resource]
+script = ExtResource("1_tuning")
+pressure_window_ticks = 90
+flinch_recovery_ticks = 20
