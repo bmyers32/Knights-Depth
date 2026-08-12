@@ -1,41 +1,85 @@
-# HANDOFF — 2026-08-11 (pre-gate i-frame/combo cadence fix)
-Milestone: 1 — Combat slice   Status: IN-PROGRESS (M0 COMPLETE)
+# HANDOFF — 2026-08-11 (M1 playtest gate run: ITERATE)
+Milestone: 1 — Combat slice   Status: IN-PROGRESS, **NOT CLOSED** (M0 COMPLETE)
 
-## Done this session
-Probed, confirmed, and fixed a Sev-1 defect that made the M1 combo mechanic
-effectively non-functional, then captured the post-gate combat batch's design.
-1. **Confirmed integration defect:** target-global health-hit i-frames at 15 ticks
-   self-suppressed the baseline sword's independently authored combo hits at ~6–7
-   tick gaps. Corrected to PROVISIONAL 5 ticks through enemy content. A named
-   real-content integration fixture now guards cadence × target-i-frame
-   compatibility. **General lesson:** independently valid defensive timing and
-   offensive cadence can become structurally incompatible when composed — recurs
-   for burst guns (P26), multi-hit charges (P27), co-op attackers, and
-   attack-speed changes.
-   Probe evidence (real content, production registration path): hit 1 lands at
-   t=4 (8 dmg), hit 2 at t=10 and hit 3 at t=17 both return
-   `attack_absorbed/iframes`. 48 ticks of maximal spam dealt 24 damage — three
-   repeats of hit 1 — instead of 26 per combo. Invisible to 280 green tests:
-   every combo/charge test registered targets at iframe 0.
-2. **Consumer audit (why the fix is content-only).** One value, one job — probe
-   showed no same-attack re-hit (1 hit per swing per target), one hit each on two
-   targets in a cone, and Burn DoT pulsing freely under full i-frames.
-3. **The fix.** `iframe_ticks_on_hit` 15 → **5** on all three families (highest
-   value preserving cadence with margin; binding gap is 6). Content only — no
-   attacker-scoped i-frames, no ownership/scope change, no sword special-case.
-   Guarded by `tests/test_combo_cadence_fixture.gd` (real content through
-   `ContentRegistrar`: all three hits land with authored damage, AND
-   `iframe_ticks_on_hit < smallest authored inter-hit gap`).
-4. **`ContentRegistrar`** (new, `game/content/content_registrar.gd`) — the content
-   → SimWorld registration path moved verbatim out of `arena.gd` so fixtures use
-   the SAME entrypoint production does. A test that reimplements the unpack is what
-   let this escape. Split `register_enemy_body` / `register_enemy_ai` so a fixture
-   can register a target with REAL defenses and no autonomous behavior.
-5. Docs: BRAIN (2 wisdom entries + `## Candidate Principles (pre-lock)` = the 9
-   combat design laws), RISKS 15–17, ROADMAP P24–P27 + P19/P5 addendum updates.
+## M1 PLAYTEST GATE — VERDICT: ITERATE (2026-08-11, build d1dbab0, seed 0)
+Ten minutes, all `debug_*` exports verified at authentic defaults (zero property
+overrides on arena.tscn's root — checked, not remembered). Verbatim answers:
+1. "Strafing" — done partly because it felt good.
+2. One dominant meta-strategy: any reasonable way to kill works. No encounter
+   nuance forcing action/weapon/timing/positioning choices. Fights end quickly;
+   player deliberately draws them out to observe mechanics.
+3. Failure must be orchestrated by the player. Any base-level action avoids it.
+   Enemies create no meaningful pressure.
+4. All damage readable and fair. No unseen damage.
+5. Nothing felt unavailable within current mechanics.
 
-290/290 headless (963 asserts). The guard was adversarially tripped: reverting
-Fang to 15 produced exactly 3 failures naming the arithmetic, then restored green.
+**Reading:** fairness and legibility (#4) PASS and must be preserved. #2 and #3 are
+what fail. The batch must honestly flip both.
+
+**Named tuning axis so it isn't missed: enemy OUTPUT (damage, attack cadence,
+aggression).** Finding #3 shows durability tuning ALONE only lengthens fights
+without making failure available — do not answer this with HP alone.
+
+### Findings carried (post-gate, NOT fixed on the frozen build)
+- **G-1 possible lunge-clamp/presentation mismatch:** the Envoy visually appears to
+  phase into enemies around melee contact. Classify post-gate via an
+  authoritative-position vs presentation check BEFORE any fix. Discriminator:
+  ordinary walking has no collision at all (`_apply_move` is unconditional; ROADMAP
+  P20 open) and a killing blow releases the clamp the same tick, so only phasing
+  against a SURVIVING target mid-combo indicts the clamp. Clamp distance is summed
+  `combat_radius` (Envoy 0.4 + Fang 1.0 / Watcher 0.8 / Ooze 0.7), all documented as
+  eyeballed against the models.
+- **G-2 knockback lacks temporal consequence:** displaced enemies immediately
+  re-evaluate to APPROACH and walk back in. AI is rule-correct (fresh-geometry
+  re-evaluation); the unnatural feel is the ABSENCE of a reaction layer between
+  displacement and re-decision. This is evidence FOR the planned FLINCHED reaction —
+  re-evaluate after flinch exists; no separate locomotion rule now. Lever order if
+  it survives flinch: locomotion commitment-break > threshold tuning. **More
+  knockback is contraindicated** (recreates the gun push-out failure, BRAIN).
+  Code fact: after an interrupting hit 3, `_cancel_enemy_windup` arms the attack
+  cooldown but NOTHING gates movement — the enemy re-decides locomotion the next
+  tick and walks forward while disarmed.
+
+## SEQUENCING AMENDMENT (supersedes "gate → itch → M1 closed")
+1. **M1 is NOT closed.** ITERATE is a legitimate gate outcome; the prior sequence
+   lacked this branch.
+2. **Web export of d1dbab0 proceeds NOW as PIPELINE VALIDATION only** — itch upload
+   as draft/private, to debug HTML5 quirks against a small frozen tested build.
+   **This does NOT satisfy the M1 itch criterion.**
+3. **The post-gate combat batch IS the ITERATE response.** Scope unchanged
+   (flinch/pressure, vulnerability windows, charge retune, continuation window,
+   enemy-by-enemy HP+threshold tuning from 3.7 evidence) PLUS the enemy-output axis.
+4. **Batch exit criterion: RE-GATE.** Same `/playtest`, same five questions, same
+   no-fixes discipline, on a frozen post-batch build. M1 closes on PASS —
+   specifically honest flips of #2 (decisions exist) and #3 (failure realistically
+   available) with #4 (fairness) preserved. That passing build becomes the public
+   itch build and satisfies the M1 criterion.
+5. **Treat Rule: the batch loses treat status** (it is now required M1 work). The
+   rule fires at actual M1 closure instead.
+6. **G-1 verification runs at the START of the batch, before flinch implementation**
+   — a clamp regression would qualify as a defect fix under the fence amendment.
+
+## Next action
+Web export (pipeline validation, draft upload) → batch recon incl. G-1 → batch.
+Full batch design: `.claude/plans/advisory-decision-consolidated-swirling-flamingo.md`
++ advisory v3. Committed pre-gate work: `d1dbab0` (i-frame/combo cadence fix — its
+commit message holds the full probe narrative and consumer audit).
+
+## Open tensions (carried)
+- **26-vs-20:** a full 1→2→3 deals 26 to a 20 HP enemy. Now decided from gate
+  evidence: HP is a lever but NOT the first or only one (see the output axis above).
+  HP and each enemy's flinch threshold stay ONE co-authored decision per enemy.
+- Burn's 12-total ratio shifts against any raised HP — re-feel in the batch.
+- **Wand cadence (7.8 audit, recorded only, no tuning):** `fire_interval_ticks=15`
+  vs the OLD i-frame 15 meant arrivals landed exactly at the boundary vs a
+  stationary target, and every other shot was ABSORBED vs a target closing at
+  3.0 u/s. At i-frame 5 those absorbs disappear, raising effective wand damage vs
+  approaching enemies.
+- All AI numbers, lunge/windup values, and i-frame 5 are unrefuted, never confirmed
+  — the gate judged the loop as a whole, not any individual threshold.
+- **GAME-RULES §3 needs THREE rules added by hand** (guard.py blocks agent edits):
+  "distance preferences govern movement only"; Burn's duration-inheritance rule;
+  the §2 governance-ladder terminus for any Candidate Principle the batch promotes.
 
 **Coverage gap — read before trusting a green suite here.** Booting the real arena
 headless exercises registration but NEVER engagement: the Envoy spawns at origin and
@@ -49,63 +93,12 @@ assertion-level coverage, and never had any. This session's change is a verbatim
 but the wiring INSIDE `_register_enemies` (telegraph cache, `debug_force_aggro`,
 per-family gating) rests on the boot alone. Not made worse; not claimed as covered.
 
-Full batch design: the plan file
-`.claude/plans/advisory-decision-consolidated-swirling-flamingo.md` + advisory v3.
-
-## Not done / next action
-**The only two M1 exit criteria (GAME-RULES §5) still open: the 10-min playtest
-gate and the itch.io build.** Run `/playtest` as its own session, all `debug_*`
-exports at authentic default (`debug_loadout_override=false`,
-`debug_force_aggro=false`, `debug_enable_fang/ooze/watcher=true`,
-`debug_show_attack_state=false`). Record, do NOT fix during the gate:
-- 3.1 Guaranteed hit-3 interrupt: reliable payoff or trivializing?
-- 3.2 Endless 1→2→3→1 cycling: does immediate re-entry feel costless?
-- 3.3 After hit 1/2 contact, is the next hit reachable, or does knockback defeat
-  the sequence? (Now that hits 2–3 actually land, this is a real question again.)
-- 3.4 Post-hit shield cancel per hit incl. finisher: deliberate spacing control?
-- 3.5 Charge vs basic: which did you pick each encounter, and why?
-- 3.6 Burn contact tension after clamped-contact ignition: intentional?
-- 3.7 Per family, with full combos landing: hits/cycles to kill; does one-combo
-  lethality feel right, cheap, or premature; does charge (20) read as a one-shot;
-  does Burn get enough target lifetime to matter; does any enemy present a
-  manipulation opportunity before death?
-- **NEW watch-item:** the Envoy has NO health i-frames (`arena.gd` passes a
-  hardcoded 0; `EnvoyStats` has no such field). Do overlapping or closely spaced
-  enemy hits produce unfair burst damage? A positive finding triggers DIAGNOSIS in
-  the post-gate batch — adding an `EnvoyStats` field is a candidate fix, not the
-  pre-approved one.
-- Carried: "trading during lunge" feel (player poise is ungraded — ROADMAP P23).
-After a PASS verdict: itch.io HTML5 build is the last remaining gate item.
-
-## Open tensions (carried)
-- **26-vs-20:** a full 1→2→3 now deals 26 damage to a 20 HP enemy, so a baseline
-  enemy dies to one combo and a finisher-flinch could never be observed on it.
-  DELIBERATELY NOT FIXED pre-gate — decided from 3.7 evidence, enemy-by-enemy,
-  with raising HP the preferred first live lever (never a blanket bump, and don't
-  lower sword damage first unless the gate indicts sword damage specifically).
-  HP and each enemy's flinch threshold are ONE co-authored decision.
-- Burn's 12-total ratio shifts against any raised HP — re-feel in the batch, no
-  preemptive Burn retune.
-- **Wand cadence (7.8 audit, recorded only, no tuning):** `fire_interval_ticks=15`
-  vs the OLD i-frame 15 meant arrivals landed at exactly the boundary against a
-  stationary target (zero margin), and every other shot was ABSORBED against a
-  target closing at 3.0 u/s (arrivals 11 ticks apart). At i-frame 5 those absorbs
-  disappear — the fix raises the wand's effective damage vs approaching enemies.
-  Watch it at the gate; do not tune the wand.
-- All AI numbers, lunge/windup values, and the new i-frame 5 are first-pass and
-  unvalidated — calibrate together at the gate.
-- **GAME-RULES §3 needs THREE rules added by hand** (guard.py blocks agent edits):
-  "distance preferences govern movement only"; Burn's duration-inheritance rule;
-  and the §2 governance-ladder terminus for any Candidate Principle the batch
-  promotes. The first two are already enforced in code via STANDING RULE comments.
-
 ## Do NOT redo
 - Fence amendment (permanent, advisory §1): a pre-gate freeze never blocks narrow
   fixes to defects that invalidate what the gate measures; see BRAIN principle 10.
 - `iframe_ticks_on_hit` is a CADENCE CAP, not just a mercy window; don't "fix" the
   fixture by relaxing its assertion. Why: BRAIN + `fang_stats.gd`.
-- Integration fixtures stay scoped to defensive-vs-offensive seams, not every
-  seam; verified by BRAIN's second wisdom entry.
+- Integration fixtures stay scoped to defensive-vs-offensive seams, not every seam.
 - Authored attack movement (`executing`) REPLACES input, never blends; verified by
   `envoy.gd`'s attack-before-move order + BRAIN's same-tick-transition entry.
 - The lunge clamp is attack-authored movement, not collision; see ROADMAP P20.
@@ -115,13 +108,10 @@ After a PASS verdict: itch.io HTML5 build is the last remaining gate item.
 - The `"returning"` AI state doesn't exist; disengage is instantaneous re-anchor.
 
 ## Concepts introduced (learning ledger)
-Test/production divergence via parallel content unpacking: two code paths reading
-the same `.tres` files drift silently, so a fixture that hand-builds what
-production registers can pass forever while production is broken — the reason
-`ContentRegistrar` is a shared entrypoint rather than a convenience.
+A playtest gate can PASS on fairness and legibility while FAILING on decisions and
+consequence — "feels good" and "is a game" are separate verdicts, which is why the
+five questions are asked individually rather than as one overall impression.
 
 ## Files touched
-`game/content/content_registrar.gd` (+`.uid`, new) · `game/arena/arena.gd` ·
-`game/content/enemies/{fang,ooze,watcher}/*_stats.gd` (+ooze/watcher `.tres`) ·
-`tests/test_{combo_cadence_fixture,content_registrar}.gd` (new) · `BRAIN.md` ·
-`RISKS.md` · `ROADMAP.md` · `HANDOFF.md`
+10 × `game/content/**/*_stats.gd` + `damage_matrix.gd` (gate date/verdict stamped
+into calibration notes per GAME-RULES §3) · `HANDOFF.md`

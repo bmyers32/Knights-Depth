@@ -5,8 +5,15 @@ extends Resource
 ## knockback on break. State machine (READY/HELD/BROKEN) lives in SimWorld
 ## (register_shield); this resource only carries the resolved numbers.
 
-## Provisional first-pass numbers, no playtest date yet (GAME-RULES calibration-note
-## law) — revisit at the M1 playtest gate. These are the project's first meaningful
+## First-pass numbers, TESTED at the M1 playtest gate 2026-08-11 (build d1dbab0,
+## seed 0): verdict ITERATE, M1 NOT closed. Combat reads fair and legible (no unseen
+## damage), but the gate found no encounter decisions -- "any reasonable way to kill
+## works" -- and no realistically available failure: "failure must be orchestrated by
+## the player." No threshold below was individually judged, so treat each as UNREFUTED,
+## never confirmed. Named tuning axis for the next pass: enemy OUTPUT (damage, attack
+## cadence, aggression) -- durability tuning ALONE only lengthens fights without making
+## failure available. A re-gate on a frozen post-batch build closes M1
+## (GAME-RULES calibration-note law). These are the project's first meaningful
 ## combat-feel defaults (shield/i-frames, Phase D step 5) — UNVALIDATED PENDING THE
 ## STEP 8 PLAYTEST. Do not treat the seconds figures below as "this feels right";
 ## they exist only so the tick counts are legible against real time while reading data.

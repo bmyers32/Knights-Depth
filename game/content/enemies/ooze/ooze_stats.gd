@@ -3,13 +3,20 @@ extends Resource
 ## Ooze (Drifted state, M1 roster per GAME-RULES §3/§7 seed+7) tunables — looked up
 ## via ContentDB, never literals in scripts.
 
-## Provisional first-pass numbers, no playtest date yet (GAME-RULES calibration-note
-## law) — revisit at the M1 playtest gate.
+## First-pass numbers, TESTED at the M1 playtest gate 2026-08-11 (build d1dbab0,
+## seed 0): verdict ITERATE, M1 NOT closed. Combat reads fair and legible (no unseen
+## damage), but the gate found no encounter decisions -- "any reasonable way to kill
+## works" -- and no realistically available failure: "failure must be orchestrated by
+## the player." No threshold below was individually judged, so treat each as UNREFUTED,
+## never confirmed. Named tuning axis for the next pass: enemy OUTPUT (damage, attack
+## cadence, aggression) -- durability tuning ALONE only lengthens fights without making
+## failure available. A re-gate on a frozen post-batch build closes M1
+## (GAME-RULES calibration-note law).
 @export var max_health: float = 20.0
 @export var family: StringName = &"ooze"
 ## Cadence constraint + derivation: see FangStats.iframe_ticks_on_hit. Same value for
 ## the same reason (this is a combat-wide invariant, not a per-family identity yet);
-## PROVISIONAL/UNVALIDATED, revisit at the M1 playtest gate.
+## PROVISIONAL/UNVALIDATED, revisit at the re-gate.
 @export var iframe_ticks_on_hit: int = 5
 ## Burn contact-spread proximity radius (GAME-RULES §3) — eyeballed against the
 ## GreenSpikyBlob model, same provisional-until-arena-lighting status as the collision
