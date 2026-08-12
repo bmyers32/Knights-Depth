@@ -46,26 +46,23 @@ lengthens fights without making failure available; not HP alone.
    itch DRAFT upload is optional/non-blocking; remaining unknowns are hosting-
    specific. The post-re-gate itch upload stays MANDATORY (written M1 exit criterion).
 3. **The batch IS the ITERATE response.** Scope unchanged (flinch/pressure,
-   vulnerability windows, charge retune, continuation window, enemy-by-enemy
-   HP+threshold tuning) PLUS the enemy-output axis and the G-1 scaling experiment.
+   vulnerability windows, charge retune, continuation window, enemy-by-enemy HP+
+   threshold tuning) PLUS the enemy-output axis and the G-1 scaling experiment.
 4. **Batch exit criterion: RE-GATE** — same `/playtest`, five questions, no-fixes
    discipline, frozen build. M1 closes on honest flips of #2 and #3 with #4 intact;
    that build becomes the public itch build.
-5. **Treat Rule: batch loses treat status** (required M1 work now); fires at closure.
+5. **Treat Rule:** batch loses treat status (required M1 work); fires at M1 closure.
 
 ## ★ BATCH NORTH STAR (pinned)
 **The gate's core finding: the player has no meaningful decisions and must cooperate
 to fail.** Flinch is the STRUCTURE; what makes it matter is enemy durability, threat,
 susceptibility differences, and vulnerability windows. No further infrastructure and
 no G-1 polish beyond the throwaway experiment until the re-gate questions can be
-answered. Locked batch order: G-1 throwaway visual-scale experiment → flinch/pressure
-implementation → dev-target mechanical validation → enemy-by-enemy HP/output/threshold
-tuning from gate evidence → live batch playtest → re-gate.
-
-## Next action
-Batch, in the locked order above. Design:
-`.claude/plans/advisory-decision-consolidated-swirling-flamingo.md` + advisory v3.
-Pre-gate work `d1dbab0`; its commit message holds the probe narrative + i-frame audit.
+answered. **NEXT ACTION — locked batch order:** G-1 throwaway visual-scale experiment
+→ flinch/pressure implementation → dev-target mechanical validation → enemy-by-enemy
+HP/output/threshold tuning from gate evidence → live batch playtest → re-gate.
+Design: `.claude/plans/advisory-decision-consolidated-swirling-flamingo.md` +
+advisory v3. `d1dbab0`'s message holds the probe narrative + i-frame audit.
 
 ## Batch item — sub-frame press/release (slot: after flinch core, before playtest)
 Assume NEITHER bug nor synthetic-only artifact until evidenced. Observed in the web
@@ -82,8 +79,7 @@ M3: input sampling vs tick boundaries is a networking-inherited problem class.
   ONE co-authored decision. Burn's 12-total ratio shifts against any raised HP.
 - **Wand cadence (7.8 audit, recorded only, no tuning):** at i-frame 5 the absorbs
   that ate every other shot vs an approaching target are gone. Numbers in `d1dbab0`.
-- All AI numbers, lunge/windup values, and i-frame 5 are unrefuted, never confirmed
-  — the gate judged the loop as a whole, not any individual threshold.
+- All AI/lunge/windup values and i-frame 5 are unrefuted, never confirmed — the gate judged the loop as a whole, not any individual threshold.
 - **GAME-RULES §3 needs THREE rules added by hand** (guard.py blocks agent edits):
   "distance preferences govern movement only"; Burn's duration-inheritance rule;
   the §2 governance-ladder terminus for any Candidate Principle the batch promotes.
@@ -104,9 +100,9 @@ AI end-to-end in a browser — the first real evidence that wiring works.
 ## Do NOT redo
 - Fence amendment (permanent, advisory §1): a pre-gate freeze never blocks narrow
   fixes to defects that invalidate what the gate measures; see BRAIN principle 10.
-- `iframe_ticks_on_hit` is a CADENCE CAP, not just a mercy window; don't "fix" the
-  fixture by relaxing its assertion. Why: BRAIN + `fang_stats.gd`.
-- Integration fixtures stay scoped to defensive-vs-offensive seams, not every seam.
+- `iframe_ticks_on_hit` is a CADENCE CAP, not a mercy window; don't "fix" the fixture
+  by relaxing its assertion (BRAIN + `fang_stats.gd`). Integration fixtures stay
+  scoped to defensive-vs-offensive seams, not every seam.
 - Authored attack movement (`executing`) REPLACES input, never blends; why:
   `envoy.gd`'s attack-before-move order + BRAIN's same-tick-transition entry.
 - Scope cuts, NOT canon: lunge clamp is attack-authored movement, not collision
