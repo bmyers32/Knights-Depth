@@ -22,28 +22,26 @@ ALONE only lengthens fights without making failure available; not HP alone.
 - **G-1 CLASSIFIED (2026-08-12): combat-geometry vs rendered-scale mismatch. NO
   clamp defect.** Sim rests the Envoy exactly at the authored contact distance
   (`test_lunge_clamp.gd:96` asserts it); `_contact_distance` is just summed
-  `combat_radius`. Three extents authored independently, all disagreeing —
-  `combat_radius` 0.40/1.00/0.70/0.80 (Envoy/Fang/Ooze/Watcher); scene capsules
-  0.50/1.00/1.00/1.00 (uniform 1.0×3.0 on all three enemies = copied default);
-  measured model half-extents 0.97 / 2.33×1.04 / 1.75×2.30 / 2.19×1.43 (glTF
-  accessor bounds, `root_scale=1.0`, node scales ~1.0). ~2 units of overlap are
-  authored in. Caveats: bboxes include weapons/attachments and these bodies aren't
-  circular — but even the NARROWER axis exceeds the authored radius every time.
+  `combat_radius`. Three independently-authored extents all disagree — sim radii vs
+  scene capsules (a uniform 1.0×3.0 copied default) vs measured model half-extents;
+  full numbers + caveats in `e8d9979`'s commit message. ~2 units of overlap are
+  authored in, and even the NARROWER model axis exceeds the authored radius always.
   **`combat_radius`/`reach`/Burn spread are UNTOUCHABLE (coupling):** model-accurate
   contact ≈3.2 vs sword reach 2.0/2.5 — raising radii would stop the lunge outside
   the Envoy's own reach and every hit would whiff.
-  **Resolution = EXPERIMENT LADDER, not a settled decision:** (1) batch start —
-  presentation-only model scaling PER MODEL, calibrated by eye so contact distance
-  reads as plausible proximity; NOT radius-matching (false precision). Fang's
-  nose/tail may need little correction, Ooze likely the most; judge the Envoy's own
-  scale against the combat space too. (2) FALSIFICATION — if scaled models read
-  toy-scale, the real defect is GLOBAL combat scale, and only then consider the
-  coupled reach/radius/spread retune as its own deliberate pass. (3) Stylization is
-  REFUTED by the gate observation itself.
+  **Resolution = EXPERIMENT LADDER, not a settled decision:** (1) batch start — a
+  THROWAWAY presentation-only per-model scaling experiment by fastest means, judged
+  by eye so contact distance reads as plausible proximity; NOT radius-matching (false
+  precision). Fang may need little correction, Ooze likely the most; judge the
+  Envoy's own scale too. (2) FALSIFICATION — if scaled models read toy-scale, the
+  real defect is GLOBAL combat scale, and only then consider the coupled
+  reach/radius/spread retune as its own deliberate pass. (3) Stylization is REFUTED
+  by the gate observation itself.
   **Recording requirement:** scale factors are tuning values — record per model with
   date, PROVISIONAL/UNVALIDATED, judge at the re-gate. **No silent scene-file magic
-  numbers** (proposed: a `model_scale` field on each stats resource applied by the
-  actor at `_ready`, so the value lives in content with a calibration note).
+  numbers.** Mechanism chosen AFTER results (rule of two — no approved mechanism yet):
+  per-resource field if scales are per-enemy; shared constant or import-scale fix if
+  ~uniform. Whichever wins: presentation-only, never read by the sim.
 - **G-2 knockback lacks temporal consequence:** displaced enemies immediately
   re-evaluate to APPROACH and walk back in. AI is rule-correct (fresh-geometry
   re-evaluation); the unnatural feel is the ABSENCE of a reaction layer between
@@ -60,6 +58,9 @@ ALONE only lengthens fights without making failure available; not HP alone.
 2. **Web export of d1dbab0 = PIPELINE VALIDATION only**, does NOT satisfy the M1
    itch criterion. Lane: templates+preset (user) → headless export + local HTTP
    validation (agent) → draft/private page (user) → quirks write-up → back to combat.
+   Write-up must state: Web/itch validation proves packaging and browser
+   compatibility ONLY; it does not substitute for later Windows desktop/Steam
+   pipeline validation.
 3. **The batch IS the ITERATE response.** Scope unchanged (flinch/pressure,
    vulnerability windows, charge retune, continuation window, enemy-by-enemy
    HP+threshold tuning) PLUS the enemy-output axis and the G-1 scaling experiment.
@@ -78,8 +79,7 @@ Pre-gate work `d1dbab0`; its commit message holds the probe narrative + i-frame 
   first or only one (see the output axis); HP and each enemy's flinch threshold stay
   ONE co-authored decision. Burn's 12-total ratio shifts against any raised HP.
 - **Wand cadence (7.8 audit, recorded only, no tuning):** at i-frame 5 the absorbs
-  that used to eat every other shot vs an approaching target are gone, raising
-  effective wand damage. Full numbers in `d1dbab0`'s commit message.
+  that ate every other shot vs an approaching target are gone. Numbers in `d1dbab0`.
 - All AI numbers, lunge/windup values, and i-frame 5 are unrefuted, never confirmed
   — the gate judged the loop as a whole, not any individual threshold.
 - **GAME-RULES §3 needs THREE rules added by hand** (guard.py blocks agent edits):
