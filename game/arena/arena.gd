@@ -56,6 +56,19 @@ extends Node3D
 ## direct underscore-field poke from this driver) each tick when on. Pure
 ## observability, default off, no gameplay effect either way.
 @export var debug_show_attack_state: bool = false
+## DEV VALIDATION TARGET (flinch batch) -- > 0.0 overrides every enemy's max_health at
+## setup so a target survives multiple full combos. ALL mechanical flinch validation
+## runs against this, deliberately independent of shipped enemy tuning: pressure
+## accumulation, threshold crossing with a SURVIVOR, re-flinch behavior, expiry ticks.
+## 0.0 = off (authentic). Never enabled for a /playtest gate or an itch build.
+@export var debug_validation_target_health: float = 0.0
+## > 0.0 replaces every enemy's authored flinch_threshold, isolating CAPABILITY
+## questions from THRESHOLD questions (a low value makes repeated cash-outs cheap
+## enough to exercise the full flinch lifecycle). 0.0 = off (authentic).
+@export var debug_flinch_threshold_override: float = 0.0
+## Prints the live flinch/pressure snapshot for each enemy (SimWorld.
+## debug_describe_flinch_state, a read-only public snapshot). Pure observability.
+@export var debug_show_flinch_state: bool = false
 
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
@@ -133,6 +146,11 @@ func _register_enemies() -> void:
 		# fixtures exercise the SAME path this driver does (see that class's doc).
 		var natural_weapon: NaturalWeaponStats = ContentRegistrar.register_enemy_body(sim, actor.actor_id, enemy_key, actor.position)
 		ContentRegistrar.register_enemy_ai(sim, actor.actor_id, enemy_key, actor.position)
+		# Dev validation target -- setup-time only, both loud no-ops at their defaults.
+		if debug_validation_target_health > 0.0:
+			sim.debug_override_health(actor.actor_id, debug_validation_target_health)
+		if debug_flinch_threshold_override > 0.0:
+			sim.register_flinch_profile(actor.actor_id, debug_flinch_threshold_override)
 		if debug_force_aggro:
 			sim.debug_set_ai_active(actor.actor_id)
 
@@ -166,6 +184,11 @@ func _physics_process(delta: float) -> void:
 		var description: Dictionary = sim.debug_describe_melee_state(envoy.actor_id)
 		if not description.is_empty():
 			print("attack state: ", description)
+	if debug_show_flinch_state:
+		for actor_id: int in _enemies.keys():
+			var flinch_state: Dictionary = sim.debug_describe_flinch_state(actor_id)
+			if not flinch_state.is_empty():
+				print("flinch state [", actor_id, "]: ", flinch_state)
 
 
 ## Dev-only debug input, deliberately NOT an InputMap action — edge-detected raw

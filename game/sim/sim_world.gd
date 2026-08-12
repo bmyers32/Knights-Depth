@@ -421,6 +421,16 @@ func debug_set_ai_active(actor_id: int) -> void:
 	_ai_state[actor_id] = "active"
 
 
+## Debug-only, setup-time health override (arena.gd's debug_validation_target_health)
+## -- the DEV VALIDATION TARGET: a body that survives multiple full combos so flinch
+## MECHANICS can be exercised independently of shipped enemy tuning. Called once from
+## _ready(), never during ticking, and never by the real driver (default 0.0 = off).
+## Exists so the driver never writes _health directly (same precedent as
+## debug_set_ai_active): a debug hook is still a mutation, and mutations live here.
+func debug_override_health(actor_id: int, health: float) -> void:
+	_health[actor_id] = health
+
+
 ## Autonomous-phase law (GAME-RULES §2): a phase that scans all actors on its own
 ## (contact spread, status resolution — and future Frost/Venom/Hex/AI behaviors) never
 ## mutates the collection it's iterating. Secondary effects (new spread recipients,
