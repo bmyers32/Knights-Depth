@@ -15,19 +15,16 @@ Passing and to be PRESERVED: #4 fairness/legibility ("all damage readable and fa
 lengthens fights without making failure available; not HP alone.
 
 ### Findings carried (post-gate, NOT fixed on the frozen build)
-- **G-1 CLASSIFIED (2026-08-12): combat-geometry vs rendered-scale mismatch, NO clamp
-  defect.** Sim rests the Envoy exactly at the authored contact distance
-  (`test_lunge_clamp.gd:96`); sim radii, scene capsules, and measured model extents
-  were all authored independently and disagree — full numbers/caveats in `e8d9979`.
-  **`combat_radius`/`reach`/Burn spread are UNTOUCHABLE (coupling):** model-accurate
-  contact ≈3.2 vs sword reach 2.0/2.5 would stop the lunge outside its own reach.
-  **LADDER:** (1) throwaway presentation-only per-model scaling, fastest means, judged
-  by eye — NOT radius-matching; (2) FALSIFICATION — if it reads toy-scale the real
-  defect is GLOBAL combat scale, its own deliberate pass; (3) stylization REFUTED.
-  **Recording:** scale factors are tuning values — per model, dated,
-  PROVISIONAL/UNVALIDATED, judged at the re-gate; no silent scene-file magic numbers.
-  Mechanism chosen AFTER results (rule of two — none approved yet); whichever wins is
-  presentation-only, never read by the sim.
+- **G-1 CLOSED as FALSIFIED (2026-08-12) — no code, no mechanism.** The lunge clamp is
+  mechanically CORRECT. The defect is a mismatch between rendered world scale and
+  authoritative combat geometry: combat radii, melee reach/contact distances, and
+  rendered silhouettes were never calibrated as ONE spatial system. Presentation-only
+  scaling was tested and refuted (uniform 0.40 neither resolved the overlap nor kept
+  the world readable; the Envoy's own ~0.97 half-extent already eats ~88% of the 1.1
+  contact budget, so no per-model scaling can close it). → **ROADMAP P28**, batch
+  step 5. **FORBIDDEN until that pass:** `model_scale` fields · raising
+  `combat_radius` alone · raising sword `reach` alone · deriving any combat radius
+  from mesh AABB/capsule extents.
 - **G-2 knockback lacks temporal consequence:** displaced enemies immediately
   re-evaluate to APPROACH and walk back in. AI is rule-correct (fresh-geometry
   re-evaluation); the unnatural feel is the ABSENCE of a reaction layer between
@@ -58,11 +55,13 @@ lengthens fights without making failure available; not HP alone.
 to fail.** Flinch is the STRUCTURE; what makes it matter is enemy durability, threat,
 susceptibility differences, and vulnerability windows. No further infrastructure and
 no G-1 polish beyond the throwaway experiment until the re-gate questions can be
-answered. **NEXT ACTION — locked batch order:** G-1 throwaway visual-scale experiment
-→ flinch/pressure implementation → dev-target mechanical validation → enemy-by-enemy
-HP/output/threshold tuning from gate evidence → live batch playtest → re-gate.
-Design: `.claude/plans/advisory-decision-consolidated-swirling-flamingo.md` +
-advisory v3. `d1dbab0`'s message holds the probe narrative + i-frame audit.
+answered. **LOCKED BATCH ORDER (amended 2026-08-12):** 1. G-1 closed as falsified, no
+code · 2. **flinch/pressure core (geometry-independent) ← NEXT** · 3. dev-target
+mechanical validation · 4. sub-frame input recon/test · 5. **global combat-scale
+coherence pass (ROADMAP P28) — HARD BARRIER**, live tuning must not be calibrated
+against spatial values known to be incoherent · 6. enemy-by-enemy
+HP/output/threshold/spacing tuning · 7. live batch playtest → re-gate.
+Design: `.claude/plans/advisory-decision-consolidated-swirling-flamingo.md` + v3.
 
 ## Batch item — sub-frame press/release (slot: after flinch core, before playtest)
 Assume NEITHER bug nor synthetic-only artifact until evidenced. Observed in the web

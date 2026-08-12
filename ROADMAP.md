@@ -37,6 +37,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P25 | Weapon-owned state & switch semantics | PROPOSED | Holstered-state categories, switch-reset tech, ammo/heat — all gated on a real consumer |
 | P26 | Ranged weapon identity futures | PROPOSED | Distance bands, committed burst, hazards, marks; identity = changed decision, not new numbers |
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
+| P28 | Global combat-scale coherence pass | IN-MILESTONE (M1 batch step 5) | Rendered world scale vs authoritative combat geometry were never calibrated as one system |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
@@ -537,6 +538,41 @@ question from "how long is a target merciful after being hit," and conflating th
 exactly what produced the M1 combo-cadence defect (BRAIN).
 **Why deferred:** defined by the first real multi-hit consumer; constrained until then
 only by the recorded audit above. Do not pre-build.
+
+### P28 — Global combat-scale coherence pass
+**Status:** IN-MILESTONE — M1 combat batch **step 5**, a HARD BARRIER before any
+live-content calibration. Live tuning must not be calibrated against spatial values
+known to be incoherent.
+**Origin (G-1, closed as falsified 2026-08-12):** the lunge clamp is mechanically
+correct. The defect is a mismatch between rendered world scale and authoritative
+combat geometry — combat radii, melee reach/contact distances, and rendered
+silhouettes were never calibrated as ONE spatial system. Evidence: at Ooze's authored
+1.1 contact distance the Envoy renders fully inside the mesh; a uniform 0.40 model
+scale neither resolved the overlap nor kept the world readable (it read toy-scale),
+and the Envoy's own model half-extent (~0.97) already consumes ~88% of that 1.1
+budget, so no per-model scaling can close it. Full detail: `e8d9979`, `1337754`.
+**FORBIDDEN until this pass runs:** `model_scale` fields · raising `combat_radius`
+alone · raising sword `reach` alone · deriving any combat radius from mesh AABB or
+capsule extents.
+**Brief:**
+- Establish a canonical perceived gameplay FOOTPRINT first, then derive combat radius
+  → reach → attack movement → enemy spacing → Burn contact around it. Do NOT preserve
+  current ratios automatically — they were authored independently and some may be
+  wrong relative to each other.
+- **Anchor candidate** (default unless visual judgment overrules): asset-meter
+  alignment — the Envoy's footprint = its glTF model's actual occupancy at scale 1.0,
+  so all future KayKit/Quaternius/Kenney content lands at native scale through M2.
+  (A uniform k ≈ 2.5 survives only as a starting estimate under this anchor, never as
+  the method.)
+- Non-circular meshes (Fang) use a gameplay body footprint judged around the
+  meaningful CORE silhouette — never full mesh extent.
+- Burn contact spread and the lunge clamp distance stay co-tuned (locked, one shared
+  `_contact_distance` formula).
+- Own commit(s); suite green before and after; distance-asserting tests updated
+  DELIBERATELY, not mechanically; all values PROVISIONAL until the re-gate; camera
+  reframe (P21-adjacent) evaluated in the same pass.
+**Why here and not earlier:** it is a deliberate design pass, not a bug fix. Doing it
+before flinch exists would tune spacing against combat that has no reaction layer yet.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
