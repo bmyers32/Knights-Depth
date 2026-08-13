@@ -13,7 +13,16 @@ extends Resource
 ## cadence, aggression) -- durability tuning ALONE only lengthens fights without making
 ## failure available. A re-gate on a frozen post-batch build closes M1
 ## (GAME-RULES calibration-note law).
-@export var max_health: float = 20.0
+## STEP-6 TUNING (batch, 2026-08-13) — PROVISIONAL/UNVALIDATED, answers the M1
+## gate's ITERATE finding #3 ("failure must be orchestrated by the player").
+## HP and flinch_threshold are ONE co-authored decision and must move together;
+## OUTPUT (damage/cadence) is co-equal with durability, never durability alone --
+## more HP by itself only lengthens fights without making failure available.
+## Watcher: squishiest, survives one combo with 12 margin. Threshold stays
+## HIGHEST (24), deliberately ABOVE hits 1+2 (16), so pressure cashes only on a
+## full combo -- making the authored VULNERABLE window the cheap route and raw
+## damage the expensive one. A charge alone (20) cannot cash here, by design.
+@export var max_health: float = 38.0
 @export var family: StringName = &"watcher"
 ## FLINCH threshold (batch, PROVISIONAL/UNVALIDATED 2026-08-12): deliberately HIGH --
 ## Watcher's lesson is not pressure but the authored VULNERABLE window on its windup

@@ -57,19 +57,26 @@ lengthens fights without making failure available; not HP alone.
 to fail.** Flinch is the STRUCTURE; what makes it matter is enemy durability, threat,
 susceptibility differences, and vulnerability windows. No further infrastructure and
 no G-1 polish beyond the throwaway experiment until the re-gate questions can be
-answered. **LOCKED BATCH ORDER:** 1. G-1 closed ✓ · 2. flinch/pressure core ✓
-(`2165acc`) · 3. dev-target mechanical validation ✓ (`890f2ce`) · 4. sub-frame input
-recon/fix ✓ (`5873244`) · 5. P28 scale pass ✓ RESOLVED, barrier lifted · 6. **enemy-by-
-enemy HP/output/flinch-threshold tuning ← NEXT** · 7. live batch playtest → re-gate.
+answered. **BATCH ORDER:** 1. G-1 closed ✓ · 2. flinch/pressure core ✓ (`2165acc`) ·
+3. dev-target validation ✓ (`890f2ce`) · 4. sub-frame input fix ✓ (`5873244`) · 5. P28
+scale pass ✓ RESOLVED · 6. enemy HP/output/threshold tuning ✓ **PROVISIONAL PASS** —
+live play now exposes pressure flinch, EXPLOIT flinch, repeated manipulation, and
+credible enemy damage. **These values are the NEXT BASELINE — no further numeric
+tuning until richer AI/encounter context produces a specific finding.**
+7. **← NEXT: enemy action repertoire / distance-conditioned action selection**, with a
+RANGED action as the first concrete second-action consumer. 8. re-gate AFTER that
+richer encounter layer exists (moved later, deliberately).
 Design: `.claude/plans/advisory-decision-consolidated-swirling-flamingo.md` + v3.
 
 ## Open tensions (carried)
-- **26-vs-20:** a full 1→2→3 deals 26 to a 20 HP enemy. HP is a lever but NOT the
-  first or only one (see the output axis); HP and each enemy's flinch threshold stay
-  ONE co-authored decision. Burn's 12-total ratio shifts against any raised HP.
-- **Wand cadence (7.8 audit, recorded only, no tuning):** at i-frame 5 the absorbs
-  that ate every other shot vs an approaching target are gone. Numbers in `d1dbab0`.
-- All AI/lunge/windup values and i-frame 5 are unrefuted, never confirmed — the gate judged the loop as a whole, not any individual threshold.
+- **26-vs-20 CLOSED** by step 6: HP now 45/70/38 vs a 26-damage combo. Burn's 12 total
+  is now 27%/17%/32% of HP (was 60%) — weaker in relative terms. Re-feel item during
+  the encounter-layer work; no preemptive retune.
+- Combined output if all three converge is ~13 DPS (passive death ~2.3s). If that ever
+  reads unfair, the Envoy's untouched 30 HP is the lever — do NOT walk enemy output
+  back, it is what makes failure available (gate #3).
+- **Wand cadence (7.8 audit):** at i-frame 5 the absorbs that ate every other shot vs an approaching target are gone. Numbers in `d1dbab0`.
+- Lunge/windup values and i-frame 5 remain unrefuted, never confirmed.
 - **GAME-RULES §3 needs THREE rules added by hand** (guard.py blocks agent edits):
   "distance preferences govern movement only"; Burn's duration-inheritance rule;
   the §2 governance-ladder terminus for any Candidate Principle the batch promotes.

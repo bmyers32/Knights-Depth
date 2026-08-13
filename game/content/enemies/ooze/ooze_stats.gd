@@ -12,7 +12,15 @@ extends Resource
 ## cadence, aggression) -- durability tuning ALONE only lengthens fights without making
 ## failure available. A re-gate on a frozen post-batch build closes M1
 ## (GAME-RULES calibration-note law).
-@export var max_health: float = 20.0
+## STEP-6 TUNING (batch, 2026-08-13) — PROVISIONAL/UNVALIDATED, answers the M1
+## gate's ITERATE finding #3 ("failure must be orchestrated by the player").
+## HP and flinch_threshold are ONE co-authored decision and must move together;
+## OUTPUT (damage/cadence) is co-equal with durability, never durability alone --
+## more HP by itself only lengthens fights without making failure available.
+## Ooze: ~3 full combos, so three flinch cycles are experienceable -- what the
+## repeated-manipulation lesson needs. Threshold stays lowest (12) so cycles are
+## cheap to re-earn. Durability is only half its identity; see its slam damage.
+@export var max_health: float = 70.0
 @export var family: StringName = &"ooze"
 ## FLINCH threshold (batch, PROVISIONAL/UNVALIDATED 2026-08-12): Ooze teaches
 ## SUSCEPTIBILITY VARIATION -- deliberately lower than Fang's 16.0, so it flinches

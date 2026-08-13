@@ -12,7 +12,15 @@ extends Resource
 ## cadence, aggression) -- durability tuning ALONE only lengthens fights without making
 ## failure available. A re-gate on a frozen post-batch build closes M1
 ## (GAME-RULES calibration-note law).
-@export var max_health: float = 20.0
+## STEP-6 TUNING (batch, 2026-08-13) — PROVISIONAL/UNVALIDATED, answers the M1
+## gate's ITERATE finding #3 ("failure must be orchestrated by the player").
+## HP and flinch_threshold are ONE co-authored decision and must move together;
+## OUTPUT (damage/cadence) is co-equal with durability, never durability alone --
+## more HP by itself only lengthens fights without making failure available.
+## Fang: survives one full 26-damage combo with 19 margin, so the finisher's
+## flinch is always observable; dies to the second. Threshold stays 16 = exactly
+## hits 1+2 -- that IS the baseline pressure lesson, so it must not drift with HP.
+@export var max_health: float = 45.0
 @export var family: StringName = &"fang"
 ## FLINCH threshold (batch, PROVISIONAL/UNVALIDATED 2026-08-12): post-mitigation HP
 ## damage that must accumulate inside the shared pressure window before a

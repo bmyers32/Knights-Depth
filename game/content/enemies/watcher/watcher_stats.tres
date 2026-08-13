@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_stats")
-max_health = 20.0
+max_health = 38.0
 family = &"watcher"
 iframe_ticks_on_hit = 5
 combat_radius = 0.85
