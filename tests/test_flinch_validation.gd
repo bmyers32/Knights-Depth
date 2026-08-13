@@ -70,7 +70,7 @@ func _land_hits(count: int, max_ticks: int = 200) -> Array:
 			if event.kind == "hit":
 				landed.append({"tick": event.tick, "profile": event.payload.get("attack_profile_id"), "damage": event.payload.damage})
 			elif event.kind == "flinched":
-				landed.append({"tick": event.tick, "profile": "FLINCH", "reason": event.payload.reason, "until": event.payload.until_tick, "extended": event.payload.extended})
+				landed.append({"tick": event.tick, "profile": "FLINCH", "reason": event.payload.reason, "until": event.payload.until_tick, "deadline_set": event.payload.recovery_deadline_set})
 	return landed
 
 
@@ -201,7 +201,7 @@ func test_34_composed_flinch_lifecycle_persist_no_extend_then_reflinch() -> void
 	for event in mid_recovery_flinches:
 		assert_eq(int(event.payload.until_tick), original_until,
 			"a mid-recovery re-flinch registers but must NOT extend flinched_until_tick")
-		assert_false(event.payload.extended)
+		assert_false(event.payload.recovery_deadline_set)
 	assert_gt(_pressure(), 0.0, "mid-recovery hits still bank pressure normally")
 
 	# 4. Recovery ends on its exact tick, and the next eligible hit re-flinches.
@@ -212,7 +212,7 @@ func test_34_composed_flinch_lifecycle_persist_no_extend_then_reflinch() -> void
 	var after: Array = _land_hits(2)
 	var re_flinched: Array = after.filter(func(e): return e.profile == "FLINCH")
 	assert_gt(re_flinched.size(), 0, "a susceptible enemy can be flinched again once recovered")
-	assert_true(re_flinched[0].extended, "the post-recovery flinch sets a FRESH deadline")
+	assert_true(re_flinched[0].deadline_set, "the post-recovery flinch sets a FRESH deadline")
 
 
 # --- 3.5 expiry ticks and concurrent cooldown --------------------------------------

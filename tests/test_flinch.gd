@@ -229,7 +229,7 @@ func test_re_flinch_registers_but_does_not_extend_the_deadline() -> void:
 	var second := _of(_swing(&"weak"), "flinched")
 	assert_eq(second.size(), 1, "a qualifying re-flinch still registers")
 	assert_eq(int(second[0].payload.until_tick), first, "but must NOT extend the deadline")
-	assert_false(second[0].payload.extended)
+	assert_false(second[0].payload.recovery_deadline_set)
 
 
 func test_interrupted_attack_cooldown_runs_concurrently_with_recovery() -> void:

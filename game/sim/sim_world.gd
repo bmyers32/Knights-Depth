@@ -1243,7 +1243,14 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 			"attacker_id": attacker_id,
 			"reason": flinch_reason,
 			"until_tick": int(_flinched_until_tick.get(target_id, tick_count)),
-			"extended": not already_flinched,
+			# CONTRACT: true iff processing THIS flinch wrote _flinched_until_tick.
+			# It names the observable write, not a design meaning, so it stays correct
+			# under the current non-extension rule AND under any future refresh rule.
+			# (It was briefly named "extended", which read as the opposite of the
+			# mechanic on a first flinch -- nothing is extended when a deadline is
+			# first established. Observability must never state the inverse of the
+			# behavior it reports.)
+			"recovery_deadline_set": not already_flinched,
 		}))
 
 	# Roll-consumption rule (locked): the proc roll happens here, UNCONDITIONALLY,

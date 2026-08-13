@@ -2,40 +2,26 @@
 Milestone: 1 — Combat slice   Status: IN-PROGRESS, **NOT CLOSED** (M0 COMPLETE)
 
 ## M1 PLAYTEST GATE — VERDICT: ITERATE (2026-08-11, build d1dbab0, seed 0)
-Ten minutes, all `debug_*` at authentic defaults (verified, not remembered). Verbatim
-answers in `1431eed`; the two failures, which the batch must honestly flip:
-2. "One dominant meta-strategy: any reasonable way to kill works. No encounter nuance
-   forcing action/weapon/timing/positioning choices. Fights end quickly; player
-   deliberately draws them out to observe mechanics."
-3. "Failure must be orchestrated by the player. Any base-level action avoids it.
-   Enemies create no meaningful pressure."
-Passing and to be PRESERVED: #4 fairness/legibility ("all damage readable and fair").
-#1 strafing felt good; #5 nothing felt unavailable. **Named tuning axis: enemy OUTPUT
-(damage, attack cadence, aggression)** — #3 shows durability tuning ALONE only
-lengthens fights without making failure available; not HP alone.
+Verbatim answers in `1431eed`. The two FAILURES the re-gate must re-ask: (#2) "one
+dominant meta-strategy: any reasonable way to kill works; no encounter nuance forcing
+action/weapon/timing/positioning choices"; (#3) "failure must be orchestrated by the
+player; enemies create no meaningful pressure." PRESERVE #4 fairness/legibility ("all
+damage readable and fair"). Named tuning axis: enemy OUTPUT, not durability alone.
 
-### Findings carried (post-gate, NOT fixed on the frozen build)
-- **G-1 CLOSED as FALSIFIED (2026-08-12)** — lunge clamp mechanically CORRECT; the
-  defect was rendered-scale vs combat-geometry, resolved via P28 (see amendment 6).
-  Detail: `e8d9979` / `1337754`. Still FORBIDDEN: `model_scale` fields; raising
+### Findings carried
+- **G-1 CLOSED as FALSIFIED** (`e8d9979`/`1337754`) — clamp correct; was rendered-scale
+  vs combat-geometry, resolved by P28. Still FORBIDDEN: `model_scale`; raising
   `combat_radius` or sword `reach` alone; AABB-derived radii.
-- **G-2 knockback lacks temporal consequence:** displaced enemies immediately
-  re-evaluate to APPROACH and walk back in. AI is rule-correct (fresh-geometry
-  re-evaluation); the unnatural feel is the ABSENCE of a reaction layer between
-  displacement and re-decision. This is evidence FOR the planned FLINCHED reaction —
-  re-evaluate after flinch exists; no separate locomotion rule now. Lever order if
-  it survives flinch: locomotion commitment-break > threshold tuning. **More
-  knockback is contraindicated** (recreates the gun push-out failure, BRAIN).
-  Code fact: after an interrupting hit 3, `_cancel_enemy_windup` arms the attack
-  cooldown but NOTHING gates movement — the enemy re-decides locomotion the next
-  tick and walks forward while disarmed.
+- **G-2 knockback lacks temporal consequence** — AI is rule-correct; the unnatural feel
+  is the ABSENCE of a reaction layer. Flinch resolves the successful-flinch case by
+  construction (a flinched enemy emits no movement). Re-read at the re-gate, LOG ONLY.
+  More knockback is contraindicated (recreates the gun push-out failure, BRAIN).
 
 ## SEQUENCING AMENDMENT (supersedes "gate → itch → M1 closed")
 1. **M1 is NOT closed.** ITERATE is a legitimate outcome the prior sequence lacked.
-2. **Export lane CLOSED** (`fdf0fa9`) — Web pipeline smoke validation passed; see
-   `WEB-EXPORT-NOTES.md` (nothreads trade, scope fence, reopening condition). The
-   itch DRAFT upload is optional/non-blocking; remaining unknowns are hosting-
-   specific. The post-re-gate itch upload stays MANDATORY (written M1 exit criterion).
+2. **Export lane CLOSED** (`fdf0fa9`) — see `WEB-EXPORT-NOTES.md` (nothreads trade,
+   scope fence, reopening condition). Draft upload optional; the post-re-gate itch
+   upload stays MANDATORY (written M1 exit criterion).
 3. **The batch IS the ITERATE response.** Scope unchanged (flinch/pressure,
    vulnerability windows, charge retune, continuation window, enemy-by-enemy HP+
    threshold tuning) PLUS the enemy-output axis and the G-1 scaling experiment.
@@ -76,25 +62,39 @@ Design: `.claude/plans/advisory-decision-consolidated-swirling-flamingo.md` + v3
   reads unfair, the Envoy's untouched 30 HP is the lever — do NOT walk enemy output
   back, it is what makes failure available (gate #3).
 - **Wand cadence (7.8 audit):** at i-frame 5 the absorbs that ate every other shot vs an approaching target are gone. Numbers in `d1dbab0`.
-- Lunge/windup values and i-frame 5 remain unrefuted, never confirmed.
 - **GAME-RULES §3 needs THREE rules added by hand** (guard.py blocks agent edits):
   "distance preferences govern movement only"; Burn's duration-inheritance rule;
   the §2 governance-ladder terminus for any Candidate Principle the batch promotes.
 
-**Coverage gap — read before trusting a green suite here.** Booting the real arena
-headless exercises registration but NEVER engagement: the Envoy spawns at origin and
-enemies sit ~16–17 units away, beyond their 8.0 detection radius, so no AI activates
-and a clean boot is a NULL result for AI behavior. Automated coverage there is
-value-transfer only (`test_content_registrar.gd` asserts every authored value reaches
-sim, incl. `register_enemy_ai`'s tuning; `test_enemy_ai.gd` covers behavior on its own
-hand-built sim). **arena.gd scope honesty:** no assertion-level coverage, and never
-had any; its registration change is a verbatim move (diff review + clean boot +
-value-level tests on what it delegates to), but the wiring INSIDE `_register_enemies`
-(telegraph cache, `debug_force_aggro`, per-family gating) rests on play alone. Not
-made worse; not claimed as covered. The web smoke test (`fdf0fa9`) did exercise live
-AI end-to-end in a browser — the first real evidence that wiring works.
+**Coverage gap — read before trusting a green suite here.** A headless arena boot
+exercises registration but NEVER engagement: the Envoy spawns at origin, enemies sit
+beyond their detection radius, so no AI activates and a clean boot is a NULL result for
+AI behavior. Automated coverage there is value-transfer only. `arena.gd` has no
+assertion-level coverage and never had any; its wiring rests on play. The web smoke test
+(`fdf0fa9`) is the only end-to-end evidence that live AI wiring works.
+
+## ★ RE-GATE SESSION PIN (frozen build; read before running)
+Same five questions, no fixes mid-session, all `debug_*` at authentic defaults —
+including the batch's new `debug_validation_target_health` and
+`debug_flinch_threshold_override`, which MUST be 0.0 (verify via arena.tscn having no
+property overrides, don't remember it).
+**VERDICT THRESHOLD IS ABSOLUTE, not comparative:** the bar is "a viable M1 combat
+foundation despite primitive content." "Materially better than last gate" is context
+only, never the test. Known shallownesses — windup thinness, no action repertoires, no
+animation, no encounter composition — are OBSERVED, not fixed, and do not pre-decide
+the verdict.
+**Method:** play naturally for most of the ten minutes; probe deliberately near the end
+— 9.13 cross-weapon cash-out (three bands: NEVER / SOMETIMES-with-intent /
+ALMOST-ALWAYS), G-2 re-read now that flinch exists (LOG ONLY, no locomotion rule), 9.8
+finisher-cycling cost (is 1-2-3-cancel-1-2-3 still costless?).
+PASS → M1 closes, public itch build, Treat Rule fires, repertoire + P17 pull-forward
+become next-milestone scoping. ITERATE → the finding becomes the repertoire's mandate.
 
 ## Do NOT redo
+- `flinched` payload key is `recovery_deadline_set` — CONTRACT: true iff processing that
+  flinch WROTE `_flinched_until_tick`. It names the observable write, not a design
+  meaning, so it survives a future flip from non-extension to refresh. Never restore the
+  old name `extended`: it read as the inverse of the mechanic on a first flinch.
 - Sub-frame input CLOSED (`5873244`): `envoy.gd` forwards BOTH edges because both fire
   in one 30 Hz tick for any click under ~33 ms; the old if/elif dropped the release and
   stranded `_melee_hold` in `charging` permanently. Don't re-collapse it to if/elif.
