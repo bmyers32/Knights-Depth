@@ -6,15 +6,15 @@ extends Resource
 ## attacking enemy synthesizes the exact same "attack" Command shape a player would
 ## send (Phase D step 8 Phase 4).
 
-## First-pass numbers, TESTED at the M1 playtest gate 2026-08-11 (build d1dbab0,
-## seed 0): verdict ITERATE, M1 NOT closed. Combat reads fair and legible (no unseen
-## damage), but the gate found no encounter decisions -- "any reasonable way to kill
-## works" -- and no realistically available failure: "failure must be orchestrated by
-## the player." No threshold below was individually judged, so treat each as UNREFUTED,
-## never confirmed. Named tuning axis for the next pass: enemy OUTPUT (damage, attack
-## cadence, aggression) -- durability tuning ALONE only lengthens fights without making
-## failure available. A re-gate on a frozen post-batch build closes M1
-## (GAME-RULES calibration-note law), alongside this session's other new AI
+## VALIDATED-FOR-M1 at the combat RE-GATE 2026-08-13 (frozen build 41ffd5a): verdict
+## PASS against the absolute bar "a viable M1 combat foundation despite primitive
+## content". Observed feel, verbatim: "much better now... I can die sometimes when I
+## get aggro from all three and try to manage them all at once"; "no incoming damage
+## felt unreasonable"; "Displacement and flinch looked good".
+## VALIDATED-FOR-M1 means judged SOUND AS A FOUNDATION in live play -- NOT individually
+## optimised, and not a claim any single number below is right. NUMERIC-TUNING FENCE:
+## no further HP/output/flinch-threshold micro-tuning until a specific future playtest
+## finding demands it (GAME-RULES calibration-note law), alongside this session's other new AI
 ## numbers (detection/leash radii especially — see below).
 @export var move_speed: float = 2.5
 ## Engagement spacing (locked defect fix, pre-gate pass): the band an engaged enemy
@@ -30,7 +30,7 @@ extends Resource
 ## held at least 0.3 beyond it -- otherwise an enemy settles INSIDE the player's body.
 ## Ooze needed the real correction (preferred 1.8 -> 2.2, since its contact grew to
 ## 1.90); preferred doubles as the weapon's reach, so a bigger body legitimately gets
-## a longer slam. PROVISIONAL/UNVALIDATED -- see ROADMAP P28.
+## a longer slam. VALIDATED-FOR-M1 at the 2026-08-13 re-gate -- see ROADMAP P28.
 @export var preferred_attack_distance: float = 1.5
 @export var minimum_attack_distance: float = 0.8
 @export var cone_half_angle_degrees: float = 90.0

@@ -4,15 +4,15 @@ extends Resource
 
 @export var move_speed: float = 4.0
 
-## First-pass numbers, TESTED at the M1 playtest gate 2026-08-11 (build d1dbab0,
-## seed 0): verdict ITERATE, M1 NOT closed. Combat reads fair and legible (no unseen
-## damage), but the gate found no encounter decisions -- "any reasonable way to kill
-## works" -- and no realistically available failure: "failure must be orchestrated by
-## the player." No threshold below was individually judged, so treat each as UNREFUTED,
-## never confirmed. Named tuning axis for the next pass: enemy OUTPUT (damage, attack
-## cadence, aggression) -- durability tuning ALONE only lengthens fights without making
-## failure available. A re-gate on a frozen post-batch build closes M1
-## (GAME-RULES calibration-note law). This session is the first time the Envoy is
+## VALIDATED-FOR-M1 at the combat RE-GATE 2026-08-13 (frozen build 41ffd5a): verdict
+## PASS against the absolute bar "a viable M1 combat foundation despite primitive
+## content". Observed feel, verbatim: "much better now... I can die sometimes when I
+## get aggro from all three and try to manage them all at once"; "no incoming damage
+## felt unreasonable"; "Displacement and flinch looked good".
+## VALIDATED-FOR-M1 means judged SOUND AS A FOUNDATION in live play -- NOT individually
+## optimised, and not a claim any single number below is right. NUMERIC-TUNING FENCE:
+## no further HP/output/flinch-threshold micro-tuning until a specific future playtest
+## finding demands it (GAME-RULES calibration-note law). This session is the first time the Envoy is
 ## a registered combatant (SimWorld.register_combatant), so it can take real damage —
 ## from Burn's contact-spread/DoT specifically (GAME-RULES §3's enemy<->player
 ## allegiance rule). No enemy attack exists yet, so this health is only reachable
@@ -24,7 +24,7 @@ extends Resource
 ## (mirrors FangStats/OozeStats/WatcherStats' own family field) for consistency, not
 ## because a matrix row is needed yet.
 @export var family: StringName = &"envoy"
-## COMBAT FOOTPRINT (P28 calibration, 2026-08-13) — PROVISIONAL/UNVALIDATED.
+## COMBAT FOOTPRINT (P28) — VALIDATED-FOR-M1 at the 2026-08-13 re-gate.
 ## The authoritative body radius: feeds BOTH Burn's contact-spread and the melee
 ## lunge clamp through the one shared _contact_distance (GAME-RULES §3), so it is
 ## never tuned for one of those in isolation. Derived from this model's CORE

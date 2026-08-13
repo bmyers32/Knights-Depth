@@ -23,7 +23,11 @@ extends Resource
 ## judged on a NEVER / SOMETIMES-with-intent / ALMOST-ALWAYS band — never timer
 ## arithmetic.
 ##
-## PROVISIONAL/UNVALIDATED first pass (2026-08-12): 90 ticks = 3.0s at 30 Hz, chosen
+## VALIDATED-FOR-M1 (2026-08-13 re-gate): the cross-weapon cash-out route was observed
+## live -- wand banks pressure on Ooze, switch to sword, close, hit 3 cashes -- and was
+## classified SOMETIMES-with-intent, the healthy band. (That band label is the gate's
+## classification of the observed sequence, NOT a verbatim player quote.)
+## 90 ticks = 3.0s at 30 Hz, chosen
 ## as roughly twice the sword's 45-tick combo reset so an uninterrupted 1->2->3
 ## comfortably lands inside one window while a disengage-and-return does not.
 @export var pressure_window_ticks: int = 90
@@ -31,6 +35,7 @@ extends Resource
 ## Sim ticks an enemy stays FLINCHED. Effective attack denial is
 ## max(recovery, remaining cooldown) — never the sum — because both are absolute
 ## tick deadlines that run concurrently (GAME-RULES §3).
-## PROVISIONAL/UNVALIDATED first pass: 20 ticks (~0.67s) — long enough to read as a
+## VALIDATED-FOR-M1 (2026-08-13 re-gate: "Displacement and flinch looked good").
+## 20 ticks (~0.67s) — long enough to read as a
 ## real reaction and to reposition, short enough that chaining it demands intent.
 @export var flinch_recovery_ticks: int = 20

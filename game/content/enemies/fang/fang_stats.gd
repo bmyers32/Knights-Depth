@@ -3,16 +3,16 @@ extends Resource
 ## Fang (Common state, M1 roster per GAME-RULES §3/§7 seed+7) tunables — looked up
 ## via ContentDB, never literals in scripts.
 
-## First-pass numbers, TESTED at the M1 playtest gate 2026-08-11 (build d1dbab0,
-## seed 0): verdict ITERATE, M1 NOT closed. Combat reads fair and legible (no unseen
-## damage), but the gate found no encounter decisions -- "any reasonable way to kill
-## works" -- and no realistically available failure: "failure must be orchestrated by
-## the player." No threshold below was individually judged, so treat each as UNREFUTED,
-## never confirmed. Named tuning axis for the next pass: enemy OUTPUT (damage, attack
-## cadence, aggression) -- durability tuning ALONE only lengthens fights without making
-## failure available. A re-gate on a frozen post-batch build closes M1
-## (GAME-RULES calibration-note law).
-## STEP-6 TUNING (batch, 2026-08-13) — PROVISIONAL/UNVALIDATED, answers the M1
+## VALIDATED-FOR-M1 at the combat RE-GATE 2026-08-13 (frozen build 41ffd5a): verdict
+## PASS against the absolute bar "a viable M1 combat foundation despite primitive
+## content". Observed feel, verbatim: "much better now... I can die sometimes when I
+## get aggro from all three and try to manage them all at once"; "no incoming damage
+## felt unreasonable"; "Displacement and flinch looked good".
+## VALIDATED-FOR-M1 means judged SOUND AS A FOUNDATION in live play -- NOT individually
+## optimised, and not a claim any single number below is right. NUMERIC-TUNING FENCE:
+## no further HP/output/flinch-threshold micro-tuning until a specific future playtest
+## finding demands it (GAME-RULES calibration-note law).
+## STEP-6 TUNING (batch) — VALIDATED-FOR-M1 at the 2026-08-13 re-gate; answers the M1
 ## gate's ITERATE finding #3 ("failure must be orchestrated by the player").
 ## HP and flinch_threshold are ONE co-authored decision and must move together;
 ## OUTPUT (damage/cadence) is co-equal with durability, never durability alone --
@@ -34,10 +34,10 @@ extends Resource
 ## own combo hits 2 and 3 (gaps of 6 and 7 ticks) -- a full 1->2->3 landed hit 1 only.
 ## Rule: iframe_ticks_on_hit < the smallest gap between consecutive authored hits.
 ## 5 keeps one tick of margin under that 6-tick minimum. Probed 2026-08-11 and played
-## through the gate that day; unrefuted, still PROVISIONAL -- revisit at the re-gate.
+## through both gates; VALIDATED-FOR-M1 at the 2026-08-13 re-gate.
 ## tests/test_combo_cadence_fixture.gd fails if a cadence retune ever violates the rule.
 @export var iframe_ticks_on_hit: int = 5
-## COMBAT FOOTPRINT (P28 calibration, 2026-08-13) — PROVISIONAL/UNVALIDATED.
+## COMBAT FOOTPRINT (P28) — VALIDATED-FOR-M1 at the 2026-08-13 re-gate.
 ## The authoritative body radius: feeds BOTH Burn's contact-spread and the melee
 ## lunge clamp through the one shared _contact_distance (GAME-RULES §3), so it is
 ## never tuned for one of those in isolation. Derived from this model's CORE

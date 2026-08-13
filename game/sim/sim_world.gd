@@ -1231,10 +1231,17 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	if cancels_windup:
 		events.append(Event.new(tick_count, "windup_interrupted", {"actor_id": target_id, "attacker_id": attacker_id}))
 	if flinch_reason != "":
-		# Re-flinch (PROVISIONAL default): a qualifying flinch on an ALREADY-flinched
-		# enemy fully registers damage/pressure/knockback/interruption but does NOT
-		# extend the deadline. The batch playtest decides non-extension vs refresh --
-		# deliberately not a content flag until that evidence exists.
+		# Re-flinch: a qualifying flinch on an ALREADY-flinched enemy fully registers
+		# damage/pressure/knockback/interruption but does NOT extend the deadline.
+		# EVIDENCE BOUNDARY (2026-08-13 re-gate) -- deliberately split, do not collapse:
+		#   MECHANICAL non-extension: VALIDATED. Proven by the step-3 lifecycle tests
+		#     (test_flinch.gd + test_flinch_validation.gd::test_34), and immutable by
+		#     construction -- the assignment below is the only write and is guarded.
+		#   GENERAL flinch feel: VALIDATED ("Displacement and flinch looked good").
+		#   NARROW feel of sustained repeated chain-flinch on a susceptible survivor:
+		#     STILL OPEN. The re-gate did not deliberately exercise it, so no claim is
+		#     made either way. Non-extension vs refresh stays a live design question,
+		#     and deliberately NOT a content flag until real evidence exists.
 		var already_flinched: bool = tick_count < int(_flinched_until_tick.get(target_id, -1))
 		if not already_flinched:
 			_flinched_until_tick[target_id] = tick_count + _flinch_recovery_ticks

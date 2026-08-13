@@ -524,7 +524,15 @@ playtest validation.
    structural change only when existing seams demonstrably cannot express the result.
    Corollary: if an A/B comparison of authored content is expensive to run, fix the
    content seam before debating the content.
-10. **A feature freeze does not freeze the thing being measured.** A pre-gate fence
+10. **Depth is composition, not compulsion.** Multiple viable approaches at differing
+   effort/safety is desirable, not a defect; encounter depth must come from composing
+   situations, never from converting combat into mandatory single-answer counters.
+   Established at the M1 re-gate, where the player named the freedom to kill an enemy
+   several ways — at different levels of effort and safety — as a thing they *liked*,
+   while real decisions appeared under multi-enemy pressure. The failure mode this
+   guards against is manufacturing "decision-making" metrics by making each enemy a lock
+   with exactly one key. Verbatim fence recorded at ROADMAP P29.
+11. **A feature freeze does not freeze the thing being measured.** A pre-gate fence
    ("no new implementation before the playtest") never prohibits narrow fixes for
    CONFIRMED defects that invalidate the mechanics the gate exists to measure —
    otherwise the gate certifies a build whose headline mechanic does not function, and

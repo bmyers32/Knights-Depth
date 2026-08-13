@@ -14,15 +14,15 @@ extends Resource
 ## GAME-RULES §3's required tag on every weapon resource (sword/gun/bomb).
 @export var weapon_class: StringName = &"sword"
 
-## First-pass numbers, TESTED at the M1 playtest gate 2026-08-11 (build d1dbab0,
-## seed 0): verdict ITERATE, M1 NOT closed. Combat reads fair and legible (no unseen
-## damage), but the gate found no encounter decisions -- "any reasonable way to kill
-## works" -- and no realistically available failure: "failure must be orchestrated by
-## the player." No threshold below was individually judged, so treat each as UNREFUTED,
-## never confirmed. Named tuning axis for the next pass: enemy OUTPUT (damage, attack
-## cadence, aggression) -- durability tuning ALONE only lengthens fights without making
-## failure available. A re-gate on a frozen post-batch build closes M1
-## (GAME-RULES calibration-note law).
+## VALIDATED-FOR-M1 at the combat RE-GATE 2026-08-13 (frozen build 41ffd5a): verdict
+## PASS against the absolute bar "a viable M1 combat foundation despite primitive
+## content". Observed feel, verbatim: "much better now... I can die sometimes when I
+## get aggro from all three and try to manage them all at once"; "no incoming damage
+## felt unreasonable"; "Displacement and flinch looked good".
+## VALIDATED-FOR-M1 means judged SOUND AS A FOUNDATION in live play -- NOT individually
+## optimised, and not a claim any single number below is right. NUMERIC-TUNING FENCE:
+## no further HP/output/flinch-threshold micro-tuning until a specific future playtest
+## finding demands it (GAME-RULES calibration-note law).
 @export var base_damage: float = 10.0
 @export var damage_type: StringName = &"force"
 @export var reach: float = 2.0

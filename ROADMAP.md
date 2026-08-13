@@ -37,6 +37,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P25 | Weapon-owned state & switch semantics | PROPOSED | Holstered-state categories, switch-reset tech, ammo/heat — all gated on a real consumer |
 | P26 | Ranged weapon identity futures | PROPOSED | Distance bands, committed burst, hazards, marks; identity = changed decision, not new numbers |
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
+| P29 | Enemy action repertoire / distance-conditioned selection | NEXT-MILESTONE | First second-action consumer is a ranged action; carries the composition fence |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -599,6 +600,31 @@ capsule extents.
   reframe (P21-adjacent) evaluated in the same pass.
 **Why here and not earlier:** it is a deliberate design pass, not a bug fix. Doing it
 before flinch exists would tune spacing against combat that has no reaction layer yet.
+
+### P29 — Enemy action repertoire / distance-conditioned action selection
+**Status:** NEXT-MILESTONE scoping, opened at M1 close (2026-08-13). Explicitly NOT a
+retroactive M1 prerequisite — M1 passed its re-gate without it.
+**Idea:** enemies gain a repertoire of authored actions and choose between them by
+situation (distance first). The AI's new power is narrowly "which of my authored
+actions applies here"; everything about an action — reach, windup, damage, telegraph,
+susceptibility window — stays CONTENT, preserving the locked build-shape rule that the
+AI only ever decides move + attack-now. First concrete second-action consumer: a
+**ranged action**, pulling P17's ranged archetype forward. A Force-typed ranged attack
+respects MECHANICS-REFERENCE §2's onboarding rule (all early enemy damage is baseline
+type) and needs no enemy-applied status, so only P17's M2 content-pass timing moves.
+**THE COMPOSITION FENCE (verbatim, carried from the M1 re-gate — this is the point):**
+> "Multiple viable approaches at differing effort/safety is desirable, not a defect.
+> Enemy repertoire depth must create decisions through situation composition, never by
+> converting combat into mandatory single-answer counters."
+**Why it matters:** the M1 re-gate's answer to "is there a dominant strategy?" was that
+the player *values* killing enemies several ways at differing effort and safety, with
+real decisions emerging under group pressure. Depth must come from composing situations,
+not from making each enemy a lock with one key.
+**Design questions (settle before code):** where selection lives (action id from an
+authored per-family list); what conditions it (distance bands per action, first
+eligible wins, no RNG); shared vs per-action cooldown (per-action is what enables
+"ranged is on cooldown, so it closes"); which family gets the ranged action, and whether
+giving the EXPLOIT-window teacher a second action dilutes its lesson.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

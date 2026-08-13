@@ -60,8 +60,10 @@ extends Resource
 ##                 VULNERABLE; never cashes stored pressure.
 ##   &"pressure" — cashes stored pressure at/above the target's threshold, AND
 ##                 exploits a VULNERABLE window like &"exploit".
-## Locked M1 sword mapping: hits 1-2 = exploit, hit 3 = pressure (the finisher holds
-## the cash-out monopoly). Threshold readiness is NOT cash-out: an exploit hit that
+## Locked M1 sword mapping, VALIDATED at the 2026-08-13 re-gate: hits 1-2 = exploit,
+## hit 3 = pressure, charge = pressure (a deliberate SECOND cash-out route -- the
+## player reported getting "hits and charge off" under real threat, so charge is a
+## live option rather than a trap or a dominant answer). Threshold readiness is NOT cash-out: an exploit hit that
 ## pushes pressure past the threshold banks it for the next pressure-capable hit
 ## rather than flinching. That is intended behavior, not a tuning gap.
 @export var flinch_capability: StringName = &"none"
