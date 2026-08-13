@@ -25,7 +25,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P13 | Community world-state | PROPOSED | Shared Drift scalar + thresholds; architect-for at P9, build M5-if-ever |
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
-| P16 | Timed shield bounce | PROPOSED | Raise-in-window repels the attacker; layers on the recorded block-start tick |
+| P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
 | P17 | Per-family engagement identities | PROPOSED | Movement/attack personality as content on top of the shared AI; M2 content pass |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
@@ -261,21 +261,38 @@ own (probably longer) content field.
 or movement-burst design has been done. First candidate once combo/charge (§3) also
 needs revisiting, since dodge likely interacts with combo timing.
 
-### P16 — Timed shield bounce
-**Idea:** Raising the shield within `bounce_window_ticks` of an incoming hit repels
-the attacker (knockback applied TO THEM instead of the block just absorbing), with an
-internal `bounce_cooldown_ticks` preventing spam. Both new fields on `ShieldStats`.
-Layers directly onto the shipped block system via the block-start tick SimWorld
-already records on every READY→HELD rising edge (`_block_start_tick`) — the bounce
-reads existing state instead of retrofitting a new one.
-**Reasoning:** Rewards timing over passively holding block, translated from the
-reference game's shield mechanics — a skill expression the flat "hold to negate"
-model doesn't have room for on its own.
-**Design questions:** Does a bounced attack still drain the meter? Does bounce work
-during the post-break `break_recovery_delay_ticks` window? Can bosses/heavy attacks be
-bounced, or are some attacks bounce-immune by data flag?
-**Why deferred:** Shield v1 (this session) ships the flat block/break model only;
-bounce is a Treat-Rule-friendly layer once the base mechanic is playtested.
+### P16 — Shield bump + perfect parry (TREAT, pulled forward at M1 close)
+**Status:** the ONE guilt-free out-of-order Treat item (AGENTS.md Momentum Protocol),
+chosen 2026-08-13. Still passes /gate; it just skips the queue.
+
+**SPLIT (developer direction, 2026-08-13):** the original entry conflated one timing-
+gated mechanic. It is now TWO separable behaviors with INDEPENDENT tuning. The baseline
+bump must NOT become timing-dependent — that was the correction.
+
+**1. Shield bump — baseline spacing utility.** Raising the shield while an enemy is
+inside a very close authored proximity pushes it away. NO precision timing required:
+this is spacing control available to any player, not a skill check. Its own cooldown
+prevents holding or re-raising the shield from continuously repelling everything.
+Reuses the existing authoritative displacement path (the same knockback resolution the
+combat pipeline already owns) — no generic reaction framework.
+
+**2. Perfect parry — mastery layer.** A block landing inside a short timing window
+converts defense into a brief offensive advantage. Preferred first payoff: the parried
+attacker takes INCREASED DAMAGE for a short deterministic duration. Deliberately ONE
+reward — no stun + flinch + damage + meter refund + knockback package. Uses the
+narrowest existing damage-modifier seam; no generalized armor/debuff framework invented
+for a single consumer.
+
+**Desired shield progression:** normal block = safety · bump = spacing control ·
+perfect parry = defense converted into short offensive advantage.
+
+**Foundations that already exist:** `_block_start_tick` (recorded on every READY→HELD
+rising edge) gives the parry window its reference point for free; `_contact_distance`
+gives bump its proximity test; the knockback pipeline gives bump its displacement; and
+flinch's absolute-deadline pattern (`_flinched_until_tick`) is the precedent for the
+parry's temporary vulnerability window.
+**Why deferred until now:** shield v1 shipped the flat block/break model only; both
+layers needed a playtested base to attach to. That base passed its re-gate.
 
 ### P17 — Per-family engagement identities
 **Idea:** Movement/attack personality translated from the reference game, layered as
