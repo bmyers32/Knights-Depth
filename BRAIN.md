@@ -11,6 +11,15 @@ overlapping entries, delete anything a law in GAME-RULES already covers.
 | Falsifiable | Ignoring it → specific, nameable failure |
 | Decompressible | Body expands into the full reasoning chain: incident, mechanism, failure-if-ignored, where else it applies |
 
+## Milestones
+**M0 closed** (warmups, repo/workflow bootstrap). **M1 closed 2026-08-13** — combat
+slice, re-gate PASS on frozen build `41ffd5a`, public build at
+https://bmyers32.itch.io/knight-depths. Every entry below was earned during M0–M1.
+Milestone-completion prune performed at M1 close: no entry was found redundant against
+a GAME-RULES law, and none overlapped enough to merge — the two pairs that share a root
+(verdict/line-count, and quiescence/timestamps) already cross-reference each other and
+are load-bearing separately, so both were kept deliberately rather than by omission.
+
 ## Wisdom
 
 ### Quiescence: "stopped acting" is not "idle"

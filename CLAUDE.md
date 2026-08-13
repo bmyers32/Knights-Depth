@@ -77,7 +77,7 @@ knight_depths/
 | # | Scope | Status |
 |---|---|---|
 | 0 | Warmups: 2 tiny tutorial games; Godot basics; repo + workflow bootstrap | [x] |
-| 1 | Combat slice: Envoy, sword+gun+shield, 3 enemies (Common Fang / Drifted Ooze / Claimed Watcher), 1 arena, 1 status effect | [ ] |
+| 1 | Combat slice: Envoy, sword+gun+shield, 3 enemies (Common Fang / Drifted Ooze / Claimed Watcher), 1 arena, 1 status effect | [x] |
 | 2 | Procedural depths: tile segments, seeded 5-floor runs, elevators, difficulty curve (strata: Archive, Foundry) | [ ] |
 | 3 | Co-op netcode: 2–4 player server-authoritative, prediction, 150ms-latency playable | [ ] |
 | 4 | Persistence & hub: accounts/saves, Commons hub scene, crafting/heat progression | [ ] |
