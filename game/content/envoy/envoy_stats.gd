@@ -24,7 +24,16 @@ extends Resource
 ## (mirrors FangStats/OozeStats/WatcherStats' own family field) for consistency, not
 ## because a matrix row is needed yet.
 @export var family: StringName = &"envoy"
-## Burn contact-spread proximity radius (GAME-RULES §3) — first-pass, smaller than the
-## enemies' so the Envoy must walk in close rather than start already overlapping Fang
-## at envoy_movement_dev.tscn's default spawn distance (1.5 units).
-@export var combat_radius: float = 0.4
+## COMBAT FOOTPRINT (P28 calibration, 2026-08-13) — PROVISIONAL/UNVALIDATED.
+## The authoritative body radius: feeds BOTH Burn's contact-spread and the melee
+## lunge clamp through the one shared _contact_distance (GAME-RULES §3), so it is
+## never tuned for one of those in isolation. Derived from this model's CORE
+## SILHOUETTE (radial p50 across its torso band), deliberately NOT its mesh AABB:
+## the Knight model's 0.97 AABB is mostly an outstretched weapon, not body.
+## Adopted after a live playtest confirmed believable body separation at authored
+## contact with no toy-scale side effect. **REVALIDATION TRIGGER:** there is no
+## sword model or attack animation yet, so weapon-reach/contact ALIGNMENT is
+## explicitly NOT validated — re-check once real attack visuals exist, and do not
+## retune this geometry to fix an animation problem unless authoritative contact
+## itself proves wrong. Method + trigger recorded at ROADMAP P28.
+@export var combat_radius: float = 0.45

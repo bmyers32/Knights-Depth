@@ -5,8 +5,8 @@
 [resource]
 script = ExtResource("1_stats")
 move_speed = 3.0
-preferred_attack_distance = 1.5
-minimum_attack_distance = 0.8
+preferred_attack_distance = 1.65
+minimum_attack_distance = 1.35
 cone_half_angle_degrees = 90.0
 windup_ticks = 12
 fire_interval_ticks = 30

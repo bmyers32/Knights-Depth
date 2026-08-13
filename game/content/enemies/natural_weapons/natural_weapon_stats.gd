@@ -25,6 +25,12 @@ extends Resource
 ## weapon's actual reach passed to register_weapon — keep it <= the attack's real
 ## hit range so a settled enemy can always land the attack it fires; content's job to
 ## keep those consistent, not sim's to enforce.
+## P28 (2026-08-13): these are DERIVED FROM CONTACT DISTANCE, not chosen freely.
+## minimum_attack_distance = that family's combat contact distance, and preferred is
+## held at least 0.3 beyond it -- otherwise an enemy settles INSIDE the player's body.
+## Ooze needed the real correction (preferred 1.8 -> 2.2, since its contact grew to
+## 1.90); preferred doubles as the weapon's reach, so a bigger body legitimately gets
+## a longer slam. PROVISIONAL/UNVALIDATED -- see ROADMAP P28.
 @export var preferred_attack_distance: float = 1.5
 @export var minimum_attack_distance: float = 0.8
 @export var cone_half_angle_degrees: float = 90.0

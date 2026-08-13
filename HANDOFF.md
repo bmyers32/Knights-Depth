@@ -15,16 +15,10 @@ Passing and to be PRESERVED: #4 fairness/legibility ("all damage readable and fa
 lengthens fights without making failure available; not HP alone.
 
 ### Findings carried (post-gate, NOT fixed on the frozen build)
-- **G-1 CLOSED as FALSIFIED (2026-08-12) — no code, no mechanism.** The lunge clamp is
-  mechanically CORRECT. The defect is a mismatch between rendered world scale and
-  authoritative combat geometry: combat radii, melee reach/contact distances, and
-  rendered silhouettes were never calibrated as ONE spatial system. Presentation-only
-  scaling was tested and refuted (uniform 0.40 neither resolved the overlap nor kept
-  the world readable; the Envoy's own ~0.97 half-extent already eats ~88% of the 1.1
-  contact budget, so no per-model scaling can close it). → **ROADMAP P28**, batch
-  step 5. **FORBIDDEN until that pass:** `model_scale` fields · raising
-  `combat_radius` alone · raising sword `reach` alone · deriving any combat radius
-  from mesh AABB/capsule extents.
+- **G-1 CLOSED as FALSIFIED (2026-08-12)** — lunge clamp mechanically CORRECT; the
+  defect was rendered-scale vs combat-geometry, resolved via P28 (see amendment 6).
+  Detail: `e8d9979` / `1337754`. Still FORBIDDEN: `model_scale` fields; raising
+  `combat_radius` or sword `reach` alone; AABB-derived radii.
 - **G-2 knockback lacks temporal consequence:** displaced enemies immediately
   re-evaluate to APPROACH and walk back in. AI is rule-correct (fresh-geometry
   re-evaluation); the unnatural feel is the ABSENCE of a reaction layer between
@@ -49,28 +43,25 @@ lengthens fights without making failure available; not HP alone.
    discipline, frozen build. M1 closes on honest flips of #2 and #3 with #4 intact;
    that build becomes the public itch build.
 5. **Treat Rule:** batch loses treat status (required M1 work); fires at M1 closure.
+6. **P28 RESOLVED for M1 (2026-08-13), barrier LIFTED.** Not a global rescale: core
+   silhouette (p50 of the torso band, never mesh AABB) showed the defect was mostly
+   Ooze at 0.70 vs a real ~1.45 body. Candidate A adopted PROVISIONAL: combat_radius
+   Envoy 0.45 / Fang 0.90 / Watcher 0.85 / Ooze 1.45; Ooze preferred 2.20; each
+   minimum = its contact distance; **sword reach unchanged 2.0/2.5** (max contact
+   1.90). **OPEN revalidation trigger:** no sword model/attack animation exists, so
+   reach/contact ALIGNMENT is unvalidated — recheck when real attack visuals land, and
+   don't retune geometry for an animation problem unless contact itself proves wrong.
 
 ## ★ BATCH NORTH STAR (pinned)
 **The gate's core finding: the player has no meaningful decisions and must cooperate
 to fail.** Flinch is the STRUCTURE; what makes it matter is enemy durability, threat,
 susceptibility differences, and vulnerability windows. No further infrastructure and
 no G-1 polish beyond the throwaway experiment until the re-gate questions can be
-answered. **LOCKED BATCH ORDER (amended 2026-08-12):** 1. G-1 closed as falsified, no
-code · 2. **flinch/pressure core (geometry-independent) ← NEXT** · 3. dev-target
-mechanical validation · 4. sub-frame input recon/test · 5. **global combat-scale
-coherence pass (ROADMAP P28) — HARD BARRIER**, live tuning must not be calibrated
-against spatial values known to be incoherent · 6. enemy-by-enemy
-HP/output/threshold/spacing tuning · 7. live batch playtest → re-gate.
+answered. **LOCKED BATCH ORDER:** 1. G-1 closed ✓ · 2. flinch/pressure core ✓
+(`2165acc`) · 3. dev-target mechanical validation ✓ (`890f2ce`) · 4. sub-frame input
+recon/fix ✓ (`5873244`) · 5. P28 scale pass ✓ RESOLVED, barrier lifted · 6. **enemy-by-
+enemy HP/output/flinch-threshold tuning ← NEXT** · 7. live batch playtest → re-gate.
 Design: `.claude/plans/advisory-decision-consolidated-swirling-flamingo.md` + v3.
-
-## Batch item — sub-frame press/release (slot: after flinch core, before playtest)
-Assume NEITHER bug nor synthetic-only artifact until evidenced. Observed in the web
-smoke test: a synthetic click with press+release inside one 30 Hz frame produced NO
-swing (`envoy.gd`'s `if/elif` sent `pressed`, never `released`); a 250 ms hold worked.
-(a) RECON the real input→Command path — can both edges fall in one presentation frame
-with only one forwarded? (b) TEST that an ultra-short press/release between adjacent
-ticks never strands `_melee_hold` in `charging`. (c) Close with evidence either way.
-M3: input sampling vs tick boundaries is a networking-inherited problem class.
 
 ## Open tensions (carried)
 - **26-vs-20:** a full 1→2→3 deals 26 to a 20 HP enemy. HP is a lever but NOT the
@@ -97,6 +88,9 @@ made worse; not claimed as covered. The web smoke test (`fdf0fa9`) did exercise 
 AI end-to-end in a browser — the first real evidence that wiring works.
 
 ## Do NOT redo
+- Sub-frame input CLOSED (`5873244`): `envoy.gd` forwards BOTH edges because both fire
+  in one 30 Hz tick for any click under ~33 ms; the old if/elif dropped the release and
+  stranded `_melee_hold` in `charging` permanently. Don't re-collapse it to if/elif.
 - Fence amendment (permanent, advisory §1): a pre-gate freeze never blocks narrow
   fixes to defects that invalidate what the gate measures; see BRAIN principle 10.
 - `iframe_ticks_on_hit` is a CADENCE CAP, not a mercy window; don't "fix" the fixture

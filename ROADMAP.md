@@ -37,7 +37,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P25 | Weapon-owned state & switch semantics | PROPOSED | Holstered-state categories, switch-reset tech, ammo/heat — all gated on a real consumer |
 | P26 | Ranged weapon identity futures | PROPOSED | Distance bands, committed burst, hazards, marks; identity = changed decision, not new numbers |
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
-| P28 | Global combat-scale coherence pass | IN-MILESTONE (M1 batch step 5) | Rendered world scale vs authoritative combat geometry were never calibrated as one system |
+| P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
@@ -540,9 +540,35 @@ exactly what produced the M1 combo-cadence defect (BRAIN).
 only by the recorded audit above. Do not pre-build.
 
 ### P28 — Global combat-scale coherence pass
-**Status:** IN-MILESTONE — M1 combat batch **step 5**, a HARD BARRIER before any
-live-content calibration. Live tuning must not be calibrated against spatial values
-known to be incoherent.
+**Status: RESOLVED for M1 (2026-08-13) — hypothesis NARROWED BY BETTER MEASUREMENT,
+not confirmed.** The barrier is lifted; live tuning may proceed. Do NOT reopen without
+a concrete new spatial finding.
+**Outcome:** there was no need to globally rescale the combat system. Core-silhouette
+analysis (radial p50 across each model's torso band) plus a live playtest showed the
+defect was primarily **Ooze's undersized authored footprint** — 0.70 against a real
+body of ~1.45, roughly half — with minor cleanup elsewhere. The earlier "contact ≈3.2
+vs reach 2.0, therefore impossible" reading was an artifact of measuring mesh AABB,
+which is dominated by appendages: Fang's 2.32 is nose-to-tail length, Watcher's 2.19 is
+outstretched arms, the Envoy's 0.97 is a raised weapon. Measured at the core instead,
+Envoy/Fang/Watcher were already about right.
+**Adopted (Candidate A, PROVISIONAL/UNVALIDATED):** combat_radius Envoy 0.45 / Fang
+0.90 / Watcher 0.85 / Ooze 1.45; Ooze preferred_attack_distance 1.8 → 2.20; each
+family's minimum_attack_distance set to its contact distance. **Sword reach unchanged
+at 2.0 / 2.5** — max contact is 1.90, still inside it. Burn spread co-tuned for free
+through the shared `_contact_distance`. Candidate B (generous core, reach 2.4/2.9)
+was defined but deliberately NOT tested: only try it against a concrete spatial
+failure. No model scaling; world scale not reopened.
+**Playtest verdict (2026-08-13):** Ooze no longer swallows the Envoy at contact; all
+three distances believable in motion; world scale normal; enemy spacing fine; no new
+Burn/contact problem observed.
+**REVALIDATION TRIGGER (open):** there is no sword model or attack animation yet, so
+weapon-reach/contact ALIGNMENT is explicitly unvalidated — nothing shows a strike arc
+or a contact frame. Re-check reach/contact presentation once real attack visuals
+exist. Do NOT retune this geometry to solve an animation problem unless authoritative
+contact itself proves wrong.
+**Method retained below** for that revalidation and for any future scale question.
+
+**(Original brief, retained as method:)**
 **Origin (G-1, closed as falsified 2026-08-12):** the lunge clamp is mechanically
 correct. The defect is a mismatch between rendered world scale and authoritative
 combat geometry — combat radii, melee reach/contact distances, and rendered
