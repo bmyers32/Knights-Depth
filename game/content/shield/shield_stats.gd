@@ -38,7 +38,27 @@ extends Resource
 ## and therefore scales itself across Fang (0.90), Watcher (0.85) and Ooze (1.45)
 ## without per-family values. PROVISIONAL/UNVALIDATED.
 @export var bump_padding: float = 0.35
-@export var bump_knockback_distance: float = 1.5
+## BUMP is a short authored SLIDE, not KNOCKBACK (LEXICON): the target is pushed out
+## over bump_slide_ticks so the motion reads as a physical shove followed by a brief
+## authoritative slide -- "get off me" -- rather than the impulse of a heavy hit.
+## The field was renamed from bump_knockback_distance the moment it stopped using
+## knockback semantics; a name that lies about its mechanism is worse than a rename.
+## CANDIDATE B, VALIDATED FOR CURRENT USE (playtest 2026-08-13): 2.5 over 10 ticks =
+## 0.250 u/tick. Observed feel, verbatim: "reads sufficiently like a shove/slide instead
+## of ordinary knockback". That is the motion-language finding this revision existed to
+## answer, so it is answered; NO FURTHER TUNING without a specific future finding.
+## Validated means the motion READS RIGHT -- not that the numbers are optimal, and not
+## that every consequence was exercised. Comfortably below the sword charge lunge's
+## 0.3125 u/tick, so no easing framework is needed.
+## STILL UNTESTED, carried deliberately: B's 10-tick slide spans most of Fang's 12-tick
+## windup, so bumping a winding-up Fang can carry it out of reach and make the attack
+## whiff. Once, that is legitimate spacing payoff; if it ever becomes the COMMON case,
+## ordinary bump has become de facto attack denial and is leaking perfect parry's
+## mastery value into a no-timing baseline action. Candidate A (2.0 over 7) is the
+## one-edit step back if that is ever observed. A was drafted first for this reason and
+## was never playtested, so the concern is UNTESTED rather than resolved.
+@export var bump_distance: float = 2.5
+@export var bump_slide_ticks: int = 10
 ## Own absolute cooldown so holding, or re-raising, cannot continuously repel. While
 ## it is cooling down the shield still raises and blocks entirely normally -- the bump
 ## is the only thing suppressed. LOCKED RULE: the cooldown arms only when at least one

@@ -90,6 +90,17 @@ var _block_start_tick: Dictionary = {}  # actor_id -> int, tick of the last read
 ## the shield normally but performs no bump. Only the bump is gated -- blocking itself
 ## is never suppressed by this.
 var _shield_bump_ready_tick: Dictionary = {}
+## P16 BUMP slide: actor_id -> {direction, step_distance, end_tick}. A short AUTHORED
+## SLIDE, deliberately not KNOCKBACK (LEXICON: knockback is an immediate impulse; bump
+## is a controlled shove that resolves over several ticks so it reads as "get off me"
+## rather than "heavy hit").
+## Deliberately NOT stored in _melee_hold: that record's lifecycle is welded to attack
+## resolution -- completing one arms _next_fire_tick, resolves a hit, and advances combo
+## state. Driving a bumped enemy through it would rewrite that enemy's own attack
+## cooldown and desynchronise its committed windup, violating GAME-RULES §3's
+## non-flinching-displacement law. This record touches no attack state at all, so the
+## windup continues on its original timeline by construction rather than by care.
+var _bump_slides: Dictionary = {}
 ## P16 PARRY EXPOSED (LEXICON): actor_id -> absolute tick / multiplier. A temporary
 ## INCOMING-DAMAGE multiplier on an attacker that a defender perfect-parried.
 ## Deliberately NOT named "vulnerable": VULNERABLE already means an enemy action's
@@ -383,17 +394,18 @@ func set_damage_matrix(families: Dictionary, weak_multiplier: float, resist_mult
 ## Registers actor_id as a shield-capable blocker (GAME-RULES §3) — starts in the
 ## "ready" state with a full meter. Only entities with a registered shield process
 ## "block" Commands; unregistered actors silently ignore them (_apply_block).
-func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, break_recovery_delay_ticks: int, knockback_distance: float, bump_padding: float = 0.0, bump_knockback_distance: float = 0.0, bump_cooldown_ticks: int = 0, parry_window_ticks: int = 0, parry_exposure_ticks: int = 0, parry_damage_multiplier: float = 1.0) -> void:
+func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, break_recovery_delay_ticks: int, knockback_distance: float, bump_padding: float = 0.0, bump_distance: float = 0.0, bump_slide_ticks: int = 1, bump_cooldown_ticks: int = 0, parry_window_ticks: int = 0, parry_exposure_ticks: int = 0, parry_damage_multiplier: float = 1.0) -> void:
 	_shields[actor_id] = {
 		"meter_max": meter_max,
 		"regen_per_tick": regen_per_tick,
 		"break_recovery_delay_ticks": break_recovery_delay_ticks,
 		"knockback_distance": knockback_distance,
 		# P16 (all default to inert, so every pre-P16 caller keeps byte-identical
-		# behavior: a 0 bump_knockback_distance displaces nothing and a 0
+		# behavior: a 0 bump_distance displaces nothing and a 0
 		# parry_window_ticks can never contain a hit).
 		"bump_padding": bump_padding,
-		"bump_knockback_distance": bump_knockback_distance,
+		"bump_distance": bump_distance,
+		"bump_slide_ticks": bump_slide_ticks,
 		"bump_cooldown_ticks": bump_cooldown_ticks,
 		"parry_window_ticks": parry_window_ticks,
 		"parry_exposure_ticks": parry_exposure_ticks,
@@ -480,6 +492,10 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# cancel timing rule explicit-by-construction rather than incidental Command-
 	# array order; see _advance_melee_execution_tick).
 	events.append_array(_advance_pending_attacks())
+	# BUMP slides advance alongside pending attacks and BEFORE AI decisions, so a
+	# sliding actor's own move Command (issued below) is suppressed this same tick, and
+	# so the AI re-evaluates fresh geometry the tick after the slide completes.
+	_advance_bump_slides()
 	# AI (Phase D step 8 Phase 4) decides enemy Commands here, right before dispatch,
 	# so its output (move/attack) feeds through the exact same handlers below a
 	# player's own Commands would — no separate resolution path. It also appends any
@@ -495,6 +511,11 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 			# weapon lines own their movement identity as pure content. "windup"
 			# and "charging" are unaffected (free movement, explicit locked rule).
 			if _melee_hold.get(command.actor_id, {}).get("state", "") == "executing":
+				continue
+			# An actor mid-BUMP-slide does not steer: authored displacement replaces
+			# locomotion for its duration, the same rule the lunge follows. This
+			# suppresses MOVEMENT ONLY -- the actor's attack timeline is untouched.
+			if _bump_slides.has(command.actor_id):
 				continue
 			events.append(_apply_move(command, dt))
 		elif command.kind == "attack":
@@ -704,6 +725,7 @@ func _clear_reaction_state(actor_id: int) -> void:
 	# body, never a ledger that outlives it.
 	_parry_exposed_until_tick.erase(actor_id)
 	_parry_exposed_damage_multiplier.erase(actor_id)
+	_bump_slides.erase(actor_id)
 
 
 func _clear_clamps_targeting(dead_actor_id: int) -> void:
@@ -1505,7 +1527,7 @@ func _find_earliest_swept_hit(start: Vector3, end: Vector3, attacker_id: int, hi
 ## movement path, and deliberately no generic "reaction" framework for one consumer.
 ## Allies are never bumped (_is_valid_target), matching every other sweep in this file.
 func _apply_shield_bump(actor_id: int, shield: Dictionary) -> Array[Event]:
-	var distance: float = float(shield.get("bump_knockback_distance", 0.0))
+	var distance: float = float(shield.get("bump_distance", 0.0))
 	if distance <= 0.0 or tick_count < int(_shield_bump_ready_tick.get(actor_id, 0)):
 		return []  # inert content, or still cooling down -- blocking itself is unaffected
 	var padding: float = float(shield.get("bump_padding", 0.0))
@@ -1522,7 +1544,14 @@ func _apply_shield_bump(actor_id: int, shield: Dictionary) -> Array[Event]:
 		# Zero offset has no defined push direction; fall back to the blocker's facing
 		# so a perfectly overlapping actor is still moved deterministically.
 		var direction: Vector3 = _normalize_horizontal(offset, _facings.get(actor_id, Vector3(0.0, 0.0, -1.0)))
-		entities[target_id] = entities.get(target_id, Vector3.ZERO) + direction * distance
+		# Start an authored SLIDE rather than teleporting: the whole point of the
+		# revision is that the motion reads as a controlled shove over time.
+		var slide_ticks: int = max(1, int(shield.get("bump_slide_ticks", 1)))
+		_bump_slides[target_id] = {
+			"direction": direction,
+			"step_distance": distance / float(slide_ticks),
+			"steps_remaining": slide_ticks,
+		}
 		bumped.append(target_id)
 	if bumped.is_empty():
 		# LOCKED RULE: the cooldown arms only when at least one hostile is actually
@@ -1533,6 +1562,43 @@ func _apply_shield_bump(actor_id: int, shield: Dictionary) -> Array[Event]:
 		return []
 	_shield_bump_ready_tick[actor_id] = tick_count + int(shield.get("bump_cooldown_ticks", 0))
 	return [Event.new(tick_count, "shield_bumped", {"actor_id": actor_id, "bumped_ids": bumped})]
+
+
+## Advances every live BUMP slide by one authored step. Reuses the SAME segment sweep
+## the sword lunge uses (_find_earliest_lunge_contact), so bump inherits whatever the
+## project authoritatively treats as a blocker rather than inventing its own rules.
+## KNOWN LIMITATION, deliberately not fixed here (ROADMAP P20): that sweep only
+## considers actors of a DIFFERENT allegiance, and no walls or arena bounds exist
+## anywhere in this project. A bumped enemy can therefore slide through another enemy
+## and past the visual arena edge. Revalidate bump when body-blocking or world bounds
+## become real; do not pull that work forward for this Treat.
+## Autonomous-phase law (see tick()): sorted ids, no mutation of the collection while
+## iterating -- completed slides are collected first and erased afterwards.
+func _advance_bump_slides() -> void:
+	var actor_ids: Array = _bump_slides.keys()
+	actor_ids.sort()
+	var completed: Array = []
+	for actor_id in actor_ids:
+		var slide: Dictionary = _bump_slides[actor_id]
+		var start: Vector3 = entities.get(actor_id, Vector3.ZERO)
+		var end: Vector3 = start + slide.direction * float(slide.step_distance)
+		# Closing-direction semantics mean separation is never clamped by the source,
+		# so this only stops the slide against something it is genuinely moving INTO.
+		var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
+		if contact.is_empty():
+			entities[actor_id] = end
+		else:
+			entities[actor_id] = contact.entry_position
+			completed.append(actor_id)  # blocked: the slide ends here, never chases
+			continue
+		# Counted in STEPS rather than compared against an end tick: the record is
+		# created during one tick's Commands and first advances on the NEXT, so tick
+		# arithmetic here is off-by-one bait. A counter simply cannot drift.
+		slide.steps_remaining = int(slide.steps_remaining) - 1
+		if int(slide.steps_remaining) <= 0:
+			completed.append(actor_id)
+	for actor_id in completed:
+		_bump_slides.erase(actor_id)
 
 
 ## Resolves damage against a HELD shield (GAME-RULES §3: own break meter, knockback
@@ -1904,11 +1970,22 @@ func _find_earliest_lunge_contact(start: Vector3, end: Vector3, actor_id: int) -
 		f.y = 0.0
 		var c_coeff: float = f.length_squared() - contact * contact
 
+		# b_coeff < 0 means this segment is CLOSING the gap toward the candidate.
+		var b_coeff: float = 2.0 * f.dot(travel)
 		var t: float = INF
 		if c_coeff <= 0.0:
-			t = 0.0  # start is already within contact distance -- entry is immediate
+			# Already inside contact distance. CLOSING-DIRECTION SEMANTICS (locked):
+			# a body obstructs only movement that closes toward it -- you are never
+			# blocked by the thing you are moving AWAY from. Previously this branch
+			# clamped unconditionally ("entry is immediate"), which is right for an
+			# attacker lunging in but exactly backwards for separation: BUMP starts
+			# from inside contact by definition, so an unconditional clamp would pin
+			# the bumped actor in place and it would never move at all.
+			# Expressed here as truthful contact semantics rather than a "BUMP skips
+			# the clamp" special case -- the clamp simply never applied to separation.
+			if b_coeff < 0.0:
+				t = 0.0
 		elif a_coeff > _FACING_EPSILON_SQ:
-			var b_coeff: float = 2.0 * f.dot(travel)
 			var discriminant: float = b_coeff * b_coeff - 4.0 * a_coeff * c_coeff
 			if discriminant >= 0.0:
 				var t_candidate: float = (-b_coeff - sqrt(discriminant)) / (2.0 * a_coeff)

@@ -9,9 +9,13 @@ const PLAYER_ID := 0
 const ENEMY_ID := 1
 const DT := 1.0 / 30.0
 
+## Synthetic FIXTURE values -- these deliberately do NOT track shipped content. This
+## file protects the MECHANICAL laws (rising-edge trigger, cooldown, slide stepping,
+## parry routing); tuning is validated by playtest, never pinned by assertions here.
 const METER := 100.0
 const BUMP_PADDING := 0.35
-const BUMP_DISTANCE := 1.5
+const BUMP_DISTANCE := 2.0
+const BUMP_SLIDE_TICKS := 7
 const BUMP_COOLDOWN := 45
 const PARRY_WINDOW := 6
 const PARRY_EXPOSURE := 45
@@ -31,7 +35,8 @@ func before_each() -> void:
 	sim.add_entity(ENEMY_ID, Vector3(0, 0, -1.0), 0.0)
 	sim.register_combatant(ENEMY_ID, 500.0, &"test_enemy", 0, ENEMY_RADIUS, &"enemy")
 	sim.register_shield(PLAYER_ID, METER, 0.0, 30, 1.5,
-		BUMP_PADDING, BUMP_DISTANCE, BUMP_COOLDOWN, PARRY_WINDOW, PARRY_EXPOSURE, PARRY_MULTIPLIER)
+		BUMP_PADDING, BUMP_DISTANCE, BUMP_SLIDE_TICKS, BUMP_COOLDOWN,
+		PARRY_WINDOW, PARRY_EXPOSURE, PARRY_MULTIPLIER)
 	# Enemy melee, and a player sword for punishing a PARRY EXPOSED target.
 	sim.register_weapon(&"claw", 10.0, &"force", 2.0, 90.0, 0.0)
 	sim.register_weapon(&"sword", 10.0, &"force", 3.0, 90.0, 0.0)
@@ -64,8 +69,13 @@ func test_bump_fires_on_the_rising_edge_and_displaces_a_close_hostile() -> void:
 	var events := _block(true)
 	assert_eq(_of(events, "shield_bumped").size(), 1)
 	assert_eq(_of(events, "shield_bumped")[0].payload.bumped_ids, [ENEMY_ID])
+	assert_almost_eq(sim.entities[ENEMY_ID].z, before.z, 0.001,
+		"BUMP is a SLIDE, not an impulse: nothing has teleported on the raise tick")
+	for _i in range(BUMP_SLIDE_TICKS):
+		sim.tick([], DT)
 	assert_almost_eq(sim.entities[ENEMY_ID].z, before.z - BUMP_DISTANCE, 0.001,
-		"the hostile is pushed directly away from the blocker")
+		"the full authored distance is delivered over bump_slide_ticks, directly away")
+	assert_false(sim._bump_slides.has(ENEMY_ID), "and the slide record clears on completion")
 
 
 func test_bump_requires_no_timing_and_ignores_hostiles_beyond_contact_plus_padding() -> void:
@@ -245,15 +255,50 @@ func test_later_tick_projectile_parries_normally_through_the_shared_gate() -> vo
 	assert_eq(_of(events, "parried").size(), 1, "and parries normally -- parry is not melee-only")
 
 
-func test_bump_displacing_the_attacker_out_of_reach_yields_no_parry_and_no_error() -> void:
-	# Enemy adjacent, so the raise bumps it; its attack then resolves from the new
-	# position and simply whiffs. Block is processed before the enemy's Command.
+func test_bump_slide_carries_an_attacker_out_of_reach_so_its_attack_whiffs() -> void:
+	# The spacing payoff (GAME-RULES §3): displacement is non-flinching, so the attack
+	# is never cancelled -- it simply resolves later from a position out of its reach.
 	sim.entities[ENEMY_ID] = Vector3(0, 0, -1.0)
-	sim.set_equipped_weapon(ENEMY_ID, &"claw")
-	var events := _block(true, [Command.new(sim.tick_count, ENEMY_ID, "attack", {"aim": Vector3(0, 0, 1)})])
-	assert_eq(_of(events, "shield_bumped").size(), 1, "the bump landed")
-	assert_eq(_of(events, "blocked").size(), 0, "the displaced attack never connected")
-	assert_eq(_of(events, "parried").size(), 0, "so there is nothing to parry -- and no error")
+	_block(true)
+	for _i in range(BUMP_SLIDE_TICKS):
+		sim.tick([], DT)
+	assert_almost_eq(sim.entities[ENEMY_ID].z, -3.0, 0.001, "slid beyond the claw's 2.0 reach")
+	var events := sim.tick([_enemy_attacks()], DT)
+	assert_eq(_of(events, "blocked").size(), 0, "the attack whiffs from its new position")
+	assert_eq(_of(events, "hit").size(), 0)
+	assert_eq(_of(events, "parried").size(), 0, "nothing connected, so there is nothing to parry")
+
+
+## REQUIRED (§3 non-flinching-displacement law): a BUMP during a committed windup must
+## not cancel, reset, delay or desynchronise it. The attack's own timeline continues
+## untouched while the actor slides, and resolves from wherever it ends up.
+func test_bump_during_a_committed_windup_never_disturbs_its_timeline() -> void:
+	sim.entities[ENEMY_ID] = Vector3(0, 0, -1.0)
+	sim.register_weapon(&"bite", 10.0, &"force", 2.0, 90.0, 0.0, 45)
+	sim.register_ai(ENEMY_ID, &"bite", Vector3(0, 0, -1.0), 2.0, 0.5, 12, 20.0, 40.0)
+	sim.debug_set_ai_active(ENEMY_ID)
+	sim.tick([], DT)  # AI commits to a windup
+	assert_true(sim._ai_attack_fire_tick.has(ENEMY_ID), "sanity: a windup is committed")
+
+	var start_tick: int = int(sim._ai_attack_start_tick[ENEMY_ID])
+	var fire_tick: int = int(sim._ai_attack_fire_tick[ENEMY_ID])
+	var cooldown_before: int = int(sim._next_fire_tick.get(ENEMY_ID, 0))
+
+	var events := _block(true)  # bump it mid-windup
+	assert_eq(_of(events, "shield_bumped").size(), 1, "sanity: the bump landed")
+	assert_eq(int(sim._ai_attack_start_tick[ENEMY_ID]), start_tick, "windup start is untouched")
+	assert_eq(int(sim._ai_attack_fire_tick[ENEMY_ID]), fire_tick, "fire tick is untouched")
+	assert_eq(int(sim._next_fire_tick.get(ENEMY_ID, 0)), cooldown_before,
+		"and the slide never arms the enemy's own attack cooldown")
+	assert_eq(_of(events, "windup_interrupted").size(), 0, "BUMP never interrupts")
+	assert_eq(_of(events, "flinched").size(), 0, "and never flinches")
+
+	var during: Array[Event] = []
+	while sim.tick_count <= fire_tick:
+		during.append_array(sim.tick([], DT))
+		assert_eq(_of(during, "windup_interrupted").size(), 0,
+			"the committed windup runs its ORIGINAL timeline throughout the slide")
+	assert_false(sim._ai_attack_fire_tick.has(ENEMY_ID), "it fired on schedule, from wherever it now is")
 
 
 # --- 4. determinism / inertness -----------------------------------------------------

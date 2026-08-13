@@ -83,7 +83,8 @@ Deviation → Synchronization instability → **Conjecture** (unproven, being te
 |---|---|
 | **FLINCH** | A reaction STATE on an enemy: its current action is canceled and it yields no movement or attack until a deterministic recovery deadline. |
 | **INTERRUPT** | The CONSEQUENCE of an action being canceled — not a state. An interrupted attack arms its normal cooldown. |
-| **KNOCKBACK** | Displacement resolved through the combat pipeline. Independent of FLINCH: neither implies the other. |
+| **KNOCKBACK** | An IMMEDIATE impulse displacement resolved through the combat pipeline, applied in a single tick. Independent of FLINCH: neither implies the other. |
+| **BUMP** | A short AUTHORED SLIDE over several ticks, produced by raising a shield next to a hostile. Spacing only: it is non-flinching displacement and never cancels, delays or desynchronises a committed windup. Distinct from KNOCKBACK by DURATION and intent — impulse vs controlled shove. |
 | **KNOCKDOWN** | (Future) a stronger reaction than FLINCH. Unimplemented; reserved so it never gets used loosely for FLINCH. |
 | **VULNERABLE** | An enemy ACTION MODE (per authored window) meaning "a qualifying hit may FLINCH me now". Susceptibility to reactions — **not** a damage modifier. |
 | **PARRY EXPOSED** | A temporary INCOMING-DAMAGE MULTIPLIER on an attacker, earned by a defender's perfect parry. Strictly damage: it does **not** imply EXPLOIT susceptibility, does not FLINCH, and is not a status instance. Refreshes on re-earning; never stacks. |

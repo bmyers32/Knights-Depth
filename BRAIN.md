@@ -44,6 +44,35 @@ switch-reset tech, charge sequencing, the deferred multi-hit model, and every M3
 networking/replay test, where "has this actor finished acting?" becomes a question asked
 across a wire.
 
+### Count steps for executions; reserve tick deadlines for expiry
+**Incident (M1, P16 bump slide):** the bump's authored displacement stored
+`end_tick = tick_count + slide_ticks` and stepped while `tick_count < end_tick`. It
+delivered **six** of seven steps. The record is created during one tick's *Command*
+phase but first advances in the *next* tick's autonomous phase, so the window the
+arithmetic describes and the window the stepping actually occupies are offset by one.
+Fixed by storing `steps_remaining` and decrementing — after which the count cannot
+drift no matter which phase creates or advances it. **Mechanism:** a tick deadline
+answers "has the moment passed?", which is a question about *state*. An execution that
+must perform exactly N discrete steps is asking "how much work is left?", which is a
+question about *progress* — and reconstructing progress from two timestamps silently
+imports every phase-boundary offset between them. The two questions look
+interchangeable because both are expressed in ticks. **The rule:** absolute tick
+deadlines stay correct and preferred for EXPIRY/ELIGIBILITY state — cooldowns
+(`_next_fire_tick`), FLINCHED recovery, PARRY EXPOSED, pressure contribution expiry;
+they compose (that is what makes `max(recovery, cooldown)` free) and there is no step
+count to lose. But for an EXECUTION that must perform exactly N per-tick steps —
+especially when creation and first advancement fall in different phases of the same
+tick — carry explicit progress (`steps_remaining`, a step index) or use authoritative
+`Event` timestamps, never start/end arithmetic. **Failure if ignored:** the execution
+silently delivers N−1 steps, which reads as a *tuning* problem ("the bump feels short")
+rather than an arithmetic one, so it gets "fixed" by inflating the authored distance
+and the real defect ships. **Applies elsewhere:** this was the THIRD phase-boundary
+off-by-one in a single session — see the entry below on `Event.tick`, and the
+same-tick-transition entry further down. It will recur in any future multi-tick
+authored execution: staged multi-hit charges (P27), recoil/dash displacement (P26),
+M2's elevator transitions, and any M3 reconciliation that replays a partially-completed
+execution across a wire.
+
 ### Events carry the authoritative timestamp, not tick_count
 **Incident (M1, same session):** a fixture recorded `sim.tick_count` immediately after
 `sim.tick()` returned and asserted a flinch deadline equalled `hit_tick +
