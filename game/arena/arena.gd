@@ -131,7 +131,7 @@ func _ready() -> void:
 	sim.set_status_priority(priority_table.priority)
 
 	var shield: ShieldStats = ContentDB.get_resource(&"shield", &"default")
-	sim.register_shield(envoy.actor_id, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance)
+	sim.register_shield(envoy.actor_id, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance, shield.bump_padding, shield.bump_knockback_distance, shield.bump_cooldown_ticks, shield.parry_window_ticks, shield.parry_exposure_ticks, shield.parry_damage_multiplier)
 
 
 func _register_enemies() -> void:
@@ -260,6 +260,10 @@ func _report_events(events: Array[Event]) -> void:
 				print("blocked: ", event.payload)
 			"shield_broken":
 				print("shield broken: ", event.payload)
+			"shield_bumped":
+				print("shield bumped: ", event.payload)
+			"parried":
+				print("PARRIED: ", event.payload)
 			"block_rejected":
 				print("block rejected: ", event.payload)
 			"projectile_fired":

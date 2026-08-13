@@ -78,6 +78,21 @@ Deviation → Synchronization instability → **Conjecture** (unproven, being te
 **Counterexample** (its persistence invalidates the Proof — the Axiom is afraid) →
 "Correction no longer possible."
 
+### Combat reactions & states (never aliased — each names ONE thing)
+| Term | Meaning |
+|---|---|
+| **FLINCH** | A reaction STATE on an enemy: its current action is canceled and it yields no movement or attack until a deterministic recovery deadline. |
+| **INTERRUPT** | The CONSEQUENCE of an action being canceled — not a state. An interrupted attack arms its normal cooldown. |
+| **KNOCKBACK** | Displacement resolved through the combat pipeline. Independent of FLINCH: neither implies the other. |
+| **KNOCKDOWN** | (Future) a stronger reaction than FLINCH. Unimplemented; reserved so it never gets used loosely for FLINCH. |
+| **VULNERABLE** | An enemy ACTION MODE (per authored window) meaning "a qualifying hit may FLINCH me now". Susceptibility to reactions — **not** a damage modifier. |
+| **PARRY EXPOSED** | A temporary INCOMING-DAMAGE MULTIPLIER on an attacker, earned by a defender's perfect parry. Strictly damage: it does **not** imply EXPLOIT susceptibility, does not FLINCH, and is not a status instance. Refreshes on re-earning; never stacks. |
+
+**PARRY EXPOSED vs VULNERABLE is the distinction most likely to be blurred.**
+VULNERABLE is about *what reactions a hit can trigger*; PARRY EXPOSED is about *how
+much damage a hit deals*. An actor may be either, both, or neither, and neither one
+implies the other. Do not introduce a shared "vulnerability" identifier covering both.
+
 ## Visual / Motion Language (channel law — GAME-RULES §3)
 Damage types own telegraphs and hit effects. Entity STATES own **silhouette and
 motion**:

@@ -86,6 +86,20 @@ var _shield_meter: Dictionary = {}  # actor_id -> float
 var _shield_break_ticks_remaining: Dictionary = {}  # actor_id -> int
 var _block_held_prev: Dictionary = {}  # actor_id -> bool, previous tick's held input (edge detection)
 var _block_start_tick: Dictionary = {}  # actor_id -> int, tick of the last ready->held transition
+## P16 shield bump: actor_id -> int, ABSOLUTE tick before which a rising edge raises
+## the shield normally but performs no bump. Only the bump is gated -- blocking itself
+## is never suppressed by this.
+var _shield_bump_ready_tick: Dictionary = {}
+## P16 PARRY EXPOSED (LEXICON): actor_id -> absolute tick / multiplier. A temporary
+## INCOMING-DAMAGE multiplier on an attacker that a defender perfect-parried.
+## Deliberately NOT named "vulnerable": VULNERABLE already means an enemy action's
+## FLINCH susceptibility, and these must never be conflated -- PARRY EXPOSED is damage
+## only and confers no EXPLOIT susceptibility. Not a status instance either (it never
+## touches the single-slot/spread architecture).
+## REFRESH, never stack: one record per actor; a new parry overwrites the deadline with
+## a fresh full window and re-sets (never compounds) the multiplier.
+var _parry_exposed_until_tick: Dictionary = {}
+var _parry_exposed_damage_multiplier: Dictionary = {}
 var _combat_radius: Dictionary = {}  # actor_id -> float, contact-spread proximity radius (combatants only)
 var _allegiance: Dictionary = {}  # actor_id -> StringName ("player" | "enemy"), for spread allegiance rules
 ## actor_id -> {id: String, ticks_remaining: int, next_tick: int, applied_tick: int}.
@@ -369,12 +383,21 @@ func set_damage_matrix(families: Dictionary, weak_multiplier: float, resist_mult
 ## Registers actor_id as a shield-capable blocker (GAME-RULES §3) — starts in the
 ## "ready" state with a full meter. Only entities with a registered shield process
 ## "block" Commands; unregistered actors silently ignore them (_apply_block).
-func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, break_recovery_delay_ticks: int, knockback_distance: float) -> void:
+func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, break_recovery_delay_ticks: int, knockback_distance: float, bump_padding: float = 0.0, bump_knockback_distance: float = 0.0, bump_cooldown_ticks: int = 0, parry_window_ticks: int = 0, parry_exposure_ticks: int = 0, parry_damage_multiplier: float = 1.0) -> void:
 	_shields[actor_id] = {
 		"meter_max": meter_max,
 		"regen_per_tick": regen_per_tick,
 		"break_recovery_delay_ticks": break_recovery_delay_ticks,
 		"knockback_distance": knockback_distance,
+		# P16 (all default to inert, so every pre-P16 caller keeps byte-identical
+		# behavior: a 0 bump_knockback_distance displaces nothing and a 0
+		# parry_window_ticks can never contain a hit).
+		"bump_padding": bump_padding,
+		"bump_knockback_distance": bump_knockback_distance,
+		"bump_cooldown_ticks": bump_cooldown_ticks,
+		"parry_window_ticks": parry_window_ticks,
+		"parry_exposure_ticks": parry_exposure_ticks,
+		"parry_damage_multiplier": parry_damage_multiplier,
 	}
 	_shield_state[actor_id] = "ready"
 	_shield_meter[actor_id] = meter_max
@@ -677,6 +700,10 @@ func _clear_attack_input_state(actor_id: int) -> Array[Event]:
 func _clear_reaction_state(actor_id: int) -> void:
 	_flinched_until_tick.erase(actor_id)
 	_pressure_contributions.erase(actor_id)
+	# PARRY EXPOSED dies with the actor too -- it is a temporary state on a living
+	# body, never a ledger that outlives it.
+	_parry_exposed_until_tick.erase(actor_id)
+	_parry_exposed_damage_multiplier.erase(actor_id)
 
 
 func _clear_clamps_targeting(dead_actor_id: int) -> void:
@@ -1143,6 +1170,53 @@ func _select_flinch_route(target_id: int, capability: String) -> String:
 	return ""
 
 
+## PARRY EXPOSED lookup — 1.0 (no effect) unless a live exposure record exists. Read
+## lazily at hit resolution; there is no per-tick scan, matching the pressure/flinch
+## discipline of storing an absolute deadline and asking only when it matters.
+func _parry_exposure_multiplier(actor_id: int) -> float:
+	if tick_count >= int(_parry_exposed_until_tick.get(actor_id, -1)):
+		return 1.0
+	return float(_parry_exposed_damage_multiplier.get(actor_id, 1.0))
+
+
+## P16 perfect parry. The window is measured from the shield's RISING EDGE, so it is
+## earned by raising the shield into the attack rather than by holding it.
+##
+## NON-RETROACTIVITY INVARIANT (locked, deliberate): parry state is read at the moment
+## a hit resolves, and phase order within a tick is preserved untouched. Projectiles
+## resolve at the TOP of tick() (_advance_projectiles), before Commands, so a
+## projectile arriving on the same tick the shield rises sees the PRE-RAISE shield
+## state and is neither blocked nor parried by it. Later projectiles use the
+## established shield/parry state normally through this same shared gate. This is NOT
+## a "melee-only parry" rule -- it is ordinary non-retroactivity, and the fix is never
+## to reorder projectile resolution for this feature.
+##
+## REFRESH, never stack: a newly earned parry overwrites the deadline with a fresh FULL
+## window and re-sets the multiplier. Remaining duration is never added and multipliers
+## never compound -- one record per actor. This deliberately diverges from flinch's
+## non-extension rule: a defender-earned window should renew every time it is earned,
+## whereas flinch must not be extendable by the attacker.
+func _try_parry(defender_id: int, attacker_id: int) -> Array[Event]:
+	var shield: Dictionary = _shields.get(defender_id, {})
+	var window: int = int(shield.get("parry_window_ticks", 0))
+	if window <= 0 or not _block_start_tick.has(defender_id):
+		return []
+	if tick_count - int(_block_start_tick[defender_id]) > window:
+		return []
+	var exposure: int = int(shield.get("parry_exposure_ticks", 0))
+	var multiplier: float = float(shield.get("parry_damage_multiplier", 1.0))
+	if exposure <= 0 or multiplier <= 1.0:
+		return []  # inert content -- a parry with no payload is not an event
+	_parry_exposed_until_tick[attacker_id] = tick_count + exposure
+	_parry_exposed_damage_multiplier[attacker_id] = multiplier
+	return [Event.new(tick_count, "parried", {
+		"defender_id": defender_id,
+		"attacker_id": attacker_id,
+		"until_tick": tick_count + exposure,
+		"damage_multiplier": multiplier,
+	})]
+
+
 func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary, resolved_aim: Vector3, weapon_id: String, attack_profile_id: String = "") -> Array[Event]:
 	# i-frames fully negate a hit: no damage, no knockback, no status, no meter
 	# interaction — the attack simply doesn't land (locked invariant).
@@ -1153,14 +1227,25 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 
 	var family: StringName = _families[target_id]
 	var multiplier: float = _damage_multiplier(weapon.damage_type, family)
-	var damage: float = weapon.damage * multiplier
+	# P16 PARRY EXPOSED: the narrowest possible seam -- ONE multiply, folded in beside
+	# the damage matrix rather than a new mitigation stage. Because it lands before the
+	# post-mitigation figure is recorded, parry damage feeds the pressure ledger and
+	# every downstream consumer naturally, with no special-casing anywhere.
+	# Damage ONLY: this never confers EXPLOIT/flinch susceptibility (see LEXICON).
+	var damage: float = weapon.damage * multiplier * _parry_exposure_multiplier(target_id)
 	var target_position: Vector3 = entities.get(target_id, Vector3.ZERO)
 
 	# A held shield redirects damage into its own meter instead of health — no health
 	# loss, no weapon knockback, no i-frames (distinct defenses; block must not also
 	# grant invulnerability). See _resolve_blocked_hit.
 	if _shield_state.get(target_id, "ready") == "held":
-		return [_resolve_blocked_hit(target_id, target_position, resolved_aim, attacker_id, damage)]
+		var blocked: Array[Event] = [_resolve_blocked_hit(target_id, target_position, resolved_aim, attacker_id, damage)]
+		# P16 perfect parry: a hit landing inside the window measured from the shield's
+		# own rising edge (_block_start_tick, which already existed) marks the ATTACKER
+		# PARRY EXPOSED. The meter still drained above, deliberately -- a parry's only
+		# extra reward is the offensive punish window, never meter efficiency.
+		blocked.append_array(_try_parry(target_id, attacker_id))
+		return blocked
 
 	var hp_before: float = _health[target_id]
 	var remaining_health: float = hp_before - damage
@@ -1411,6 +1496,45 @@ func _find_earliest_swept_hit(start: Vector3, end: Vector3, attacker_id: int, hi
 	return best_target_id
 
 
+## P16 shield bump — displaces every living HOSTILE already inside contact range plus
+## the authored padding, away from the blocker. Eligibility is
+## `distance <= _contact_distance(blocker, hostile) + bump_padding`, so the authored
+## number means EXTRA PROXIMITY BEYOND both actors' combat footprints and scales itself
+## across families of different size rather than needing per-family radii.
+## Reuses the same direct displacement write knockback already performs — no new
+## movement path, and deliberately no generic "reaction" framework for one consumer.
+## Allies are never bumped (_is_valid_target), matching every other sweep in this file.
+func _apply_shield_bump(actor_id: int, shield: Dictionary) -> Array[Event]:
+	var distance: float = float(shield.get("bump_knockback_distance", 0.0))
+	if distance <= 0.0 or tick_count < int(_shield_bump_ready_tick.get(actor_id, 0)):
+		return []  # inert content, or still cooling down -- blocking itself is unaffected
+	var padding: float = float(shield.get("bump_padding", 0.0))
+	var origin: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var bumped: Array = []
+	var candidate_ids: Array = _families.keys().filter(func(id): return _is_valid_target(actor_id, id))
+	candidate_ids.sort()  # determinism -- dictionary order must never leak into event order
+	for target_id in candidate_ids:
+		var offset: Vector3 = entities.get(target_id, Vector3.ZERO) - origin
+		offset.y = 0.0
+		var reach: float = _contact_distance(actor_id, target_id) + padding
+		if offset.length_squared() > reach * reach:
+			continue
+		# Zero offset has no defined push direction; fall back to the blocker's facing
+		# so a perfectly overlapping actor is still moved deterministically.
+		var direction: Vector3 = _normalize_horizontal(offset, _facings.get(actor_id, Vector3(0.0, 0.0, -1.0)))
+		entities[target_id] = entities.get(target_id, Vector3.ZERO) + direction * distance
+		bumped.append(target_id)
+	if bumped.is_empty():
+		# LOCKED RULE: the cooldown arms only when at least one hostile is actually
+		# displaced. It exists to RATE-LIMIT THE SPACING EFFECT, not to punish an empty
+		# shield raise -- a rising edge with no eligible hostile produces no bump and
+		# spends no cooldown. Found by test: arming on every edge meant raising the
+		# shield in open space locked out the next real bump.
+		return []
+	_shield_bump_ready_tick[actor_id] = tick_count + int(shield.get("bump_cooldown_ticks", 0))
+	return [Event.new(tick_count, "shield_bumped", {"actor_id": actor_id, "bumped_ids": bumped})]
+
+
 ## Resolves damage against a HELD shield (GAME-RULES §3: own break meter, knockback
 ## on break). Full absorption, zero spill: meter clamps at 0 on overflow, the target
 ## takes no health damage that swing — poor meter management is punished by the
@@ -1495,7 +1619,14 @@ func _apply_block(command: Command) -> Array[Event]:
 			# branch); same-tick-as-hit: the hit already resolved, only remaining
 			# lunge/recovery is canceled; post-hit (recovery): hit already stands.
 			# One uniform cancel call correctly produces all three outcomes.
-			return _cancel_open_melee_hold(actor_id, true)
+			#
+			# P16 shield bump fires on THIS rising edge -- spacing utility, never
+			# timing-gated, so it is available to any player rather than being a
+			# second skill check. Its own cooldown gates ONLY the bump: the shield
+			# above is already raised and blocks normally either way.
+			var events: Array[Event] = _apply_shield_bump(actor_id, shield)
+			events.append_array(_cancel_open_melee_hold(actor_id, true))
+			return events
 	elif state == "held":
 		if not held:
 			_shield_state[actor_id] = "ready"
