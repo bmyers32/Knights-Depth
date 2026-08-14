@@ -30,7 +30,28 @@ extends Resource
 @export var damage_type: StringName = &"force"
 @export var speed: float = 8.0
 @export var max_lifetime_ticks: int = 60
-@export var hit_radius: float = 0.4
+## PROJECTILE VOLUME — the bolt's OWN radius, and nothing else. PROVISIONAL/UNVALIDATED,
+## re-derived 2026-08-14 (P29 item 3) from 0.40 to 0.20.
+##
+## Before the geometry correction this number was doing two jobs: describing the bolt AND
+## silently compensating for a collision test that never consulted the target's body. The
+## body term is now explicit (collision resolves at hit_radius + target.combat_radius), so
+## the compensation had to come back out or every body would be counted twice.
+##
+## 0.20, not the 0.15 first proposed: presentation is now tied 1:1 to this value
+## (ProjectileTracer draws exactly hit_radius at VISUAL_SCALE 1.0), and the earlier 0.18
+## tracer was already reported too small in playtest — 0.15 would have regressed that
+## finding through the visual law itself.
+##
+## READABILITY DISCIPLINE (binding): if 0.20 still reads poorly, fix it with NON-WIDTH
+## presentation levers only — trail, persistence, brightness/contrast, departure and
+## impact cues. Never widen collision to buy visibility; lateral radius is gameplay
+## geometry, not a display setting.
+##
+## This is the BASELINE for GunStats. wand_A (gun_stats.tres) inherits it. The dormant
+## carousel guns (gun_pierce_A/arc/umbral) explicitly author the pre-correction 0.4 and
+## are deliberately left alone -- recorded as content debt at ROADMAP P26.
+@export var hit_radius: float = 0.20
 @export var knockback_distance: float = 0.0
 @export var fire_interval_ticks: int = 15
 ## Optional status payload (GAME-RULES §3) — see SwordStats.status_id. No M1 gun

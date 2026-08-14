@@ -511,6 +511,56 @@ a similar dual-trigger shape, and any M3 netcode reconciliation path where a
 server correction and a normal tick advance the same actor's state in the same
 frame.
 
+### A measurement must prove its mechanism fired before its numbers mean anything
+**Incident (P29 iteration, 2026-08-14):** a diagnostic script written to measure projectile
+hit geometry printed a clean, plausible, fully-formatted table — every case reading
+`measured_effective = 0.00`. The number was interpretable ("only dead-centre shots hit"),
+which is exactly what made it dangerous. In fact `SimWorld.tick()` had rejected every
+Command: the script passed an untyped `Array` where a typed `Array[Command]` was required,
+the engine reported it on **stderr**, and the run had been invoked with `2>/dev/null`. No
+projectile was ever spawned. The instrument measured nothing and said so in a format
+indistinguishable from a result. **Mechanism:** an instrument has two independent failure
+modes — the thing being measured can be wrong, or the measurement can never have happened
+— and a well-formatted zero looks like the first while being the second. Suppressing the
+channel where the engine reports the second is what makes them indistinguishable.
+**Failure if ignored:** a diagnosis reports a false finding with full confidence, and the
+"fix" that follows is aimed at a mechanism that was never running — the most expensive
+possible outcome of measuring, worse than not measuring at all. **The rule:** before
+trusting any measurement, assert that its mechanism FIRED — a non-zero count of the
+intermediate the measurement depends on (here: projectiles actually spawned). Never run a
+diagnostic with stderr suppressed. A result whose "no effect" case and whose "never ran"
+case print identically is not yet an instrument. **Applies elsewhere:** every future
+tools/ diagnostic, every calibration probe, the M2 gen-time budget measurement, and any
+M3 latency/reconciliation harness — all of which will be read for their numbers by a
+session that did not write them. Corollary, learned the same day: this is the
+line-count-cap lesson's sibling — there the tool measured a subtly different quantity;
+here the tool measured nothing at all.
+
+### Enforce a rule with the same notion of the thing the rest of the sim uses
+**Incident (P29, 2026-08-14, twice in one feature):** (A) action-band overlap was
+enforced by a content-lint test using a sorted-adjacent `next.min >= prev.max`
+inequality, while the selector decided eligibility with half-open/terminal-inclusive
+`band_contains()`. The two disagreed on a degenerate band sitting on another's inclusive
+maximum: the lint APPROVED a repertoire the selector treated as ambiguous. (B) swept
+projectile collision compared distance-to-CENTRE against the weapon's radius alone, while
+Burn contact-spread, the melee lunge clamp and P16's bump all consulted `combat_radius`,
+the authoritative body. A wand shot needed to pass within 0.40 of an Ooze whose authored
+body is 1.45 — shots crossing three-quarters of the visible body were "clean misses", and
+it surfaced as the vague playtest complaint "apparent hits that miss". **Mechanism:** when
+a rule is enforced (or a contact resolved) using a *re-derived* notion of the underlying
+concept rather than the shared one, the two definitions agree on ordinary inputs and
+diverge exactly at the boundaries — which is where the interesting bugs and the entire
+point of the rule live. **Failure if ignored:** the guard certifies the thing it exists to
+forbid, or one subsystem silently disagrees with every other about what "contact" means,
+and the symptom reaches the player as feel ("it looks like it hit") rather than as an
+error. **The rule:** one predicate, one source of truth, shared by the decider and every
+enforcer — `band_contains()` for eligibility, `combat_radius` for bodies. If a check needs
+its own copy of the definition, that is the defect. **Applies elsewhere:** every future
+spatial query (M2 room/segment bounds, P20 walls and body-blocking, seeking projectiles),
+any second content lint, and M3 server-side validation, where a server re-deriving "was
+that a legal hit" differently from the sim IS the desync.
+
+
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
 (no incident produced them) and NOT law yet. Governance ladder — the only path to

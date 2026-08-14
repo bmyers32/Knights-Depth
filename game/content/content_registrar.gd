@@ -118,4 +118,4 @@ static func register_enemy_ai(sim: SimWorld, actor_id: int, enemy_key: StringNam
 			"max_range": resolve_max_range(action, stats),
 			"windup_ticks": action.windup_ticks,
 		})
-	sim.register_ai(actor_id, repertoire, position, stats.preferred_attack_distance, stats.minimum_attack_distance, stats.detection_radius, stats.leash_radius)
+	sim.register_ai(actor_id, repertoire, position, stats.preferred_attack_distance, stats.minimum_attack_distance, stats.detection_radius, stats.leash_radius, stats.engagement_delay_ticks)

@@ -23,6 +23,18 @@ func show_telegraph(color: Color, duration_seconds: float) -> void:
 	_telegraph.flash(color, duration_seconds)
 
 
+## P29 item 2: the authored VULNERABLE window just opened on this actor's committed
+## action. Driven by the arena from telegraph tick + action content -- this actor never
+## computes combat timing itself (Prime Directive 1).
+func show_vulnerable_window() -> void:
+	_telegraph.mark_vulnerable()
+
+
+## The committed action was cancelled; stop advertising a window that no longer exists.
+func clear_telegraph() -> void:
+	_telegraph.clear()
+
+
 ## A stable point to aim toward (roughly body-center height) — independent of exactly
 ## where on the model's silhouette the cursor's raycast landed. First-pass placement,
 ## eyeballed against the model's measured bounding box; revisit visually at the arena

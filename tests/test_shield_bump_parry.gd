@@ -240,10 +240,25 @@ func test_same_tick_projectile_sees_pre_raise_shield_state() -> void:
 	assert_eq(sim._shield_state[PLAYER_ID], "held", "the shield is nonetheless up from this tick on")
 
 
+## SPAWN DISTANCE RE-BASELINED 2026-08-14 (P29 item 3, authoritative projectile geometry).
+## DELIBERATE, and it is a PRECONDITION restoration, not an assertion change: both
+## assertions below are untouched and still demand exactly one block and one parry.
+##
+## This test's isolation depends on the bolt being STILL IN FLIGHT when the shield rises.
+## Once the swept hit test began summing the target's body (0.40 bolt + 0.40 player = 0.80
+## effective, was 0.40), the bolt from 1.6 units away started connecting during the three
+## "still in flight" setup ticks — i.e. before the rising edge — so it landed as an
+## ordinary unblocked hit and there was nothing to parry. Exactly BRAIN's "reordering a
+## shared decision invalidates test SETUPS, not just assertions", in spatial form.
+##
+## 2.5 restores the intended timeline against the corrected geometry: contact needs
+## 1.7 units of travel at 0.267/tick, so the bolt arrives on travel step 7 — after the
+## rising edge on step 4, inside the four post-block ticks, and 3 ticks into the 6-tick
+## parry window.
 func test_later_tick_projectile_parries_normally_through_the_shared_gate() -> void:
 	sim.register_gun(&"bolt", 10.0, &"force", 8.0, 60, 0.4, 0.0)
 	sim.set_equipped_weapon(ENEMY_ID, &"bolt")
-	sim.entities[ENEMY_ID] = Vector3(0, 0, -1.6)  # several travel ticks at 8.0 u/s
+	sim.entities[ENEMY_ID] = Vector3(0, 0, -2.5)  # several travel ticks at 8.0 u/s
 	sim.tick([Command.new(sim.tick_count, ENEMY_ID, "attack", {"aim": Vector3(0, 0, 1)})], DT)
 	for _i in range(3):
 		sim.tick([], DT)                             # bolt still in flight

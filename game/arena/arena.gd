@@ -82,6 +82,14 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## band gap is diagnosable on sight instead of presenting as "the enemy mysteriously
 ## stopped attacking." Pure observability, default off.
 @export var debug_show_action_selection: bool = false
+## P29 item 4 — the wand EXPLOIT-vs-NONE A/B (ROADMAP 9.14, deferred since M1).
+## true flips every registered GUN's flinch_capability from its authored value to "none"
+## for this run, so the same build plays both arms of the comparison by toggling ONE
+## export. Deliberately NOT a redesign: no new capability values, no change to pressure
+## contribution, no content edit — the authored .tres is untouched and the flag only
+## rewrites the RESOLVED profile at setup, exactly like debug_flinch_threshold_override.
+## Seconds to flip, invariant across runs; the comparison itself is the player's to make.
+@export var debug_wand_flinch_none: bool = false
 
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
@@ -102,6 +110,11 @@ var _projectile_visuals: Dictionary = {}
 ## SimWorld stays authoritative for position, collision, hit and expiry, and presentation
 ## never feeds anything back -- a tracer/sim disagreement is always a TRACER bug.
 var _projectile_tracers: Dictionary = {}
+## actor_id -> {"opens_tick": int, "ends_tick": int, "marked": bool} for the P29 vulnerable
+## cue. Absolute sim ticks derived from the telegraph Event's OWN tick plus authored
+## content -- Event.tick is the authoritative timestamp (BRAIN), never tick_count sampled
+## afterwards. Purely presentation scheduling; reads sim state, never writes it.
+var _windup_cues: Dictionary = {}
 ## Resolved once at setup from the loadout's combo/charge-capable SwordStats (Slice B
 ## charge-ready cue) — mirrors _enemy_telegraphs' resolve-once pattern, so
 ## _report_events never touches ContentDB. Stays Color.WHITE (never used) if no
@@ -140,6 +153,8 @@ func _ready() -> void:
 	# scene, no generic VFX framework.
 	_cache_gun_visuals(loadout_weapon_ids)
 
+	_apply_wand_flinch_ab()
+
 	if debug_loadout_override:
 		# Loud on purpose (AGENTS.md Invariable #2) -- a silent override would read
 		# as the shipped loadout during a playtest instead of a deliberately-active
@@ -165,6 +180,23 @@ func _ready() -> void:
 	sim.register_shield(envoy.actor_id, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance, shield.bump_padding, shield.bump_distance, shield.bump_slide_ticks, shield.bump_cooldown_ticks, shield.parry_window_ticks, shield.parry_exposure_ticks, shield.parry_damage_multiplier)
 
 
+## P29 item 4: the B arm of the wand EXPLOIT-vs-NONE comparison. Rewrites the RESOLVED
+## profile only (sim's own table), never the .tres — so the authored content stays the A
+## arm and flipping back is just clearing the export. Loud on purpose: an A/B that
+## silently reports the wrong arm is worse than no A/B at all (BRAIN: never stamp a
+## verdict the human hasn't rendered — that starts with knowing which build was played).
+func _apply_wand_flinch_ab() -> void:
+	if not debug_wand_flinch_none:
+		return
+	var flipped: Array[String] = []
+	for weapon_id: String in sim._weapons:
+		var weapon: Dictionary = sim._weapons[weapon_id]
+		if weapon.get("resolution", "") == "projectile" and weapon.get("flinch_capability", "none") != "none":
+			weapon.flinch_capability = "none"
+			flipped.append(weapon_id)
+	print("!!! A/B ARM B ACTIVE — gun flinch_capability forced to NONE for: ", flipped, " !!!")
+
+
 ## Resolves tracer speed/colour for any GunStats in the given ids. Colour comes from the
 ## damage-type channel the telegraph already uses (GAME-RULES §3 channel law: types own
 ## colour, presentation reads it and never invents one).
@@ -175,6 +207,7 @@ func _cache_gun_visuals(weapon_ids: Array[StringName]) -> void:
 			_projectile_visuals[String(weapon_id)] = {
 				"speed": weapon.speed,
 				"color": PROJECTILE_TRACER_FALLBACK_COLOR,
+				"hit_radius": weapon.hit_radius,
 			}
 
 
@@ -204,11 +237,18 @@ func _register_enemies() -> void:
 			_action_telegraphs[String(action_id)] = {
 				"color": action.telegraph_color,
 				"duration_seconds": action.windup_ticks / Engine.physics_ticks_per_second,
+				# P29 item 2: the authored window, as offsets from windup start. Resolved
+				# here at setup from CONTENT -- the telegraph Event names its action_id, so
+				# presentation derives the whole phase timeline without a new Event.
+				"vulnerable_start": action.vulnerable_start_tick,
+				"vulnerable_end": action.vulnerable_end_tick,
+				"windup_ticks": action.windup_ticks,
 			}
 			if action.attack_resolution == &"projectile":
 				_projectile_visuals[String(action_id)] = {
 					"speed": action.projectile_speed,
 					"color": action.telegraph_color,
+					"hit_radius": action.projectile_hit_radius,
 				}
 
 
@@ -231,6 +271,7 @@ func _physics_process(delta: float) -> void:
 		var actor: Node3D = _enemies[actor_id]
 		actor.sync_from_sim(sim.entities.get(actor_id, actor.position))
 	_report_events(events)
+	_advance_windup_cues()
 	if debug_show_attack_state:
 		var description: Dictionary = sim.debug_describe_melee_state(envoy.actor_id)
 		if not description.is_empty():
@@ -264,6 +305,27 @@ func _process_debug_weapon_cycle() -> void:
 	_debug_tab_held_prev = tab_held
 
 
+## Fires the ONE distinct vulnerable-window cue at the exact sim tick the authored window
+## opens, and retires the schedule when the windup ends. Content truth is NORMAL early ->
+## VULNERABLE late -> fire, so the early phase deliberately gets NO special signal: NORMAL
+## is ordinary susceptibility, and cueing it would promise the player something the sim
+## does not actually grant.
+##
+## tick_count advances as the LAST statement of SimWorld.tick(), so the tick just
+## simulated is tick_count - 1 (BRAIN: "Events carry the authoritative timestamp").
+func _advance_windup_cues() -> void:
+	var simulated_tick: int = sim.tick_count - 1
+	for actor_id: int in _windup_cues.keys():
+		var cue: Dictionary = _windup_cues[actor_id]
+		if simulated_tick > int(cue.ends_tick):
+			_windup_cues.erase(actor_id)
+			continue
+		if not bool(cue.marked) and simulated_tick >= int(cue.opens_tick):
+			cue.marked = true
+			if _enemies.has(actor_id):
+				_enemies[actor_id].show_vulnerable_window()
+
+
 ## Spawns a cosmetic tracer for a shot the sim has already created. Presentation is
 ## handed the spawn state and EXTRAPOLATES (dead-reckons) from it — this is not
 ## interpolation between sim states, because there is no second sim state to interpolate
@@ -275,7 +337,9 @@ func _spawn_tracer(payload: Dictionary) -> void:
 		return  # unregistered visual -- a missing tracer is a cosmetic gap, never a sim error
 	var tracer: ProjectileTracer = PROJECTILE_TRACER.instantiate()
 	add_child(tracer)
-	tracer.launch(payload.get("position", Vector3.ZERO), payload.get("direction", Vector3.FORWARD), float(visuals.speed), visuals.color)
+	# hit_radius comes from CONTENT, resolved once at setup -- never from the Event, whose
+	# payload must stay free of tunables (and whose shape the backward-compat allow-list pins).
+	tracer.launch(payload.get("position", Vector3.ZERO), payload.get("direction", Vector3.FORWARD), float(visuals.speed), visuals.color, float(visuals.get("hit_radius", 0.0)))
 	_projectile_tracers[int(payload.get("projectile_id", -1))] = tracer
 
 
@@ -317,6 +381,12 @@ func _report_events(events: Array[Event]) -> void:
 				print("hit: ", event.payload)
 			"windup_interrupted":
 				print("windup interrupted: ", event.payload)
+				# A cancelled action must stop advertising a window that no longer exists
+				# -- the sim already erased its susceptibility along with the windup.
+				var interrupted_id: int = event.payload.get("actor_id")
+				_windup_cues.erase(interrupted_id)
+				if _enemies.has(interrupted_id):
+					_enemies[interrupted_id].clear_telegraph()
 			"flinched":
 				print("FLINCHED: ", event.payload)
 			"died":
@@ -331,6 +401,7 @@ func _report_events(events: Array[Event]) -> void:
 				elif _enemies.has(actor_id):
 					_enemies[actor_id].queue_free()
 					_enemies.erase(actor_id)
+					_windup_cues.erase(actor_id)
 					# _action_telegraphs is deliberately NOT pruned here: since P29 it is
 					# keyed by ACTION, not actor, so it is resolved-once CONTENT shared by
 					# every actor of that family. Erasing it on one death would silently
@@ -346,6 +417,13 @@ func _report_events(events: Array[Event]) -> void:
 				if _enemies.has(actor_id) and _action_telegraphs.has(action_id):
 					var telegraph: Dictionary = _action_telegraphs[action_id]
 					_enemies[actor_id].show_telegraph(telegraph.color, telegraph.duration_seconds)
+					_windup_cues.erase(actor_id)
+					if int(telegraph.vulnerable_start) >= 0 and int(telegraph.vulnerable_end) >= int(telegraph.vulnerable_start):
+						_windup_cues[actor_id] = {
+							"opens_tick": event.tick + int(telegraph.vulnerable_start),
+							"ends_tick": event.tick + int(telegraph.windup_ticks),
+							"marked": false,
+						}
 			"attack_rejected":
 				print("attack rejected: ", event.payload)
 			"attack_absorbed":

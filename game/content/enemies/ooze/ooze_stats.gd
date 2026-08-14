@@ -62,3 +62,6 @@ extends Resource
 @export var minimum_attack_distance: float = 1.9
 @export var detection_radius: float = 10.0
 @export var leash_radius: float = 18.0
+## Engagement opener: see FangStats.engagement_delay_ticks. Ooze stays at 0 (P29
+## iteration changes the Watcher only).
+@export var engagement_delay_ticks: int = 0

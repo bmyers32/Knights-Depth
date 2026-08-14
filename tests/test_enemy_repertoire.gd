@@ -339,6 +339,179 @@ func test_multi_action_selection_is_deterministic() -> void:
 			assert_eq(events_a[j].payload, events_b[j].payload)
 
 
+# --- engagement opener (P29 iteration item 1) ---------------------------------------
+# Playtest finding: "first-engagement firing reads mechanically range-triggered." A fresh
+# actor's _next_fire_tick defaults to 0, so crossing a band edge started a windup on that
+# very tick. The opener arms that SAME gate at acquisition -- no parallel clock.
+
+const OPENER: int = 10
+
+
+func _register_opener_enemy(s: SimWorld, position: Vector3, delay: int = OPENER, detection: float = 8.0) -> void:
+	s.add_entity(ENEMY_ID, position, 0.0)
+	s.register_combatant(ENEMY_ID, 500.0, &"watcher", 0, 0.85, &"enemy")
+	s.register_weapon(NEAR, 8.0, &"force", NEAR_MAX, 90.0, 0.0, 20)
+	var repertoire: Array[Dictionary] = [{"id": NEAR, "min_range": 0.0, "max_range": NEAR_MAX, "windup_ticks": NEAR_WINDUP}]
+	s.register_ai(ENEMY_ID, repertoire, position, 1.5, 0.0, detection, 100.0, delay)
+
+
+## All THREE acquisition paths route through the one _acquire_aggro seam, so all three
+## must produce the identical deadline. Before centralisation an opener armed at only the
+## passive path would have been bypassable simply by shooting from outside detection range.
+func test_every_acquisition_path_arms_the_same_opener_deadline() -> void:
+	var deadlines: Dictionary = {}
+
+	# (1) passive detection
+	var passive := SimWorld.new()
+	_register_player(passive, Vector3.ZERO)
+	_register_opener_enemy(passive, Vector3(0, 0, -1.0))
+	passive.tick([], 1.0 / 30.0)
+	deadlines["passive"] = int(passive._next_fire_tick.get(ENEMY_ID, -1))
+
+	# (2) hit-establishes-aggro, from outside detection range
+	var by_hit := SimWorld.new()
+	_register_player(by_hit, Vector3.ZERO)
+	_register_opener_enemy(by_hit, Vector3(0, 0, -1.0), OPENER, 0.1)
+	by_hit.set_damage_matrix({}, 1.5, 0.5)
+	by_hit.register_weapon(&"poke", 1.0, &"force", 12.0, 180.0, 0.0, 0)
+	by_hit.set_equipped_weapon(PLAYER_ID, &"poke")
+	assert_eq(by_hit._ai_state[ENEMY_ID], "idle", "sanity: detection alone must not have acquired")
+	by_hit.tick([Command.new(by_hit.tick_count, PLAYER_ID, "attack", {"aim": Vector3(0, 0, -1)})], 1.0 / 30.0)
+	deadlines["hit"] = int(by_hit._next_fire_tick.get(ENEMY_ID, -1))
+
+	# (3) status-application-establishes-aggro, also from outside detection range
+	var by_status := SimWorld.new()
+	_register_player(by_status, Vector3.ZERO)
+	_register_opener_enemy(by_status, Vector3(0, 0, -1.0), OPENER, 0.1)
+	by_status.set_damage_matrix({}, 1.5, 0.5)
+	by_status.register_status(&"burn", 1.0, 2, 10)
+	by_status.register_weapon(&"brand", 1.0, &"force", 12.0, 180.0, 0.0, 0, &"burn", 1.0)
+	by_status.set_equipped_weapon(PLAYER_ID, &"brand")
+	by_status.tick([Command.new(by_status.tick_count, PLAYER_ID, "attack", {"aim": Vector3(0, 0, -1)})], 1.0 / 30.0)
+	deadlines["status"] = int(by_status._next_fire_tick.get(ENEMY_ID, -1))
+
+	for path in deadlines:
+		assert_eq(deadlines[path], OPENER, "'%s' acquisition must arm the same opener deadline" % path)
+
+
+## max(), never assignment: re-acquiring must not SHORTEN a cooldown already running, or
+## disengage/re-engage becomes an attack-speed exploit.
+func test_reacquisition_can_never_shorten_a_live_cooldown() -> void:
+	sim = SimWorld.new()
+	_register_player(sim, Vector3(0, 0, -50.0))
+	_register_opener_enemy(sim, Vector3(0, 0, -1.0))
+	sim._next_fire_tick[ENEMY_ID] = 500  # a long cooldown already running
+	sim.entities[PLAYER_ID] = Vector3.ZERO  # now inside detection -> acquires
+	sim.tick([], 1.0 / 30.0)
+	assert_eq(int(sim._next_fire_tick[ENEMY_ID]), 500,
+		"acquisition must never pull a longer live cooldown forward")
+
+
+## Only a GENUINE inactive -> active transition arms the opener. Chip damage on an enemy
+## already fighting you must not repeatedly re-suppress its attacks.
+func test_a_hit_on_an_already_active_enemy_does_not_rearm_the_opener() -> void:
+	sim = SimWorld.new()
+	_register_player(sim, Vector3.ZERO)
+	_register_opener_enemy(sim, Vector3(0, 0, -1.0))
+	sim.set_damage_matrix({}, 1.5, 0.5)
+	sim.register_weapon(&"poke", 1.0, &"force", 12.0, 180.0, 0.0, 0)
+	sim.set_equipped_weapon(PLAYER_ID, &"poke")
+	sim.tick([], 1.0 / 30.0)  # passive acquisition arms the opener
+	assert_eq(sim._ai_state[ENEMY_ID], "active")
+	var armed: int = int(sim._next_fire_tick[ENEMY_ID])
+
+	for _i in 3:
+		sim.tick([Command.new(sim.tick_count, PLAYER_ID, "attack", {"aim": Vector3(0, 0, -1)})], 1.0 / 30.0)
+	assert_eq(int(sim._next_fire_tick[ENEMY_ID]), armed,
+		"hits on an ALREADY-active enemy must not touch its readiness gate -- re-arming would let chip damage lock an enemy out of attacking")
+
+
+## The opener delays the ATTACK, never the approach -- that is the whole feel it buys.
+func test_the_opener_suppresses_the_attack_but_not_the_approach() -> void:
+	sim = SimWorld.new()
+	_register_player(sim, Vector3.ZERO)
+	sim.add_entity(ENEMY_ID, Vector3(0, 0, -3.0), 2.0)  # real move speed, outside the band
+	sim.register_combatant(ENEMY_ID, 500.0, &"watcher", 0, 0.85, &"enemy")
+	sim.register_weapon(NEAR, 8.0, &"force", NEAR_MAX, 90.0, 0.0, 20)
+	var repertoire: Array[Dictionary] = [{"id": NEAR, "min_range": 0.0, "max_range": NEAR_MAX, "windup_ticks": NEAR_WINDUP}]
+	sim.register_ai(ENEMY_ID, repertoire, Vector3(0, 0, -3.0), 1.5, 0.0, 8.0, 100.0, OPENER)
+
+	var opening: Array[Event] = _tick(sim, OPENER)
+	assert_eq(opening.filter(func(e): return e.kind == "attack_telegraph").size(), 0,
+		"no attack may commit during the opener")
+	assert_gt(opening.filter(func(e): return e.kind == "moved").size(), 0,
+		"but the enemy must still be closing -- the opener is a commitment delay, not a freeze")
+	assert_gt(_tick(sim, 40).filter(func(e): return e.kind == "attack_telegraph").size(), 0,
+		"and it attacks normally once the opener elapses")
+
+
+## A zero delay must be a true no-op, so Fang and Ooze stay byte-identical (this is what
+## keeps tests/test_ai_backward_compat.gd valid).
+func test_zero_delay_is_a_true_noop() -> void:
+	sim = SimWorld.new()
+	_register_player(sim, Vector3.ZERO)
+	_register_opener_enemy(sim, Vector3(0, 0, -1.0), 0)
+	var events: Array[Event] = sim.tick([], 1.0 / 30.0)
+	assert_eq(events.filter(func(e): return e.kind == "attack_telegraph").size(), 1,
+		"with no opener authored, acquisition and commitment happen on the same tick exactly as before")
+
+
+# --- telegraph timing (P29 readability verification) --------------------------------
+
+## VERIFIED, not assumed: the telegraph Event is stamped with the SAME tick the action is
+## committed on, with no dead ticks between decision and cue. Commitment and the Event
+## append share one statement block in _decide_attack_commands, and _decide_ai_commands
+## mutates the tick's event array in place -- but "the code looks adjacent" is not
+## evidence, so this asserts the observable stamps.
+##
+## This is the foundation the windup-phase cue rests on: presentation derives the whole
+## phase timeline from Event.tick, so a one-tick emission lag would silently skew every
+## derived window by one tick (BRAIN: "Events carry the authoritative timestamp").
+func test_telegraph_is_emitted_on_the_exact_commitment_tick() -> void:
+	sim = _make_at(6.4)
+	var events: Array[Event] = sim.tick([], 1.0 / 30.0)
+	var telegraphs := events.filter(func(e): return e.kind == "attack_telegraph")
+	assert_eq(telegraphs.size(), 1, "sanity: exactly one commitment this tick")
+	if telegraphs.size() != 1:
+		return
+	assert_eq(telegraphs[0].tick, int(sim._ai_attack_start_tick[ENEMY_ID]),
+		"the telegraph must carry the windup's own start tick -- zero dead ticks between decision and cue")
+	assert_eq(int(sim._ai_attack_fire_tick[ENEMY_ID]) - telegraphs[0].tick, FAR_WINDUP,
+		"and the full authored windup must remain ahead of the player at the moment the cue appears")
+
+
+## The vulnerable window is CLIENT-DERIVABLE from what already ships: the telegraph names
+## its action_id, and that action's vulnerable_start/end_tick are content the driver
+## already resolves at setup. Window = [Event.tick + start, Event.tick + end]. This test
+## pins the derivation so a future payload change cannot silently break the cue.
+func test_vulnerable_window_is_derivable_from_the_telegraph_payload_alone() -> void:
+	var s: SimWorld = _real_watcher_at(6.0)
+	var events: Array[Event] = s.tick([], 1.0 / 30.0)
+	var telegraph: Event = null
+	for event in events:
+		if event.kind == "attack_telegraph":
+			telegraph = event
+	assert_not_null(telegraph)
+	if telegraph == null:
+		return
+	var action_id: String = String(telegraph.payload.get("action_id", ""))
+	var action: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", action_id)
+	var window_opens: int = telegraph.tick + action.vulnerable_start_tick
+	var window_closes: int = telegraph.tick + action.vulnerable_end_tick
+
+	# Prove the derived window matches the sim's own susceptibility ruling tick-for-tick.
+	for offset in range(0, action.windup_ticks + 1):
+		var probe_tick: int = telegraph.tick + offset
+		var derived_vulnerable: bool = probe_tick >= window_opens and probe_tick <= window_closes
+		while s.tick_count < probe_tick:
+			s.tick([], 1.0 / 30.0)
+		if s.tick_count != probe_tick:
+			continue
+		var sim_mode: String = s._flinch_mode_of(ENEMY_ID)
+		assert_eq(sim_mode == "vulnerable", derived_vulnerable,
+			"tick %d: presentation's derived window must agree with the sim's authoritative susceptibility" % offset)
+
+
 # --- named integration fixture: the REAL Watcher, production path -------------------
 # BRAIN, "Convenience-zeroed defenses in tests hide the interactions worth testing": the
 # synthetic fixtures above protect SIMULATION laws, and every one of them hand-builds its

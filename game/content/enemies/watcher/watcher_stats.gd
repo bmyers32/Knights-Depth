@@ -77,3 +77,10 @@ extends Resource
 @export var minimum_attack_distance: float = 1.3
 @export var detection_radius: float = 10.0
 @export var leash_radius: float = 18.0
+## ENGAGEMENT OPENER (P29 iteration) -- see FangStats.engagement_delay_ticks for the
+## mechanism. 10 is PROVISIONAL and explicitly UNVALIDATED: it is a first value chosen to
+## be perceptible without stalling the encounter (a third of the survey's 34-tick windup),
+## and the re-playtest judges the FEEL of having an opener at all. A poor first number is
+## not evidence the approach is wrong -- retune here before concluding anything about
+## architecture.
+@export var engagement_delay_ticks: int = 10

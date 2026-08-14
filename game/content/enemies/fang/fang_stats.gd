@@ -90,3 +90,14 @@ extends Resource
 ## straight-line retreat from any plausible re-anchor point gives 30+ units of room.
 @export var detection_radius: float = 10.0
 @export var leash_radius: float = 18.0
+## ENGAGEMENT OPENER (P29 iteration, 2026-08-14). Sim ticks to wait after a GENUINE
+## inactive->active acquisition before this family may commit its first attack. Arms the
+## existing shared readiness gate (SimWorld._next_fire_tick) rather than a parallel clock,
+## so it composes with cooldown for free and suppresses only the ATTACK -- the enemy keeps
+## approaching during it. Answers the playtest finding that first-engagement firing "reads
+## mechanically range-triggered": before this, crossing a band edge started a windup on
+## that very tick, because a fresh actor's readiness gate defaults to ready.
+## Re-acquisition uses max(), so it can never shorten a cooldown already running.
+## 0 = off, and Fang/Ooze deliberately stay at 0: this iteration changes ONE family, so
+## the re-playtest can attribute any felt difference to the Watcher alone.
+@export var engagement_delay_ticks: int = 0

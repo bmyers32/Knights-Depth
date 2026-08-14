@@ -440,7 +440,7 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 ## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
 ## than preferred -> approach, closer than minimum -> back away, inside the band ->
 ## stop. Since P29 they govern MOVEMENT ONLY; attack eligibility is the action band.
-func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float) -> void:
+func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0) -> void:
 	# The TERMINAL band is the one with the largest max_range — the only band that
 	# includes its own maximum (see _select_action). Derived, never authored, so content
 	# cannot accidentally declare two terminals or none.
@@ -470,6 +470,7 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 		"minimum_attack_distance": minimum_attack_distance,
 		"detection_radius": detection_radius,
 		"leash_radius": leash_radius,
+		"engagement_delay_ticks": engagement_delay_ticks,
 	}
 	# Equip the LOWEST-BAND action so _equipped_weapon is never empty for an AI actor.
 	# Chosen from authored band values, not from array position — element 0 is not
@@ -506,6 +507,36 @@ func _lint_band_overlap(actor_id: int, resolved: Array[Dictionary]) -> void:
 			if band_contains(a, shared) and band_contains(b, shared):
 				push_warning("register_ai [actor %d]: bands '%s' [%.3f, %.3f] and '%s' [%.3f, %.3f] both cover distance %.3f -- overlapping bands make action selection ambiguous (GAME-RULES §3), which repertoire ORDER must never silently resolve" % [
 					actor_id, a.id, a.min_range, a.max_range, b.id, b.min_range, b.max_range, shared])
+
+
+## THE one aggro-acquisition seam (P29 iteration). Before this existed, three separate
+## sites flipped _ai_state to "active" -- passive detection, hit-establishes-aggro, and
+## status-establishes-aggro -- and anything that had to happen "when an enemy engages"
+## would have had to be repeated at all three or be silently bypassable (get shot from
+## outside detection range and the engagement opener simply would not arm).
+##
+## Returns true only for a GENUINE inactive -> active transition. An already-active enemy
+## is a no-op: a hit or status landing on an enemy already fighting you is not a fresh
+## engagement, and must never re-arm the opener (that would let repeated chip damage
+## repeatedly suppress an enemy's attacks). Non-AI actors are ignored, preserving the
+## _ai_state.has() guard the hit/status callers used to carry inline.
+func _acquire_aggro(actor_id: int) -> bool:
+	if not _ai_state.has(actor_id) or _ai_state[actor_id] == "active":
+		return false
+	_ai_state[actor_id] = "active"
+	# ENGAGEMENT OPENER (P29 iteration, playtest finding: "first-engagement firing reads
+	# mechanically range-triggered"). A fresh actor's _next_fire_tick defaults to 0, so
+	# the instant the player crossed a band edge the cooldown was ALREADY satisfied and a
+	# windup began that same tick. This arms the existing shared readiness gate instead of
+	# adding a parallel clock, so the delay composes with cooldown for free and suppresses
+	# only the ATTACK -- the enemy still approaches during it, which is the point: it
+	# closes on you first, then commits.
+	# max(), never assignment: re-acquisition must never SHORTEN a cooldown already
+	# running (disengage/re-engage would otherwise be an attack-speed exploit).
+	var delay: int = int(_ai_tuning.get(actor_id, {}).get("engagement_delay_ticks", 0))
+	if delay > 0:
+		_next_fire_tick[actor_id] = max(int(_next_fire_tick.get(actor_id, 0)), tick_count + delay)
+	return true
 
 
 ## Debug-only, setup-time direct write (arena.gd's debug_force_aggro) -- called ONCE
@@ -1389,8 +1420,8 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	# passive-acquisition only; a landed hit is an unambiguous "the player is right
 	# here." Harmless no-op for a non-AI target (_ai_state.has check) or a lethal hit
 	# (the target dies this same resolution and AI already skips dead actors).
-	if _allegiance.get(attacker_id, &"enemy") == &"player" and _ai_state.has(target_id):
-		_ai_state[target_id] = "active"
+	if _allegiance.get(attacker_id, &"enemy") == &"player":
+		_acquire_aggro(target_id)
 
 	var hit_payload: Dictionary = {
 		"attacker_id": attacker_id,
@@ -1593,7 +1624,22 @@ func _find_earliest_swept_hit(start: Vector3, end: Vector3, attacker_id: int, hi
 		if travel_length_sq > _FACING_EPSILON_SQ:
 			t = clamp((target_position - start).dot(travel) / travel_length_sq, 0.0, 1.0)
 		var closest_point: Vector3 = start + travel * t
-		if closest_point.distance_squared_to(target_position) <= hit_radius * hit_radius and t < best_t:
+		# AUTHORITATIVE GEOMETRY (P29 iteration item 3, playtest: "apparent hits that
+		# miss"). The test is projectile radius + the TARGET'S BODY -- a Minkowski sum --
+		# not the projectile radius alone. Before this, a shot had to pass within
+		# hit_radius of a target's CENTRE: measured at 0.40 against an Ooze whose authored
+		# body is 1.45, so shots visually crossing three-quarters of the body registered
+		# as clean misses (tools/diagnose_projectile_geometry.gd).
+		#
+		# combat_radius is the SAME authoritative body radius _contact_distance already
+		# gives Burn's contact-spread, the melee lunge clamp and P16's bump. Every other
+		# contact system in the sim consulted it; only this one did not. Reusing it means
+		# the correction scales per family for free and adds no new tunable.
+		#
+		# The sum lives ONLY in collision space: the tracer draws the projectile radius
+		# alone, because that is the object the player sees (see ProjectileTracer).
+		var effective_radius: float = hit_radius + _combat_radius.get(target_id, 0.0)
+		if closest_point.distance_squared_to(target_position) <= effective_radius * effective_radius and t < best_t:
 			best_t = t
 			best_target_id = target_id
 
@@ -1880,7 +1926,7 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		spawn_to_player.y = 0.0
 		if spawn_to_player.length() > tuning.detection_radius:
 			return []  # no re-acquisition path except idle -> active (locked)
-		_ai_state[actor_id] = "active"
+		_acquire_aggro(actor_id)
 		state = "active"
 
 	# state == "active": leash check first (measured from the fixed anchor, not this
@@ -2107,8 +2153,8 @@ func _apply_status(target_id: int, status_id: StringName, application_source: St
 		# reaches this function at all (_advance_status_ticks resolves ticks
 		# directly), so ticking alone can never (re-)establish aggro — only an
 		# application can.
-		if _allegiance.get(source_actor_id, &"enemy") == &"player" and _ai_state.has(target_id):
-			_ai_state[target_id] = "active"
+		if _allegiance.get(source_actor_id, &"enemy") == &"player":
+			_acquire_aggro(target_id)
 	var payload: Dictionary = {
 		"target_id": target_id,
 		"status_id": new_id,

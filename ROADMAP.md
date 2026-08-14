@@ -37,7 +37,8 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P25 | Weapon-owned state & switch semantics | PROPOSED | Holstered-state categories, switch-reset tech, ammo/heat — all gated on a real consumer |
 | P26 | Ranged weapon identity futures | PROPOSED | Distance bands, committed burst, hazards, marks; identity = changed decision, not new numbers |
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
-| P29 | Enemy action repertoire / distance-conditioned selection | BUILT 2026-08-14, verdict not yet rendered | Watcher gains `watcher_survey`; bands + tracer shipped; playtest pending |
+| P29 | Enemy action repertoire / distance-conditioned selection | **ITERATE (concept validated) 2026-08-14** | Ranged action works; closure blocked on opener feel, windup/arrival readability, wand A/B |
+| P30 | Wand charge profile | **NEAR-TERM (weapon docket)** | Promoted 2026-08-14; likely home for committed ranged flinch authority, pending the P29 item-4 A/B |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -504,6 +505,18 @@ sequence states more cheaply than the normal economy permits.
 **Why deferred:** one combo weapon and one gun cannot demonstrate a switch economy.
 
 ### P26 — Ranged weapon identity futures
+**CONTENT DEBT — pre-correction projectile radii (recorded 2026-08-14, P29 item 3).**
+Projectile collision now resolves at `projectile.hit_radius + target.combat_radius`, so
+`hit_radius` means the projectile's OWN volume and nothing else. The two ACTIVE values
+were re-derived accordingly (wand_A 0.40 -> 0.20, watcher_survey 0.50 -> 0.20).
+`gun_pierce_A`, `gun_arc_A` and `gun_umbral_A` still author the PRE-CORRECTION 0.4. They
+are deliberately untouched: they are dev-carousel only, and dormant numeric content is not
+retuned without a consumer. **Trigger:** re-derive them when any of those weapons enters
+an active loadout or a validation slice. Recorded here ONCE rather than annotated into
+each dormant resource — the note belongs with the ranged-weapon docket, not scattered
+across content nobody is reading.
+
+
 **Idea:** Ranged depth arrives through content-authored projectile / commitment / control
 behavior, never a universal projectile behavior graph. Identity = a CHANGED COMBAT
 DECISION; one new lifecycle behavior at a time. The M1 wand is deliberately the simple
@@ -620,10 +633,23 @@ capsule extents.
 before flinch exists would tune spacing against combat that has no reaction layer yet.
 
 ### P29 — Enemy action repertoire / distance-conditioned action selection
-**Status:** BUILT 2026-08-14 — implementation complete and suite-green; the fun
-VERDICT IS NOT YET RENDERED (a human playtest decides it, never an inference: BRAIN,
-"Never stamp a verdict the human hasn't rendered"). Opened at M1 close (2026-08-13);
-explicitly NOT a retroactive M1 prerequisite — M1 passed its re-gate without it.
+**Status:** **ITERATE — concept validated.** Playtest verdict rendered by Breon
+2026-08-14, verbatim:
+> "P29 — ITERATE, concept validated. The Watcher's ranged action materially improves
+> group-combat pressure, feels fair, preserves both close and ranged approaches, and
+> strengthens the Watcher's 'read the windup' identity. P29 is not closed because the
+> current implementation does not yet make its higher-skill interaction windows legible:
+> the vulnerable interval and intentional parry timing could not be identified during
+> play, the projectile's visual/authoritative relationship produces apparent hits that
+> miss, and first-engagement firing reads mechanically range-triggered. Required
+> iteration is limited to engagement-opener feel using content levers first,
+> windup/projectile readability, and the wand EXPLOIT-vs-NONE comparison. Selection
+> architecture remains unchanged unless the re-playtest provides evidence that these
+> narrower changes are insufficient."
+
+Per M1 precedent the iteration items are REQUIRED closure work; **the next verdict comes
+from the re-playtest, never from the suite going green.** Selection architecture is NOT
+reopened. Opened at M1 close (2026-08-13); explicitly NOT a retroactive M1 prerequisite.
 **Idea:** enemies gain a repertoire of authored actions and choose between them by
 situation (distance first). The AI's new power is narrowly "which of my authored
 actions applies here"; everything about an action — reach, windup, damage, telegraph,
@@ -670,11 +696,83 @@ this entry, decides whether that worked.**
   the test and nothing else — the fall-through behaviour is already specified and already
   covered by `test_interior_band_gap_falls_through_to_ordinary_locomotion`. Overlap stays
   permanently forbidden.
+**ITERATION LANDED 2026-08-14 (pre-replay).** Items 1-4 of the required closure work are
+implemented and suite-green; the verdict remains ITERATE until the re-playtest renders a
+new one.
+
+**REPLAY ATTRIBUTION FENCE (binding on how the next session is read).** The next arena
+session is NOT a pure wand-capability comparison against the original P29 build. Four
+things changed underneath it since the first playtest: projectile collision geometry,
+projectile visual radius, the Watcher engagement delay, and vulnerability presentation.
+Treat the replay as **validation of the current composed P29 iteration**; the wand
+EXPLOIT/NONE toggle isolates only that ONE variable within the new, frozen substrate.
+Do NOT attribute global feel changes solely to the capability toggle.
+
+**Remaining P29 queue — entirely arena-side, nothing left to build:**
+1. wand basic EXPLOIT vs NONE A/B (`debug_wand_flinch_none`), pressure contribution unchanged.
+2. Watcher opener feel at `engagement_delay_ticks = 10`.
+3. Vulnerable-window cue legibility.
+4. Projectile visibility + arrival readability + dodge feel under corrected geometry.
+5. Q8 parry re-ask (below).
+
+**STOP-LINE:** no further pre-playtest changes of any kind. No selection-architecture
+work, no HP/damage/flinch-threshold tuning, no charge implementation, and no additional
+projectile-radius tuning before the replay. The substrate under the A/B is trustworthy
+and stays still until it is measured.
+
+**Q8 (parry reach) — BLOCKED UPSTREAM, NOT FAILED (2026-08-14).** The question was
+"after parrying a survey at range, can you reach the Watcher while PARRY EXPOSED is still
+useful?" It could not be answered because no perceptible ARRIVAL cue existed to time a
+shield-raise against — the player could not deliberately choose the parry moment, so
+nothing about parry REACH was ever exercised. Recording this as a parry-tuning failure
+would have been a false negative about a mechanic that never got to run.
+**Q8 ACCEPTANCE FENCE:** arrival presentation must improve timing readability WITHOUT
+visually overstating projectile collision width (see the projectile presentation law in
+game/actors/projectile_tracer.gd). Only if intentional parry becomes possible does it
+become legitimate to evaluate whether parry reach or window themselves need tuning.
+**Re-ask after items 2-3.** The entry criterion is strictly upstream of reach: *can the
+player deliberately choose the parry moment at all?* Only once that is YES does parry
+reach/window tuning become diagnosable — and only then may any parry number move.
+
+**FUTURE DIRECTION — context/intent-conditioned selection (captured 2026-08-14, NOT
+scheduled).** Bands stay what they are: pure ELIGIBILITY ("which actions are legal from
+here"). The direction is to add a separate, explicit INTENT layer that chooses among the
+already-eligible actions — engagement, retreat, and player-occupied contexts being the
+first three worth naming. This keeps the no-hidden-priority rule intact, because intent
+would be an authored, inspectable input rather than an implicit ordering. It is NOT a
+utility/scoring framework and must not become one.
+**Trigger (either):** the re-playtest, after items 1–2 below, still reads
+range-triggered; OR the range-maintaining ("kiting-punisher") family arrives, which
+already carries its own deferred movement-coupling question.
+
 **Open after the build, before any tuning:** whether the two Watcher tells are
 distinguishable. They share a telegraph COLOUR by law (both Force; damage types own
 colour, GAME-RULES §3 channel law) and are separated by windup duration (20 vs 34) plus
 the tracer. If a playtest finds them confusable, the fix is another non-colour channel
 (disc size, pulse rate) — never a colour the damage type does not own.
+
+### P30 — Wand charge profile
+**Status:** NEAR-TERM, promoted to the weapon docket 2026-08-14 out of the P29 playtest.
+**Idea:** give the wand a charge profile — the ranged counterpart to the sword's
+hold-to-charge, which today has no ranged equivalent at all (the wand is deliberately the
+simple baseline, P26).
+**Why it was promoted:** P29's item-4 A/B asks whether the BASIC wand shot should carry
+EXPLOIT flinch authority. Both answers point here. If basic-EXPLOIT proves too strong,
+the charge profile is the natural home for *committed* ranged flinch authority — you pay
+a hold for the right to interrupt, which is the same bargain the sword's charge already
+makes. If basic-EXPLOIT proves fine, the charge still needs its own distinct answer to
+BRAIN candidate principle 3 ("why use the basic attack here?" AND "why charge here?"),
+and inheriting flinch authority unexamined would fail it.
+**Explicitly gated:** do not author this until the item-4 comparison is played. Its whole
+design question is downstream of that result.
+**Design questions:** what the charge changes (damage? projectile count? travel? pierce?)
+— identity must be a CHANGED DECISION, not a bigger number (P26) · whether charge-shot
+flinch authority is EXPLOIT or a committed variant · how it composes with the shared
+per-actor cooldown · does it want its own tracer treatment.
+**Reasoning:** P26 already parks "committed burst / simple charge gun" as the first
+advanced ranged consumer and "direct charge access for future charge guns". This
+promotes exactly that slice to near-term, with a concrete trigger, rather than leaving it
+in the general ranged-futures pool.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
