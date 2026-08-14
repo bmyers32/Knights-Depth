@@ -4,15 +4,13 @@
 
 [resource]
 script = ExtResource("1_stats")
-move_speed = 3.0
-preferred_attack_distance = 1.65
-minimum_attack_distance = 1.35
+min_range = 0.0
+max_range = -1.0
+attack_resolution = &"melee"
 cone_half_angle_degrees = 90.0
 windup_ticks = 12
 fire_interval_ticks = 24
 damage = 6.0
 damage_type = &"force"
 knockback_distance = 0.5
-detection_radius = 10.0
-leash_radius = 18.0
 telegraph_color = Color(0.9, 0.4, 0.1, 1)

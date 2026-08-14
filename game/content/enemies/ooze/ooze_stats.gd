@@ -46,3 +46,19 @@ extends Resource
 ## retune this geometry to fix an animation problem unless authoritative contact
 ## itself proves wrong. Method + trigger recorded at ROADMAP P28.
 @export var combat_radius: float = 1.45
+
+## Repertoire + actor-level locomotion (P29): see FangStats for the canonical
+## explanation of every field below — the band/actor split, the order-is-meaningless
+## rule, the P28 contact-distance derivation, and the leash/detection anchoring.
+## Ooze ships ONE action, so its band is terminal and its behaviour is byte-identical
+## to pre-P29. Per-family deltas only: it is the SLOW, FAT bruiser — the lowest
+## move_speed in the roster, and the widest spacing, because minimum_attack_distance
+## tracks its 1.45 combat_radius (P28's real correction: preferred moved 1.8 -> 2.2,
+## since a bigger body legitimately gets a longer slam and preferred doubles as reach).
+## All values migrated verbatim; no numerical change at P29.
+@export var action_ids: Array[StringName] = [&"ooze_slam"]
+@export var move_speed: float = 1.5
+@export var preferred_attack_distance: float = 2.2
+@export var minimum_attack_distance: float = 1.9
+@export var detection_radius: float = 10.0
+@export var leash_radius: float = 18.0

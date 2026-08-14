@@ -46,3 +46,34 @@ extends Resource
 ## retune this geometry to fix an animation problem unless authoritative contact
 ## itself proves wrong. Method + trigger recorded at ROADMAP P28.
 @export var combat_radius: float = 0.85
+
+## Repertoire + actor-level locomotion (P29): see FangStats for the canonical
+## explanation of every field below. Spacing/leash values migrated verbatim; no
+## numerical change at P29.
+##
+## THE WATCHER IS THE FIRST MULTI-ACTION FAMILY, and the reason P29 exists. Two authored
+## actions, selected by distance band:
+##   watcher_pulse  [0.0, 2.0)  melee — the EXPLOIT teacher, unchanged from M1
+##   watcher_survey [2.0, 9.0]  ranged — terminal band, new at P29
+## Order here is meaningless; the bands decide. They tile with no overlap and no gap.
+##
+## WHY A SECOND ACTION DOES NOT DILUTE THIS FAMILY'S LESSON: Watcher teaches "raw
+## pressure is expensive (threshold 24, deliberately above a full combo's hits 1+2);
+## reading the windup is cheap." watcher_survey adds no second key to a second lock — it
+## teaches the SAME lesson at a SECOND distance with a DIFFERENT tool, and its longer
+## windup makes it the most readable action in the game.
+##
+## The engagement band below stays actor-level and UNCHANGED, deliberately: deriving
+## movement from the selected action would make the Watcher hold at survey range and
+## become a turret, letting the player stand at 3 units and never meet the melee action
+## at all. Keeping it means the Watcher always wants to be on you — the survey is what it
+## does on the way in and when you push it off ("you cannot disengage for free"). The
+## steady state is still pulse: the approach terminates at distance <= 2.0, inside the
+## pulse band. Do NOT couple selection to movement to make the survey fire more often;
+## the levers are content only (band edges, spacing, windup/cadence, projectile speed).
+@export var action_ids: Array[StringName] = [&"watcher_pulse", &"watcher_survey"]
+@export var move_speed: float = 2.0
+@export var preferred_attack_distance: float = 2.0
+@export var minimum_attack_distance: float = 1.3
+@export var detection_radius: float = 10.0
+@export var leash_radius: float = 18.0

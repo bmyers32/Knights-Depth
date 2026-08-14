@@ -4,13 +4,19 @@
 
 [resource]
 script = ExtResource("1_stats")
-min_range = 0.0
-max_range = -1.0
-attack_resolution = &"melee"
+min_range = 2.0
+max_range = 9.0
+attack_resolution = &"projectile"
+projectile_speed = 7.0
+projectile_hit_radius = 0.5
+projectile_max_lifetime_ticks = 60
 cone_half_angle_degrees = 90.0
-windup_ticks = 30
-fire_interval_ticks = 55
-damage = 11.0
+windup_ticks = 34
+fire_interval_ticks = 45
+damage = 6.0
 damage_type = &"force"
-knockback_distance = 0.5
+knockback_distance = 0.0
 telegraph_color = Color(0.9, 0.4, 0.1, 1)
+windup_flinch_mode = &"normal"
+vulnerable_start_tick = 23
+vulnerable_end_tick = 34

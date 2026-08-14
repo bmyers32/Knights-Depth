@@ -19,6 +19,20 @@ Register test for new names: could it exist in a legend AND plausibly describe a
 digital construct? Avoid recognizable conceptual clusters from other universes even
 when individual words are fine (e.g. Pattern+Loom+Thread together = Wheel of Time).
 
+### Axiom naming register — construct ACTIONS (added at P29)
+Actions authored for Axiom constructs use **procedural / clinical** vocabulary —
+*survey, pulse, audit, index, calibrate* — never **weapon** vocabulary (lance, blade,
+cannon) and never **creature** vocabulary (gaze, maw, claw). The Axiom's self-image is
+maintenance, not war (see Watcher/Custodian below); an id that calls its attack a weapon
+contradicts the fiction the true-name reveal depends on.
+
+Player-facing THREAT legibility is carried by the telegraph, the projectile, and the folk
+name — never forced into the internal id. Watcher's pair reads as *assessment, then
+intervention*: `watcher_survey` (ranged) → `watcher_pulse` (melee), a maintenance routine
+performed on you. Future Axiom constructs inherit this grammar rather than relitigating
+tone per enemy. Drifted and Common entities are unaffected — a beast's actions may name
+teeth, because a beast has teeth.
+
 ## Usage Rules
 - **Drift derivative set is CLOSED:** Drift (phenomenon) · Deep Drift (region) ·
   Drifted (state). New derivatives require an amendment here.

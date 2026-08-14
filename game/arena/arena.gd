@@ -17,6 +17,14 @@ extends Node3D
 }
 @onready var _failure_overlay: FailureOverlay = $FailureOverlay
 
+const PROJECTILE_TRACER: PackedScene = preload("res://game/actors/projectile_tracer.tscn")
+## Player-shot tracer colour. GAME-RULES §3's channel law says damage TYPES own colour,
+## but no type->palette table exists yet (enemy telegraphs stand in with one flat colour
+## for exactly the same reason). One placeholder here, replaced by the real palette in
+## the same pass that gives telegraphs theirs -- never a per-weapon colour, which would
+## let presentation invent a channel the type owns.
+const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
+
 ## Real M1 loadout (CLAUDE.md M1 row: sword+gun+shield) — fixed switch order,
 ## advanced only via the sim-owned switch_weapon Command (Phase D step 8 Phase 2),
 ## never a direct driver call. sword_burn_A carries M1's one status effect (Burn);
@@ -69,14 +77,31 @@ extends Node3D
 ## Prints the live flinch/pressure snapshot for each enemy (SimWorld.
 ## debug_describe_flinch_state, a read-only public snapshot). Pure observability.
 @export var debug_show_flinch_state: bool = false
+## P29 action-selection snapshot: which authored action each enemy is eligible for at its
+## current distance and, when NONE is, the nearest authored band. Exists so an accidental
+## band gap is diagnosable on sight instead of presenting as "the enemy mysteriously
+## stopped attacking." Pure observability, default off.
+@export var debug_show_action_selection: bool = false
 
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 var _debug_equipped_index: int = 0
 var _debug_tab_held_prev: bool = false
-## actor_id -> {"color": Color, "duration_seconds": float}, resolved once at setup
-## from each enemy's NaturalWeaponStats so _report_events never touches ContentDB.
-var _enemy_telegraphs: Dictionary = {}
+## action_id -> {"color": Color, "duration_seconds": float}, resolved once at setup from
+## each action's NaturalWeaponStats so _report_events never touches ContentDB. Keyed by
+## ACTION since P29 (an actor may have several), and read via the attack_telegraph
+## Event's own action_id -- presentation never re-derives which action an actor chose.
+var _action_telegraphs: Dictionary = {}
+## weapon_id -> {"speed": float, "color": Color} for the projectile tracer, resolved once
+## at setup for BOTH enemy ranged actions and player guns. Speed is deliberately read
+## from CONTENT here rather than carried in the projectile_fired Event: a tunable does not
+## belong in an Event payload, and the Event already carries weapon_id to look it up by.
+var _projectile_visuals: Dictionary = {}
+## projectile_id -> Node3D. A tracer is COSMETIC PREDICTION: it extrapolates from the
+## spawn state in projectile_fired and is removed by any terminal event carrying its id.
+## SimWorld stays authoritative for position, collision, hit and expiry, and presentation
+## never feeds anything back -- a tracer/sim disagreement is always a TRACER bug.
+var _projectile_tracers: Dictionary = {}
 ## Resolved once at setup from the loadout's combo/charge-capable SwordStats (Slice B
 ## charge-ready cue) — mirrors _enemy_telegraphs' resolve-once pattern, so
 ## _report_events never touches ContentDB. Stays Color.WHITE (never used) if no
@@ -110,6 +135,11 @@ func _ready() -> void:
 			_charge_ready_tint_color = weapon.charge_ready_tint_color
 			break
 
+	# The tracer path has TWO real consumers on day one (rule of two): the Watcher's
+	# ranged action, cached in _register_enemies, and the player's guns here. One shared
+	# scene, no generic VFX framework.
+	_cache_gun_visuals(loadout_weapon_ids)
+
 	if debug_loadout_override:
 		# Loud on purpose (AGENTS.md Invariable #2) -- a silent override would read
 		# as the shipped loadout during a playtest instead of a deliberately-active
@@ -118,6 +148,7 @@ func _ready() -> void:
 		for weapon_id in debug_weapon_ids:
 			if not weapon_id in loadout_weapon_ids:
 				ContentRegistrar.register_weapon(sim, weapon_id)
+		_cache_gun_visuals(debug_weapon_ids)
 
 	var matrix: DamageMatrix = ContentDB.get_resource(&"combat", &"damage_matrix")
 	sim.set_damage_matrix(matrix.families, matrix.weak_multiplier, matrix.resist_multiplier)
@@ -134,6 +165,19 @@ func _ready() -> void:
 	sim.register_shield(envoy.actor_id, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance, shield.bump_padding, shield.bump_distance, shield.bump_slide_ticks, shield.bump_cooldown_ticks, shield.parry_window_ticks, shield.parry_exposure_ticks, shield.parry_damage_multiplier)
 
 
+## Resolves tracer speed/colour for any GunStats in the given ids. Colour comes from the
+## damage-type channel the telegraph already uses (GAME-RULES §3 channel law: types own
+## colour, presentation reads it and never invents one).
+func _cache_gun_visuals(weapon_ids: Array[StringName]) -> void:
+	for weapon_id in weapon_ids:
+		var weapon: Resource = ContentDB.get_resource(&"weapon", weapon_id)
+		if weapon is GunStats:
+			_projectile_visuals[String(weapon_id)] = {
+				"speed": weapon.speed,
+				"color": PROJECTILE_TRACER_FALLBACK_COLOR,
+			}
+
+
 func _register_enemies() -> void:
 	# debug_enable_* lookup -- read once here, never per-tick.
 	var family_enabled: Dictionary = {&"fang": debug_enable_fang, &"ooze": debug_enable_ooze, &"watcher": debug_enable_watcher}
@@ -144,7 +188,7 @@ func _register_enemies() -> void:
 			continue
 		# Sim registration goes through the shared ContentRegistrar so headless
 		# fixtures exercise the SAME path this driver does (see that class's doc).
-		var natural_weapon: NaturalWeaponStats = ContentRegistrar.register_enemy_body(sim, actor.actor_id, enemy_key, actor.position)
+		var actions: Dictionary = ContentRegistrar.register_enemy_body(sim, actor.actor_id, enemy_key, actor.position)
 		ContentRegistrar.register_enemy_ai(sim, actor.actor_id, enemy_key, actor.position)
 		# Dev validation target -- setup-time only, both loud no-ops at their defaults.
 		if debug_validation_target_health > 0.0:
@@ -155,10 +199,17 @@ func _register_enemies() -> void:
 			sim.debug_set_ai_active(actor.actor_id)
 
 		_enemies[actor.actor_id] = actor
-		_enemy_telegraphs[actor.actor_id] = {
-			"color": natural_weapon.telegraph_color,
-			"duration_seconds": natural_weapon.windup_ticks / Engine.physics_ticks_per_second,
-		}
+		for action_id: StringName in actions:
+			var action: NaturalWeaponStats = actions[action_id]
+			_action_telegraphs[String(action_id)] = {
+				"color": action.telegraph_color,
+				"duration_seconds": action.windup_ticks / Engine.physics_ticks_per_second,
+			}
+			if action.attack_resolution == &"projectile":
+				_projectile_visuals[String(action_id)] = {
+					"speed": action.projectile_speed,
+					"color": action.telegraph_color,
+				}
 
 
 func _physics_process(delta: float) -> void:
@@ -189,6 +240,11 @@ func _physics_process(delta: float) -> void:
 			var flinch_state: Dictionary = sim.debug_describe_flinch_state(actor_id)
 			if not flinch_state.is_empty():
 				print("flinch state [", actor_id, "]: ", flinch_state)
+	if debug_show_action_selection:
+		for actor_id: int in _enemies.keys():
+			var selection: Dictionary = sim.debug_describe_action_selection(actor_id, envoy.actor_id)
+			if not selection.is_empty():
+				print("action selection: ", selection)
 
 
 ## Dev-only debug input, deliberately NOT an InputMap action — edge-detected raw
@@ -208,10 +264,40 @@ func _process_debug_weapon_cycle() -> void:
 	_debug_tab_held_prev = tab_held
 
 
+## Spawns a cosmetic tracer for a shot the sim has already created. Presentation is
+## handed the spawn state and EXTRAPOLATES (dead-reckons) from it — this is not
+## interpolation between sim states, because there is no second sim state to interpolate
+## toward. The sim never publishes per-tick projectile positions and does not need to:
+## travel is a straight line at constant speed from a fixed origin.
+func _spawn_tracer(payload: Dictionary) -> void:
+	var visuals: Dictionary = _projectile_visuals.get(String(payload.get("weapon_id", "")), {})
+	if visuals.is_empty():
+		return  # unregistered visual -- a missing tracer is a cosmetic gap, never a sim error
+	var tracer: ProjectileTracer = PROJECTILE_TRACER.instantiate()
+	add_child(tracer)
+	tracer.launch(payload.get("position", Vector3.ZERO), payload.get("direction", Vector3.FORWARD), float(visuals.speed), visuals.color)
+	_projectile_tracers[int(payload.get("projectile_id", -1))] = tracer
+
+
+func _despawn_tracer(projectile_id: int) -> void:
+	if not _projectile_tracers.has(projectile_id):
+		return
+	var tracer: Node3D = _projectile_tracers[projectile_id]
+	_projectile_tracers.erase(projectile_id)
+	tracer.queue_free()
+
+
 ## Dev-only observability (AGENTS.md Invariable #2: every mechanic must be
 ## observable) — a real debug overlay/event log is future work (rule of two).
 func _report_events(events: Array[Event]) -> void:
 	for event in events:
+		# Tracer lifecycle is handled ONCE, ahead of the match, deliberately: a shot has
+		# FIVE terminal exits (hit / blocked / shield_broken / attack_absorbed /
+		# projectile_expired) and per-arm handling would silently leak a tracer the first
+		# time a sixth appeared. The rule is uniform -- any event other than the spawn
+		# that carries my projectile_id ends me -- so it is expressed uniformly.
+		if event.kind != "projectile_fired" and event.payload.has("projectile_id"):
+			_despawn_tracer(int(event.payload["projectile_id"]))
 		match event.kind:
 			"melee_swing":
 				print("melee swing: ", event.payload)
@@ -245,12 +331,20 @@ func _report_events(events: Array[Event]) -> void:
 				elif _enemies.has(actor_id):
 					_enemies[actor_id].queue_free()
 					_enemies.erase(actor_id)
-					_enemy_telegraphs.erase(actor_id)
+					# _action_telegraphs is deliberately NOT pruned here: since P29 it is
+					# keyed by ACTION, not actor, so it is resolved-once CONTENT shared by
+					# every actor of that family. Erasing it on one death would silently
+					# blank the tells of the next actor to use those actions. In-flight
+					# tracers this actor fired also survive — a projectile outlives its
+					# owner, exactly as it survives a flinch.
 			"attack_telegraph":
 				print("attack telegraph: ", event.payload)
 				var actor_id: int = event.payload.get("actor_id")
-				if _enemies.has(actor_id) and _enemy_telegraphs.has(actor_id):
-					var telegraph: Dictionary = _enemy_telegraphs[actor_id]
+				# P29: the COMMITTED action decides the tell, and the Event names it --
+				# presentation never re-derives which action an actor chose.
+				var action_id: String = String(event.payload.get("action_id", ""))
+				if _enemies.has(actor_id) and _action_telegraphs.has(action_id):
+					var telegraph: Dictionary = _action_telegraphs[action_id]
 					_enemies[actor_id].show_telegraph(telegraph.color, telegraph.duration_seconds)
 			"attack_rejected":
 				print("attack rejected: ", event.payload)
@@ -268,6 +362,7 @@ func _report_events(events: Array[Event]) -> void:
 				print("block rejected: ", event.payload)
 			"projectile_fired":
 				print("projectile fired: ", event.payload)
+				_spawn_tracer(event.payload)
 			"projectile_expired":
 				print("projectile expired: ", event.payload)
 			"status_proc":

@@ -50,3 +50,43 @@ extends Resource
 ## retune this geometry to fix an animation problem unless authoritative contact
 ## itself proves wrong. Method + trigger recorded at ROADMAP P28.
 @export var combat_radius: float = 0.9
+
+## ---------------------------------------------------------------------------------
+## REPERTOIRE + ACTOR-LEVEL LOCOMOTION (P29). The canonical explanation for all three
+## families lives here; OozeStats/WatcherStats carry only their per-family deltas.
+## ---------------------------------------------------------------------------------
+
+## The authored actions this family may choose between (ContentDB &"natural_weapon" ids).
+## ORDER IS SEMANTICALLY MEANINGLESS AND MUST STAY THAT WAY: selection is by distance
+## band, bands may not overlap, and a content-lint test proves a shuffled repertoire
+## produces an identical event stream. Nothing — not sim, not the registrar, not this
+## resource — may treat element 0 as privileged. Fang ships ONE action, which makes its
+## band terminal and its behaviour byte-identical to pre-P29 (tests/test_ai_backward_compat.gd).
+@export var action_ids: Array[StringName] = [&"fang_bite"]
+
+## ENGAGEMENT SPACING — migrated verbatim from NaturalWeaponStats at P29 (no numerical
+## change; VALIDATED-FOR-M1 at the 2026-08-13 re-gate, and inside the NUMERIC-TUNING
+## FENCE). These are ACTOR identity: the band this family tries to HOLD. Farther than
+## preferred, it approaches; closer than minimum, it backs away; inside, it stops.
+## They govern MOVEMENT ONLY — since the locked pre-gate defect fix they never gate
+## whether an attack may start, and since P29 attack eligibility is the action band
+## instead. Fixing the earlier defect where one attack_range threshold let an enemy walk
+## on top of the player before attacking.
+## P28 (2026-08-13): DERIVED FROM CONTACT DISTANCE, not chosen freely.
+## minimum_attack_distance = this family's combat contact distance, and preferred is held
+## at least 0.3 beyond it — otherwise an enemy settles INSIDE the player's body.
+## preferred_attack_distance additionally resolves any action authoring max_range = -1,
+## which is how a single-action family says "my band is exactly my engagement reach"
+## without duplicating the number.
+@export var move_speed: float = 3.0
+@export var preferred_attack_distance: float = 1.65
+@export var minimum_attack_distance: float = 1.35
+
+## AI leash/detection — migrated verbatim at P29. Enemies start idle with NO initial
+## aggro; detection_radius gates both first acquisition and re-acquisition (only while
+## idle, never mid-return). leash_radius is measured from the enemy's spawn/re-anchor
+## position, not its current position (a fixed home leash, not a drifting one).
+## leash_radius 18.0 is sized against the 40x40 arena (arena.tscn), where a
+## straight-line retreat from any plausible re-anchor point gives 30+ units of room.
+@export var detection_radius: float = 10.0
+@export var leash_radius: float = 18.0

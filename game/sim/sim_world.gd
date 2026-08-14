@@ -122,17 +122,21 @@ var _status_config: Dictionary = {}  # status_id(String) -> {damage_per_tick, ti
 var _status_priority: Dictionary = {}  # status_id(String) -> int, higher replaces lower (GAME-RULES §3)
 var _contact_transmitted_pairs: Dictionary = {}  # Vector2i(min_id, max_id) -> bool, current contact episode's transmission state
 ## Enemy AI (Phase D step 8 Phase 4) — deterministic, no RNG (a future variance need
-## gets its OWN GAME-RULES §1.3 stream, never combat's). AI only ever decides
-## move_direction/attack-intent by synthesizing the same Command shapes a player
-## would send; it never bypasses _apply_move/_apply_attack.
-var _ai_natural_weapon: Dictionary = {}  # actor_id -> weapon_id(String)
+## gets its OWN GAME-RULES §1.3 stream, never combat's). AI decides locomotion,
+## whether to attack now, and (P29, GAME-RULES §3) WHICH eligible authored action to
+## commit — nothing else. It synthesizes the same Command shapes a player would send and
+## never bypasses _apply_move/_apply_attack. Action SHAPE stays content in every case.
 ## actor_id -> Vector3, the leash/detection anchor. Scene-init/encounter-reset data
 ## only in the sense that register_ai unconditionally overwrites it on
 ## re-registration — at runtime it RE-ANCHORS to the stopped position on disengage
 ## (locked behavior, pre-gate fix pass: no universal return-to-spawn).
 var _ai_spawn_position: Dictionary = {}
 var _ai_state: Dictionary = {}  # actor_id -> "idle" | "active"
-var _ai_tuning: Dictionary = {}  # actor_id -> {preferred_attack_distance, minimum_attack_distance, windup_ticks, detection_radius, leash_radius}
+var _ai_tuning: Dictionary = {}  # actor_id -> {preferred_attack_distance, minimum_attack_distance, detection_radius, leash_radius}
+## P29 repertoire: actor_id -> Array of {id, min_range, max_range, windup_ticks,
+## is_terminal}. is_terminal is DERIVED at registration (the single largest max_range),
+## never authored -- see _select_action for the half-open boundary convention it serves.
+var _ai_repertoire: Dictionary = {}
 var _ai_attack_start_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 var _ai_attack_fire_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 ## FLINCH reaction layer (batch, GAME-RULES §3). FLINCHED is an actor/AI REACTION
@@ -417,32 +421,91 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 
 ## Registers actor_id as AI-controlled (Phase D step 8 Phase 4) — setup-time
 ## configuration, same boundary as every other register_*/set_* call (see
-## set_weapon_loadout's comment). natural_weapon_id must already be registered via
-## register_weapon (its reach == preferred_attack_distance, so a settle-in-band enemy
-## can always actually land the attack it fires — content's job to keep those
-## consistent, not sim's to enforce); this call also equips it (mirrors
-## set_equipped_weapon's existing pattern — an enemy only ever has the one natural
-## attack). spawn_position anchors the leash (leash_radius is measured from here,
-## never the actor's drifting current position — though disengage re-anchors this
-## to wherever the actor stopped, see the leash-exceeded branch below). Starts
-## "idle" — no initial aggro;
+## set_weapon_loadout's comment). Every action id in `repertoire` must already be
+## registered via register_weapon/register_gun (a melee action's reach == its resolved
+## max_range, so a settle-in-band enemy can always actually land what it fires —
+## content's job to keep those consistent, not sim's to enforce).
+##
+## P29: `repertoire` is an Array of {id, min_range, max_range, windup_ticks} — the
+## authored actions this actor may choose between, and the distance band each is chosen
+## from. ARRAY ORDER CARRIES NO MEANING and nothing here may make it carry any: bands are
+## validated non-overlapping by content lint, so at most one can ever match. Windup is
+## per-ACTION (it left _ai_tuning at P29); spacing and leash stay per-ACTOR.
+##
+## spawn_position anchors the leash (leash_radius is measured from here, never the
+## actor's drifting current position — though disengage re-anchors this to wherever the
+## actor stopped, see the leash-exceeded branch below). Starts "idle" — no initial aggro;
 ## detection_radius (read from _ai_tuning at decide-time) gates first acquisition
 ## exactly like re-acquisition. preferred_attack_distance/minimum_attack_distance
 ## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
 ## than preferred -> approach, closer than minimum -> back away, inside the band ->
-## stop and attack.
-func register_ai(actor_id: int, natural_weapon_id: StringName, spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, windup_ticks: int, detection_radius: float, leash_radius: float) -> void:
-	_ai_natural_weapon[actor_id] = String(natural_weapon_id)
+## stop. Since P29 they govern MOVEMENT ONLY; attack eligibility is the action band.
+func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float) -> void:
+	# The TERMINAL band is the one with the largest max_range — the only band that
+	# includes its own maximum (see _select_action). Derived, never authored, so content
+	# cannot accidentally declare two terminals or none.
+	var terminal_max: float = -INF
+	for action in repertoire:
+		terminal_max = max(terminal_max, float(action.max_range))
+	var resolved: Array[Dictionary] = []
+	var lowest_band_id: String = ""
+	var lowest_min: float = INF
+	for action in repertoire:
+		resolved.append({
+			"id": String(action.id),
+			"min_range": float(action.min_range),
+			"max_range": float(action.max_range),
+			"windup_ticks": int(action.windup_ticks),
+			"is_terminal": is_equal_approx(float(action.max_range), terminal_max),
+		})
+		if float(action.min_range) < lowest_min:
+			lowest_min = float(action.min_range)
+			lowest_band_id = String(action.id)
+	_lint_band_overlap(actor_id, resolved)
+	_ai_repertoire[actor_id] = resolved
 	_ai_spawn_position[actor_id] = spawn_position
 	_ai_state[actor_id] = "idle"
 	_ai_tuning[actor_id] = {
 		"preferred_attack_distance": preferred_attack_distance,
 		"minimum_attack_distance": minimum_attack_distance,
-		"windup_ticks": windup_ticks,
 		"detection_radius": detection_radius,
 		"leash_radius": leash_radius,
 	}
-	set_equipped_weapon(actor_id, natural_weapon_id)
+	# Equip the LOWEST-BAND action so _equipped_weapon is never empty for an AI actor.
+	# Chosen from authored band values, not from array position — element 0 is not
+	# privileged. Commitment overwrites this at every windup start, so the initial pick
+	# only matters before the actor's first attack; for a single-action repertoire it is
+	# that one action, identical to pre-P29.
+	if lowest_band_id != "":
+		set_equipped_weapon(actor_id, lowest_band_id)
+
+
+## Registration-time enforcement of GAME-RULES §3's "authored bands may not overlap"
+## (same precedent as _lint_flinch_capability and the hit_active_ticks clamp: content
+## that would otherwise fail SILENTLY is warned, never silently accepted).
+##
+## GENERAL by construction, not a special case. Two bands overlap iff some distance
+## satisfies BOTH, so the check asks exactly that, using the selector's own predicate
+## (band_contains) rather than a re-derived inequality. The lowest distance the two could
+## share is max(min_range); if either band is eligible past it they both are, and if that
+## exact point is eligible for both -- the shared-maximum case, where two terminal bands
+## are each inclusive at the same edge -- it is caught by the identical test. A
+## first-match selector faced with any of these would silently become an ARRAY-ORDER
+## priority, the one thing the no-hidden-priority ruling forbids.
+##
+## STRENGTH: push_warning, matching every other sim-side lint in this file (sim has no
+## hard-fail idiom and must stay headless-safe). The HARD failure for the same law lives
+## at the content-lint layer, tests/test_content_validation.gd::test_no_two_bands_overlap,
+## which uses this same predicate. Every overlap is treated identically at both layers.
+func _lint_band_overlap(actor_id: int, resolved: Array[Dictionary]) -> void:
+	for i in resolved.size():
+		for j in range(i + 1, resolved.size()):
+			var a: Dictionary = resolved[i]
+			var b: Dictionary = resolved[j]
+			var shared: float = maxf(float(a.min_range), float(b.min_range))
+			if band_contains(a, shared) and band_contains(b, shared):
+				push_warning("register_ai [actor %d]: bands '%s' [%.3f, %.3f] and '%s' [%.3f, %.3f] both cover distance %.3f -- overlapping bands make action selection ambiguous (GAME-RULES §3), which repertoire ORDER must never silently resolve" % [
+					actor_id, a.id, a.min_range, a.max_range, b.id, b.min_range, b.max_range, shared])
 
 
 ## Debug-only, setup-time direct write (arena.gd's debug_force_aggro) -- called ONCE
@@ -1118,9 +1181,9 @@ func _resolve_melee_swing(actor_id: int, attacker_position: Vector3, resolved_ai
 ## _decide_attack_commands' own consume-on-fire step) and arms the SAME cooldown a
 ## completed attack would have via _next_fire_tick, so the interrupt doesn't leave
 ## the enemy free to instantly re-windup -- "pending fire tick cleared -> cooldown".
-## Uses _equipped_weapon rather than _ai_natural_weapon: register_ai always equips an
-## AI actor's natural weapon internally, so the two are always equal here -- one dict
-## hop instead of two.
+## Reads _equipped_weapon, which since P29 is the COMMITTED action -- so an interrupted
+## multi-action enemy is charged the cooldown of the action it was actually performing,
+## not some other entry in its repertoire.
 func _cancel_enemy_windup(actor_id: int) -> void:
 	_ai_attack_start_tick.erase(actor_id)
 	_ai_attack_fire_tick.erase(actor_id)
@@ -1239,13 +1302,21 @@ func _try_parry(defender_id: int, attacker_id: int) -> Array[Event]:
 	})]
 
 
-func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary, resolved_aim: Vector3, weapon_id: String, attack_profile_id: String = "") -> Array[Event]:
+## projectile_id (P29 tracer lifecycle, -1 = not from a projectile): a shot that
+## terminates ON A TARGET does so through one of FOUR events below (attack_absorbed,
+## blocked, shield_broken, hit) — only lifetime expiry emits projectile_expired. None of
+## the four used to identify the projectile, so presentation could not tell which tracer
+## had ended, and a blocked shot whose tracer sailed on would read as a hit-detection bug.
+## Threaded as ONE optional parameter and stamped CONDITIONALLY (the established
+## attack_profile_id precedent) rather than as a new event kind, so every melee-path
+## payload stays byte-identical and no existing assertion moves.
+func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary, resolved_aim: Vector3, weapon_id: String, attack_profile_id: String = "", projectile_id: int = -1) -> Array[Event]:
 	# i-frames fully negate a hit: no damage, no knockback, no status, no meter
 	# interaction — the attack simply doesn't land (locked invariant).
 	if _iframe_ticks_remaining.get(target_id, 0) > 0:
-		return [Event.new(tick_count, "attack_absorbed", {
+		return [_stamp_projectile(Event.new(tick_count, "attack_absorbed", {
 			"attacker_id": attacker_id, "target_id": target_id, "reason": "iframes",
-		})]
+		}), projectile_id)]
 
 	var family: StringName = _families[target_id]
 	var multiplier: float = _damage_multiplier(weapon.damage_type, family)
@@ -1261,7 +1332,7 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	# loss, no weapon knockback, no i-frames (distinct defenses; block must not also
 	# grant invulnerability). See _resolve_blocked_hit.
 	if _shield_state.get(target_id, "ready") == "held":
-		var blocked: Array[Event] = [_resolve_blocked_hit(target_id, target_position, resolved_aim, attacker_id, damage)]
+		var blocked: Array[Event] = [_stamp_projectile(_resolve_blocked_hit(target_id, target_position, resolved_aim, attacker_id, damage), projectile_id)]
 		# P16 perfect parry: a hit landing inside the window measured from the shield's
 		# own rising edge (_block_start_tick, which already existed) marks the ATTACKER
 		# PARRY EXPOSED. The meter still drained above, deliberately -- a parry's only
@@ -1334,7 +1405,7 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	# existing test's exact payload-key expectations stay untouched.
 	if attack_profile_id != "":
 		hit_payload["attack_profile_id"] = attack_profile_id
-	var events: Array[Event] = [Event.new(tick_count, "hit", hit_payload)]
+	var events: Array[Event] = [_stamp_projectile(Event.new(tick_count, "hit", hit_payload), projectile_id)]
 	if cancels_windup:
 		events.append(Event.new(tick_count, "windup_interrupted", {"actor_id": target_id, "attacker_id": attacker_id}))
 	if flinch_reason != "":
@@ -1402,6 +1473,17 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		if target_hold_state == "windup" or target_hold_state == "executing":
 			events.append_array(_cancel_open_melee_hold(target_id, true))
 	return events
+
+
+## Conditionally tags a projectile's TERMINAL event with the id of the shot that caused
+## it (P29). -1 (every melee path) leaves the payload untouched, byte-for-byte — the same
+## "profile identity never substitutes for weapon identity" discipline attack_profile_id
+## already follows. Presentation's whole tracer rule is then one line: an event carrying
+## my projectile_id ends me.
+func _stamp_projectile(event: Event, projectile_id: int) -> Event:
+	if projectile_id >= 0:
+		event.payload["projectile_id"] = projectile_id
+	return event
 
 
 ## Rolls a status-carrying weapon's normal-hit proc chance exactly once (GAME-RULES
@@ -1472,7 +1554,7 @@ func _advance_projectiles(dt: float) -> Array[Event]:
 
 		var hit_target_id: int = _find_earliest_swept_hit(start_position, end_position, projectile.attacker_id, weapon.hit_radius)
 		if hit_target_id != -1:
-			events.append_array(_resolve_hit_on_target(projectile.attacker_id, hit_target_id, weapon, projectile.direction, projectile.weapon_id))
+			events.append_array(_resolve_hit_on_target(projectile.attacker_id, hit_target_id, weapon, projectile.direction, projectile.weapon_id, "", projectile_id))
 			expired_ids.append(projectile_id)
 			continue
 
@@ -1736,9 +1818,9 @@ func _apply_switch_weapon(command: Command) -> Array[Event]:
 ## See _decide_single_ai_command's attack-priority ordering for the mechanism.
 ##
 ## Enemy AI top-level decision pass (Phase D step 8 Phase 4) — a CONSUMER of the
-## existing simulation, not a new gameplay system: it only ever decides
-## move_direction/attack-intent, synthesizing the exact same Command shapes a
-## player would send. No RNG (deterministic AI v1). Actors iterate in sorted
+## existing simulation, not a new gameplay system: it decides locomotion, whether to
+## attack now, and which eligible authored action to commit (P29), synthesizing the exact
+## same Command shapes a player would send. No RNG (deterministic AI v1). Actors iterate in sorted
 ## actor_id order so dictionary iteration order never leaks into decision/event
 ## order (same discipline as every other autonomous phase — see tick()'s
 ## class-level "Autonomous-phase law" comment). events is mutated in place
@@ -1840,14 +1922,20 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 	#      closer than minimum -> retreat, farther than preferred -> approach,
 	#      inside the band (here only because the weapon is on cooldown) -> hold.
 	if _ai_attack_fire_tick.has(actor_id):
-		return _decide_attack_commands(actor_id, tuning, player_id, events)
+		return _decide_attack_commands(actor_id, "", player_id, events)
 
 	var to_player: Vector3 = player_position - position
 	to_player.y = 0.0
 	var distance_to_player: float = to_player.length()
 
-	if tick_count >= _next_fire_tick.get(actor_id, 0) and distance_to_player <= tuning.preferred_attack_distance:
-		return _decide_attack_commands(actor_id, tuning, player_id, events)
+	# P29: attack ELIGIBILITY is now "some authored action's band contains this distance",
+	# not "within preferred_attack_distance". preferred/minimum revert to movement-only
+	# (they were already movement-only for the retreat/approach rules; this removes their
+	# last eligibility job). For a single-action repertoire the two are the same test by
+	# construction — see _select_action.
+	var selected_action_id: String = _select_action(actor_id, distance_to_player)
+	if tick_count >= _next_fire_tick.get(actor_id, 0) and selected_action_id != "":
+		return _decide_attack_commands(actor_id, selected_action_id, player_id, events)
 
 	if distance_to_player < tuning.minimum_attack_distance:
 		return [Command.new(tick_count, actor_id, "move", {"direction": -to_player.normalized()})]
@@ -1858,29 +1946,130 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 	return []  # in band, weapon on cooldown: hold position and wait
 
 
+## P29 ACTION SELECTOR — the AI's one new power, and deliberately its only one: "which of
+## my authored actions applies at this distance". No RNG, no scoring, no priority, no
+## array-order tiebreak. Returns "" when nothing applies.
+##
+## BOUNDARY CONVENTION (ruled): non-terminal bands are HALF-OPEN [min, max); only the
+## terminal band (largest max_range, derived in register_ai) includes its own maximum. A
+## closed interval on both ends would let adjacent authored bands BOTH match at the
+## shared edge, which is exactly the ambiguity the overlap law forbids. No epsilon and no
+## tie-breaking: content must satisfy next.min_range == prev.max_range exactly.
+##
+## Consequence worth stating: a SINGLE-action repertoire is by definition terminal, so
+## its band is [0.0, max] inclusive at both ends — byte-identical to the pre-P29
+## `distance <= preferred_attack_distance` gate. That equivalence is what
+## tests/test_ai_backward_compat.gd exists to hold.
+##
+## "" (nothing applies) is NOT a state. It is the same condition as being outside the
+## family's overall attackable range: the caller's gate simply fails and ordinary
+## actor-level locomotion continues. Under v1's gapless content it is only reachable
+## beyond the terminal max; a future authored interior dead band makes it reachable
+## inside engagement range with no code change here.
+func _select_action(actor_id: int, distance: float) -> String:
+	for action in _ai_repertoire.get(actor_id, []):
+		if band_contains(action, distance):
+			return String(action.id)
+	return ""
+
+
+## THE band-eligibility predicate — half-open [min, max) unless terminal, then [min, max].
+## Public and extracted deliberately: the content lint that enforces GAME-RULES §3's
+## "authored bands may not overlap" must test the SAME notion of eligibility the selector
+## uses, or the law and its enforcement drift apart and the lint starts approving
+## repertoires the selector treats as ambiguous. One predicate, both callers.
+static func band_contains(action: Dictionary, distance: float) -> bool:
+	if distance < float(action.min_range):
+		return false
+	if distance < float(action.max_range):
+		return true
+	return bool(action.is_terminal) and distance <= float(action.max_range)
+
+
+## Read-only action-selection snapshot (AGENTS.md Invariable #2: every mechanic must be
+## observable). Exists specifically so an accidental band GAP is diagnosable on sight
+## instead of presenting as "the enemy mysteriously stopped attacking" — it reports the
+## live distance and, when nothing is eligible, the nearest authored band edge. Never
+## called from sim itself; the scene driver polls it behind a debug_* export.
+func debug_describe_action_selection(actor_id: int, player_id: int) -> Dictionary:
+	if not _ai_repertoire.has(actor_id):
+		return {}
+	var to_player: Vector3 = entities.get(player_id, Vector3.ZERO) - entities.get(actor_id, Vector3.ZERO)
+	to_player.y = 0.0
+	var distance: float = to_player.length()
+	var selected: String = _select_action(actor_id, distance)
+	var description: Dictionary = {
+		"actor_id": actor_id,
+		"distance": distance,
+		"selected": selected,
+		"state": _ai_state.get(actor_id, "idle"),
+	}
+	if selected == "":
+		var nearest_id: String = ""
+		var nearest_gap: float = INF
+		for action in _ai_repertoire[actor_id]:
+			var gap: float = maxf(float(action.min_range) - distance, distance - float(action.max_range))
+			if gap < nearest_gap:
+				nearest_gap = gap
+				nearest_id = "%s [%.2f, %.2f]" % [action.id, action.min_range, action.max_range]
+		description["nearest_band"] = nearest_id
+		description["distance_to_nearest_band"] = nearest_gap
+	return description
+
+
 ## In-range attack timing — two nullable tick fields, not a distinct "windup" state
 ## (locked). Reuses the shared per-actor fire-rate gate (_next_fire_tick, the same
 ## one _apply_attack already checks) instead of a second AI-owned cooldown dict, so
-## an enemy can't start a new windup before its own weapon's fire_interval_ticks has
-## elapsed from its last actual attack.
-func _decide_attack_commands(actor_id: int, tuning: Dictionary, player_id: int, events: Array[Event]) -> Array[Command]:
+## an enemy can't start a new windup before fire_interval_ticks has elapsed from its
+## last actual attack. P29 RULING: that gate stays SHARED ACROSS THE REPERTOIRE for v1 —
+## firing any action cools down every action. Revisit trigger at ROADMAP P29.
+##
+## selected_action_id is "" on the fire-side call (the action was already committed at
+## windup start and must never be re-selected — see the commitment block below).
+func _decide_attack_commands(actor_id: int, selected_action_id: String, player_id: int, events: Array[Event]) -> Array[Command]:
 	if _ai_attack_fire_tick.has(actor_id):
 		if tick_count < _ai_attack_fire_tick[actor_id]:
 			return []  # still winding up
 		_ai_attack_start_tick.erase(actor_id)
 		_ai_attack_fire_tick.erase(actor_id)
+		# AIM CAPTURE (locked, and load-bearing for P29's ranged action): aim is sampled
+		# HERE, at the fire tick, toward the player's THEN-CURRENT position -- never at
+		# commit time. A long windup would make commit-time aim stale before the shot
+		# left, turning a readable attack into one that is unavoidable or trivial purely
+		# by whether the player happened to move. The windup communicates WHEN the attack
+		# fires; travel time supplies the dodge. Projectile direction is then fixed at
+		# spawn and never steers (no seeking -- ROADMAP P17).
 		var stored_facing: Vector3 = _facings.get(actor_id, Vector3(0.0, 0.0, -1.0))
 		var aim: Vector3 = _normalize_horizontal(entities.get(player_id, Vector3.ZERO) - entities.get(actor_id, Vector3.ZERO), stored_facing)
 		return [Command.new(tick_count, actor_id, "attack", {"aim": aim})]
 
 	if tick_count < _next_fire_tick.get(actor_id, 0):
-		return []  # weapon's own cooldown from the last attack hasn't elapsed yet
+		return []  # shared repertoire cooldown from the last attack hasn't elapsed yet
+	if selected_action_id == "":
+		return []  # no authored action covers this distance
 
+	# COMMITMENT (P29). Re-equipping IS the commitment: _equipped_weapon is already "which
+	# authored attack shape resolves this actor's attack Command", and _flinch_mode_of,
+	# _cancel_enemy_windup and _apply_attack all read it. So per-action susceptibility
+	# windows, per-action cooldown arming on interrupt, and melee-vs-projectile resolution
+	# all follow from this one assignment -- no parallel "committed action" record, and
+	# Command.params stays per-tick intent ({aim}), never an id.
+	#
+	# A committed action NEVER re-evaluates: distance changing mid-windup does not swap it
+	# (the same locked rule that already forbids mid-windup cancellation). Walking out of
+	# the band produces an attack that may simply MISS -- a miss, not a cancellation.
+	set_equipped_weapon(actor_id, selected_action_id)
+	var windup_ticks: int = 0
+	for action in _ai_repertoire.get(actor_id, []):
+		if String(action.id) == selected_action_id:
+			windup_ticks = int(action.windup_ticks)
+			break
 	_ai_attack_start_tick[actor_id] = tick_count
-	_ai_attack_fire_tick[actor_id] = tick_count + int(tuning.windup_ticks)
-	var weapon_id: String = _ai_natural_weapon.get(actor_id, "")
-	var damage_type: String = _weapons.get(weapon_id, {}).get("damage_type", "force")
-	events.append(Event.new(tick_count, "attack_telegraph", {"actor_id": actor_id, "damage_type": damage_type}))
+	_ai_attack_fire_tick[actor_id] = tick_count + windup_ticks
+	var damage_type: String = _weapons.get(selected_action_id, {}).get("damage_type", "force")
+	events.append(Event.new(tick_count, "attack_telegraph", {
+		"actor_id": actor_id, "damage_type": damage_type, "action_id": selected_action_id,
+	}))
 	return []
 
 

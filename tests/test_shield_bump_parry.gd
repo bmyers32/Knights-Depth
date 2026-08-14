@@ -275,7 +275,7 @@ func test_bump_slide_carries_an_attacker_out_of_reach_so_its_attack_whiffs() -> 
 func test_bump_during_a_committed_windup_never_disturbs_its_timeline() -> void:
 	sim.entities[ENEMY_ID] = Vector3(0, 0, -1.0)
 	sim.register_weapon(&"bite", 10.0, &"force", 2.0, 90.0, 0.0, 45)
-	sim.register_ai(ENEMY_ID, &"bite", Vector3(0, 0, -1.0), 2.0, 0.5, 12, 20.0, 40.0)
+	sim.register_ai(ENEMY_ID, CombatTestHelpers.single_action_repertoire(&"bite", 2.0, 12), Vector3(0, 0, -1.0), 2.0, 0.5, 20.0, 40.0)
 	sim.debug_set_ai_active(ENEMY_ID)
 	sim.tick([], DT)  # AI commits to a windup
 	assert_true(sim._ai_attack_fire_tick.has(ENEMY_ID), "sanity: a windup is committed")

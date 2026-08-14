@@ -37,7 +37,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P25 | Weapon-owned state & switch semantics | PROPOSED | Holstered-state categories, switch-reset tech, ammo/heat — all gated on a real consumer |
 | P26 | Ranged weapon identity futures | PROPOSED | Distance bands, committed burst, hazards, marks; identity = changed decision, not new numbers |
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
-| P29 | Enemy action repertoire / distance-conditioned selection | NEXT-MILESTONE | First second-action consumer is a ranged action; carries the composition fence |
+| P29 | Enemy action repertoire / distance-conditioned selection | BUILT 2026-08-14, verdict not yet rendered | Watcher gains `watcher_survey`; bands + tracer shipped; playtest pending |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -297,8 +297,9 @@ layers needed a playtested base to attach to. That base passed its re-gate.
 ### P17 — Per-family engagement identities
 **Idea:** Movement/attack personality translated from the reference game, layered as
 CONTENT on top of the shared AI (pursue/engage/leash) built in Phase D step 8 — never
-as AI special cases (the locked build-shape rule: attack shape is content, the AI only
-ever decides move + attack-now).
+as AI special cases (the locked build-shape rule: attack shape is content; since P29
+the AI decides locomotion, whether to attack now, and which eligible authored action to
+commit — never how that action behaves).
 - **Ooze:** shuffle approach, a visible charge-up, then a hop-attack (windup +
   self-knockback + a wide/360° cone) — a pull-forward Treat Rule candidate if the M1
   replay finds the three families feeling too uniform.
@@ -619,13 +620,16 @@ capsule extents.
 before flinch exists would tune spacing against combat that has no reaction layer yet.
 
 ### P29 — Enemy action repertoire / distance-conditioned action selection
-**Status:** NEXT-MILESTONE scoping, opened at M1 close (2026-08-13). Explicitly NOT a
-retroactive M1 prerequisite — M1 passed its re-gate without it.
+**Status:** BUILT 2026-08-14 — implementation complete and suite-green; the fun
+VERDICT IS NOT YET RENDERED (a human playtest decides it, never an inference: BRAIN,
+"Never stamp a verdict the human hasn't rendered"). Opened at M1 close (2026-08-13);
+explicitly NOT a retroactive M1 prerequisite — M1 passed its re-gate without it.
 **Idea:** enemies gain a repertoire of authored actions and choose between them by
 situation (distance first). The AI's new power is narrowly "which of my authored
 actions applies here"; everything about an action — reach, windup, damage, telegraph,
 susceptibility window — stays CONTENT, preserving the locked build-shape rule that the
-AI only ever decides move + attack-now. First concrete second-action consumer: a
+AI decides only locomotion, whether to attack now, and which eligible authored action to
+commit. First concrete second-action consumer: a
 **ranged action**, pulling P17's ranged archetype forward. A Force-typed ranged attack
 respects MECHANICS-REFERENCE §2's onboarding rule (all early enemy damage is baseline
 type) and needs no enemy-applied status, so only P17's M2 content-pass timing moves.
@@ -637,11 +641,40 @@ type) and needs no enemy-applied status, so only P17's M2 content-pass timing mo
 the player *values* killing enemies several ways at differing effort and safety, with
 real decisions emerging under group pressure. Depth must come from composing situations,
 not from making each enemy a lock with one key.
-**Design questions (settle before code):** where selection lives (action id from an
-authored per-family list); what conditions it (distance bands per action, first
-eligible wins, no RNG); shared vs per-action cooldown (per-action is what enables
-"ranged is on cooldown, so it closes"); which family gets the ranged action, and whether
-giving the EXPLOIT-window teacher a second action dilutes its lesson.
+**Design questions — ALL SETTLED, built 2026-08-14 (verdict not yet rendered):**
+selection = authored `action_id` from the enemy resource's `action_ids`; conditioned on
+non-overlapping distance bands, no RNG and no array-order priority; cooldown SHARED
+per-actor; the Watcher gets the ranged action (`watcher_survey`), Fang and Ooze stay
+single-action. Boundary convention: non-terminal bands are half-open `[min, max)`, only
+the outermost band includes its maximum — a closed interval would make adjacent bands
+both match at the shared edge and violate the overlap law in v1's own content.
+Whether a second action dilutes the EXPLOIT lesson was answered by DESIGN rather than
+deferred: the survey teaches the SAME lesson at a second distance with a different tool,
+and its longer windup makes it the most readable action in the game. **The playtest, not
+this entry, decides whether that worked.**
+
+**Filed revisit triggers (do not act on these without the named evidence):**
+- **Per-action cooldown.** Reconsider ONLY on evidence that use of one authored action is
+  suppressing otherwise-desired availability of another *specifically because both share
+  `_next_fire_tick`*. "The survey fires too rarely" is NOT that evidence — exhaust the
+  content levers first (band edges, actor spacing, windup/cadence, projectile tuning).
+- **Action-derived movement preference.** P29 deliberately kept the engagement band
+  actor-level; coupling selection to movement would make the Watcher hold at survey range
+  and become a turret, letting the player skip its melee action entirely. This becomes a
+  real design question when a range-**maintaining** family arrives (the kiting-punisher
+  fork) — designed then, for that consumer, and it will need hysteresis at the band
+  boundary. Never adopt it as a fix for "the ranged action fires too rarely."
+- **The no-gaps content lint is PROVISIONAL** (`tests/test_content_validation.gd::
+  test_bands_tile_without_gaps`), typo prevention rather than schema law. Removal trigger:
+  the first enemy design that deliberately wants a meaningful interior dead band. Delete
+  the test and nothing else — the fall-through behaviour is already specified and already
+  covered by `test_interior_band_gap_falls_through_to_ordinary_locomotion`. Overlap stays
+  permanently forbidden.
+**Open after the build, before any tuning:** whether the two Watcher tells are
+distinguishable. They share a telegraph COLOUR by law (both Force; damage types own
+colour, GAME-RULES §3 channel law) and are separated by windup duration (20 vs 34) plus
+the tracer. If a playtest finds them confusable, the fix is another non-colour channel
+(disc size, pulse rate) — never a colour the damage type does not own.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

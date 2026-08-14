@@ -26,7 +26,7 @@ func _register_enemy(s: SimWorld, position: Vector3, preferred_attack_distance: 
 	s.add_entity(ENEMY_ID, position, move_speed)
 	s.register_combatant(ENEMY_ID, 20.0, &"fang", 15, 1.0, &"enemy")
 	s.register_weapon(WEAPON_ID, damage, &"force", preferred_attack_distance, 90.0, 0.0, fire_interval_ticks)
-	s.register_ai(ENEMY_ID, WEAPON_ID, position, preferred_attack_distance, minimum_attack_distance, windup_ticks, detection_radius, leash_radius)
+	s.register_ai(ENEMY_ID, CombatTestHelpers.single_action_repertoire(WEAPON_ID, preferred_attack_distance, windup_ticks), position, preferred_attack_distance, minimum_attack_distance, detection_radius, leash_radius)
 
 
 func _tick(s: SimWorld, times: int) -> Array[Event]:
@@ -253,7 +253,7 @@ func test_encounter_reset_restores_spawn_position_explicitly() -> void:
 	_tick(sim, 1)  # disengage -- re-anchors away from original_spawn
 	assert_ne(sim._ai_spawn_position[ENEMY_ID], original_spawn, "sanity: the anchor must have moved off the original spawn")
 
-	sim.register_ai(ENEMY_ID, WEAPON_ID, original_spawn, 0.5, 0.0, 100000, 8.0, 8.0)
+	sim.register_ai(ENEMY_ID, CombatTestHelpers.single_action_repertoire(WEAPON_ID, 0.5, 100000), original_spawn, 0.5, 0.0, 8.0, 8.0)
 	assert_eq(sim._ai_spawn_position[ENEMY_ID], original_spawn, "an explicit encounter reset (re-registration) must restore the authored spawn position")
 
 

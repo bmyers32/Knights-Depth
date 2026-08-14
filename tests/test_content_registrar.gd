@@ -89,32 +89,49 @@ func test_enemy_body_alone_registers_no_ai() -> void:
 		"the body half must leave a target inert -- fixtures rely on this to isolate cadence from engagement")
 
 
-func test_enemy_ai_registers_authored_tuning_and_equips_the_natural_weapon() -> void:
+## P29 moved spacing/leash off the natural weapon onto the ENEMY stats (repertoire order
+## is meaningless, so no action may source actor-level tuning) and moved windup INTO the
+## repertoire (it is per-action).
+func test_enemy_ai_registers_authored_tuning_and_equips_an_action() -> void:
+	var fang: FangStats = ContentDB.get_resource(&"enemy", &"fang")
 	var bite: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", &"fang_bite")
 	var position := Vector3(-12, 0, -12)
 	ContentRegistrar.register_enemy_body(sim, ACTOR_ID, &"fang", position)
 	ContentRegistrar.register_enemy_ai(sim, ACTOR_ID, &"fang", position)
 
 	var tuning: Dictionary = sim._ai_tuning[ACTOR_ID]
-	assert_eq(tuning.preferred_attack_distance, bite.preferred_attack_distance)
-	assert_eq(tuning.minimum_attack_distance, bite.minimum_attack_distance)
-	assert_eq(tuning.windup_ticks, bite.windup_ticks)
-	assert_eq(tuning.detection_radius, bite.detection_radius)
-	assert_eq(tuning.leash_radius, bite.leash_radius)
+	assert_eq(tuning.preferred_attack_distance, fang.preferred_attack_distance)
+	assert_eq(tuning.minimum_attack_distance, fang.minimum_attack_distance)
+	assert_eq(tuning.detection_radius, fang.detection_radius)
+	assert_eq(tuning.leash_radius, fang.leash_radius)
+	assert_false(tuning.has("windup_ticks"), "windup is per-ACTION since P29 -- it must not linger in actor-level tuning")
+
+	var repertoire: Array = sim._ai_repertoire[ACTOR_ID]
+	assert_eq(repertoire.size(), 1, "Fang ships one action")
+	assert_eq(repertoire[0].id, "fang_bite")
+	assert_eq(repertoire[0].windup_ticks, bite.windup_ticks)
+	assert_true(repertoire[0].is_terminal, "a single action is by definition the terminal band")
+
 	assert_eq(sim._ai_spawn_position[ACTOR_ID], position, "the leash anchors at the spawn position passed in")
 	assert_eq(sim._ai_state[ACTOR_ID], "idle", "enemies start idle -- no initial aggro (locked)")
-	assert_eq(sim._equipped_weapon[ACTOR_ID], "fang_bite", "register_ai equips the natural weapon internally")
+	assert_eq(sim._equipped_weapon[ACTOR_ID], "fang_bite", "register_ai equips the lowest-band action internally")
 
 
-## The natural weapon's reach must equal preferred_attack_distance or a settled enemy
-## fires attacks it cannot land -- content's job, asserted here because the registrar is
-## where the two values are wired to the same field.
-func test_every_family_natural_weapon_reach_matches_its_preferred_distance() -> void:
+## A MELEE action's reach must equal its resolved band ceiling or a settled enemy fires
+## attacks it cannot land -- content's job, asserted here because the registrar is where
+## the two values are wired together. Covers every action of every family, including the
+## -1 sentinel resolving against the ACTOR's preferred_attack_distance.
+## A PROJECTILE action is excluded by construction: its band bounds SELECTION, never
+## travel, so it has no reach to match.
+func test_every_melee_action_reach_matches_its_resolved_band_ceiling() -> void:
 	var actor_id: int = 100
-	for enemy_key: StringName in ContentRegistrar.NATURAL_WEAPON_IDS:
-		var weapon_id: StringName = ContentRegistrar.NATURAL_WEAPON_IDS[enemy_key]
-		var natural: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", weapon_id)
+	for enemy_key: StringName in [&"fang", &"ooze", &"watcher"]:
+		var stats: Resource = ContentDB.get_resource(&"enemy", enemy_key)
 		ContentRegistrar.register_enemy_body(sim, actor_id, enemy_key, Vector3.ZERO)
-		assert_eq(sim._weapons[String(weapon_id)].reach, natural.preferred_attack_distance,
-			"%s reach must equal its preferred_attack_distance" % [weapon_id])
+		for action_id: StringName in stats.action_ids:
+			var action: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", action_id)
+			if action.attack_resolution == &"projectile":
+				continue
+			assert_eq(sim._weapons[String(action_id)].reach, ContentRegistrar.resolve_max_range(action, stats),
+				"%s reach must equal its resolved max_range" % [action_id])
 		actor_id += 1

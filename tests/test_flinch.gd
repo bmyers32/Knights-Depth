@@ -169,7 +169,7 @@ func test_successful_flinch_does_not_consume_pressure() -> void:
 func _arm_windup(mode: StringName, vstart: int, vend: int, windup_ticks: int = 20) -> void:
 	sim.register_weapon(&"claw", 5.0, &"force", 2.0, 90.0, 0.0, 45)
 	sim.register_action_susceptibility(&"claw", mode, vstart, vend)
-	sim.register_ai(TARGET_ID, &"claw", TARGET_POSITION, 2.0, 1.0, windup_ticks, 8.0, 18.0)
+	sim.register_ai(TARGET_ID, CombatTestHelpers.single_action_repertoire(&"claw", 2.0, windup_ticks), TARGET_POSITION, 2.0, 1.0, 8.0, 18.0)
 	sim.debug_set_ai_active(TARGET_ID)
 	sim.tick([], DT)  # AI commits to a windup, recording its start tick
 

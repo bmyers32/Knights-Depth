@@ -11,13 +11,10 @@ extends RefCounted
 ## hand-built profiles and registered targets at iframe_ticks_on_hit = 0.
 ## Node-free (RefCounted) so a GUT test can call it without instantiating a scene.
 
-## Maps each locked M1 enemy family to its natural-attack ContentDB id (GAME-RULES
-## §3/§7 seed+7 roster) -- content, not a hardcoded weapon choice in sim/.
-const NATURAL_WEAPON_IDS: Dictionary = {
-	&"fang": &"fang_bite",
-	&"ooze": &"ooze_slam",
-	&"watcher": &"watcher_pulse",
-}
+## P29 retired the family -> natural-weapon-id map that used to live here as a script
+## literal. A family's repertoire is enemy IDENTITY, so it is authored on the enemy stats
+## resource (`action_ids`) where a designer edits it, not in a .gd constant (Prime
+## Directive 3). Nothing in this file may treat any repertoire index as privileged.
 
 
 ## A SwordStats with a non-empty combo_profiles array (Slice B, GAME-RULES §3)
@@ -59,10 +56,18 @@ static func unpack_melee_profile(profile: MeleeAttackProfile) -> Dictionary:
 	}
 
 
+## Resolves one action's band against its owning ACTOR (P29). max_range = -1 is a
+## sentinel meaning "my band ends at the actor's engagement reach" -- resolved here, so
+## sim never sees a sentinel and never needs to know an actor field to interpret a band.
+## Deliberately NOT resolved against a repertoire index: order carries no meaning.
+static func resolve_max_range(action: NaturalWeaponStats, enemy_stats: Resource) -> float:
+	return enemy_stats.preferred_attack_distance if action.max_range < 0.0 else action.max_range
+
+
 ## Registers one enemy family's BODY content -- entity, combatant defenses (health,
-## i-frames, combat radius), and its natural weapon -- and returns the resolved
-## NaturalWeaponStats so the caller can build presentation state (telegraph color/
-## duration) from the same resource without a second lookup.
+## i-frames, combat radius), and EVERY action in its repertoire -- and returns
+## {action_id: NaturalWeaponStats} so the caller can build per-action presentation state
+## (telegraph color/duration) from the same resources without a second lookup.
 ##
 ## Split from register_enemy_ai deliberately: a headless fixture that needs a target
 ## carrying REAL authored defenses (the i-frame/combo-cadence class of interaction)
@@ -70,23 +75,47 @@ static func unpack_melee_profile(profile: MeleeAttackProfile) -> Dictionary:
 ## seam, not a test-only backdoor -- an inert target dummy is a real content shape.
 ## Node lifetime, telegraph caching, and debug_enable_* family gating stay with the
 ## scene driver.
-static func register_enemy_body(sim: SimWorld, actor_id: int, enemy_key: StringName, position: Vector3) -> NaturalWeaponStats:
+##
+## The melee/projectile branch mirrors register_weapon's existing GunStats-vs-SwordStats
+## shape exactly -- an enemy action and a player weapon reach the same two sim entry
+## points (register_weapon / register_gun), because there is only ever ONE combat
+## pipeline (GAME-RULES §3).
+static func register_enemy_body(sim: SimWorld, actor_id: int, enemy_key: StringName, position: Vector3) -> Dictionary:
 	var stats: Resource = ContentDB.get_resource(&"enemy", enemy_key)
-	var natural_weapon_id: StringName = NATURAL_WEAPON_IDS[enemy_key]
-	var natural_weapon: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", natural_weapon_id)
 
-	sim.add_entity(actor_id, position, natural_weapon.move_speed)
+	sim.add_entity(actor_id, position, stats.move_speed)
 	sim.register_combatant(actor_id, stats.max_health, stats.family, stats.iframe_ticks_on_hit, stats.combat_radius, &"enemy")
 	# Registering a flinch profile is what makes an actor part of the reaction layer
 	# at all -- the Envoy deliberately gets none in M1 (player reactions: ROADMAP P23).
 	sim.register_flinch_profile(actor_id, stats.flinch_threshold)
-	sim.register_action_susceptibility(natural_weapon_id, natural_weapon.windup_flinch_mode, natural_weapon.vulnerable_start_tick, natural_weapon.vulnerable_end_tick)
-	sim.register_weapon(natural_weapon_id, natural_weapon.damage, natural_weapon.damage_type, natural_weapon.preferred_attack_distance, natural_weapon.cone_half_angle_degrees, natural_weapon.knockback_distance, natural_weapon.fire_interval_ticks)
-	return natural_weapon
+
+	var actions: Dictionary = {}
+	for action_id: StringName in stats.action_ids:
+		var action: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", action_id)
+		sim.register_action_susceptibility(action_id, action.windup_flinch_mode, action.vulnerable_start_tick, action.vulnerable_end_tick)
+		if action.attack_resolution == &"projectile":
+			sim.register_gun(action_id, action.damage, action.damage_type, action.projectile_speed, action.projectile_max_lifetime_ticks, action.projectile_hit_radius, action.knockback_distance, action.fire_interval_ticks)
+		else:
+			# A melee action's reach IS its resolved band ceiling, so a settled enemy can
+			# always land what it fires (content's job to keep those consistent; the
+			# content-lint test asserts it, sim does not enforce it).
+			sim.register_weapon(action_id, action.damage, action.damage_type, resolve_max_range(action, stats), action.cone_half_angle_degrees, action.knockback_distance, action.fire_interval_ticks)
+		actions[action_id] = action
+	return actions
 
 
-## Registers the engagement AI for an already-registered enemy body (above).
+## Registers the engagement AI for an already-registered enemy body (above). Actor-level
+## spacing/leash come from the ENEMY stats (P29: "where do I want to stand"); the
+## repertoire carries per-action bands and windups ("what can I do from here").
 static func register_enemy_ai(sim: SimWorld, actor_id: int, enemy_key: StringName, position: Vector3) -> void:
-	var natural_weapon_id: StringName = NATURAL_WEAPON_IDS[enemy_key]
-	var natural_weapon: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", natural_weapon_id)
-	sim.register_ai(actor_id, natural_weapon_id, position, natural_weapon.preferred_attack_distance, natural_weapon.minimum_attack_distance, natural_weapon.windup_ticks, natural_weapon.detection_radius, natural_weapon.leash_radius)
+	var stats: Resource = ContentDB.get_resource(&"enemy", enemy_key)
+	var repertoire: Array[Dictionary] = []
+	for action_id: StringName in stats.action_ids:
+		var action: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", action_id)
+		repertoire.append({
+			"id": action_id,
+			"min_range": action.min_range,
+			"max_range": resolve_max_range(action, stats),
+			"windup_ticks": action.windup_ticks,
+		})
+	sim.register_ai(actor_id, repertoire, position, stats.preferred_attack_distance, stats.minimum_attack_distance, stats.detection_radius, stats.leash_radius)

@@ -13,6 +13,21 @@ extends RefCounted
 ## hold makes a subsequent press hit _begin_melee_hold's already-charging no-op branch.
 ## Either one silently corrupts whatever is measured afterwards.
 ##
+## Builds the ONE-action repertoire that SimWorld.register_ai takes (P29). Shared here
+## rather than copied into each fixture: five test files register a single-action enemy,
+## and a repertoire literal duplicated five times is how the band convention drifts
+## between them. A single action is by definition the TERMINAL band, so [0.0, max_range]
+## is inclusive at both ends — exactly the pre-P29 `distance <= preferred` eligibility
+## test, which is why every existing AI fixture keeps its original behaviour unchanged.
+static func single_action_repertoire(action_id: StringName, max_range: float, windup_ticks: int) -> Array[Dictionary]:
+	return [{
+		"id": action_id,
+		"min_range": 0.0,
+		"max_range": max_range,
+		"windup_ticks": windup_ticks,
+	}]
+
+
 ## Only a "charging" hold needs an explicit release to close; every other state
 ## resolves by letting ticks pass. Returns true if quiescence was reached.
 static func settle(sim: SimWorld, actor_id: int, aim: Vector3 = Vector3(0, 0, -1), dt: float = 1.0 / 30.0, max_ticks: int = 60) -> bool:

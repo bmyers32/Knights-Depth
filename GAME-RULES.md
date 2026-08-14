@@ -88,6 +88,14 @@ SK-like/MMO attempts. Treat them as if they cost us a codebase already.)
   weapon resource carries a `class` field (sword/gun/bomb) even though bombs land
   later. Shield: hold to block, own break meter that regenerates, knockback on break.
   i-frames on dodge/hit (durations in sim ticks — never seconds in code).
+- **Enemy action selection (P29).** Enemy AI may select one authored `action_id` from
+  its repertoire according to deterministic distance-band eligibility. AI still decides
+  only locomotion, whether to attack now, and which eligible authored action to commit;
+  all action shape and resolution remain content-owned. Action eligibility must never be
+  ambiguous: authored bands may not overlap. For the current repertoire model,
+  non-terminal bands are half-open `[min, max)` and only the repertoire's outermost band
+  includes its maximum. Selection commits at windup start and is never re-evaluated
+  during that windup. Aim is sampled at the fire tick, not at action commitment.
 - Knockback resolves inside the sim pipeline (hit → matrix → status → knockback →
   death/events), so M3 can replicate it; it is not a physics-engine impulse.
 - Every threshold ships with a calibration note: observed feel at default, and the
@@ -159,3 +167,4 @@ LEXICON.md. §6.1–.2 are hard gates; §6.6 is explicitly a tiebreaker, never a
 | (seed+5) | §6.8, LEXICON, ROADMAP P10 | Three-axis law explicit (forces/states/damage-methods never merged); Umbral combat identity = coherence disruption; P10 fixed — Drifted gear costs are Umbral-neutral | Post-capture review caught P10 residue binding Drift↔Umbral; type-count challenge declined (4 types × 6 families is a locked arithmetic pair per §3 invariants) |
 | (seed+6) | §3, LEXICON, WORLD-CANON, MECHANICS-REF, SETUP, CORE-FANTASY, ROADMAP P9/P12 | QA fixes: "corruption engine"→Drift engine (LEXICON's own violation!); Umbral=dark gloss corrected; channel law forces→STATES; knight→Envoy in warmup text; anti-multiplier rule for family×state (one authored state per M1 family); Act 3 chronology; Umbral softened to general coherence disruption; CORE-FANTASY marked provisional-authority; P9 god-variable guard; P12/P7 decoupled per rule of two | External QA diff review; validates that vocabulary needs mechanical enforcement (guard.py), not authorial attention |
 | (seed+7) | §3, CLAUDE.md M1 | M1 roster LOCKED: Fang/Ooze/Watcher (one weakness per specialized type — combat-slice validation) as Common/Drifted/Claimed respectively; Hollow moved to Archive (M2) debut with true-name reveal | Developer decision after QA review; combat validation beats compressed cosmology in an arena slice; reversal requires playtest evidence |
+| 2026-08-14 | §3 | P29 enemy repertoire amendment. Enemy AI authority widened narrowly from movement + attack timing to deterministic selection of an authored action by distance eligibility. Action shape remains content-owned. Added non-overlapping range-band semantics, windup-time action commitment, and fire-time aim sampling. | First consumer: Watcher `watcher_survey` |

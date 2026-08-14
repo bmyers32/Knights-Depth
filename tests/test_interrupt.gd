@@ -29,7 +29,7 @@ func before_each() -> void:
 	# _start_target_windup below rather than waiting on the AI's own decision
 	# timing -- a huge windup_ticks just keeps register_ai's own machinery from
 	# ever completing a windup on its own mid-test.
-	sim.register_ai(TARGET_ID, TARGET_WEAPON_ID, TARGET_POSITION, 1.5, 0.8, 10000, 8.0, 10.0)
+	sim.register_ai(TARGET_ID, CombatTestHelpers.single_action_repertoire(TARGET_WEAPON_ID, 1.5, 10000), TARGET_POSITION, 1.5, 0.8, 8.0, 10.0)
 
 	sim.set_damage_matrix({}, 1.5, 0.5)
 	sim.register_status(&"burn", 2.0, 5, 20)
@@ -182,7 +182,7 @@ func test_interrupt_sequence_is_deterministic() -> void:
 		local_sim.add_entity(TARGET_ID, TARGET_POSITION, 3.0)
 		local_sim.register_combatant(TARGET_ID, 999.0, &"fang", 0, 0.0, &"enemy")
 		local_sim.register_weapon(TARGET_WEAPON_ID, 5.0, &"force", 1.5, 90.0, 0.5, TARGET_FIRE_INTERVAL_TICKS)
-		local_sim.register_ai(TARGET_ID, TARGET_WEAPON_ID, TARGET_POSITION, 1.5, 0.8, 10000, 8.0, 10.0)
+		local_sim.register_ai(TARGET_ID, CombatTestHelpers.single_action_repertoire(TARGET_WEAPON_ID, 1.5, 10000), TARGET_POSITION, 1.5, 0.8, 8.0, 10.0)
 		local_sim.set_damage_matrix({}, 1.5, 0.5)
 		local_sim.register_status(&"burn", 2.0, 5, 20)
 		local_sim.set_status_priority({"burn": 1})

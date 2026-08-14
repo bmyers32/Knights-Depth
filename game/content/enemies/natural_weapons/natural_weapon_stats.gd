@@ -1,10 +1,18 @@
 class_name NaturalWeaponStats
 extends Resource
-## Enemy natural-attack tunables (Prime Directive 3) — looked up via ContentDB, never
-## literals in scripts. Registers through the SAME register_weapon/_apply_attack
-## pipeline the Envoy's sword uses (GAME-RULES §3's combat pipeline is fixed) — an
-## attacking enemy synthesizes the exact same "attack" Command shape a player would
-## send (Phase D step 8 Phase 4).
+## One authored enemy ACTION (Prime Directive 3) — looked up via ContentDB, never
+## literals in scripts. Registers through the SAME register_weapon/register_gun/
+## _apply_attack pipeline the Envoy's own weapons use (GAME-RULES §3's combat pipeline is
+## fixed) — an attacking enemy synthesizes the exact same "attack" Command shape a player
+## would send.
+##
+## P29 SCOPE RULE: this resource describes an ACTION — what happens when it fires, and
+## the distance band from which it may be chosen. It deliberately no longer describes the
+## ACTOR. Locomotion identity (move_speed, engagement spacing, detection/leash radii)
+## migrated to the enemy stats resources at P29, because repertoire order is semantically
+## meaningless and therefore NO element of the repertoire may source actor-level tuning.
+## The split, stated once: actor-level spacing answers "where do I want to stand";
+## the band below answers "what can I do from here". Never conflate them.
 
 ## VALIDATED-FOR-M1 at the combat RE-GATE 2026-08-13 (frozen build 41ffd5a): verdict
 ## PASS against the absolute bar "a viable M1 combat foundation despite primitive
@@ -14,59 +22,77 @@ extends Resource
 ## VALIDATED-FOR-M1 means judged SOUND AS A FOUNDATION in live play -- NOT individually
 ## optimised, and not a claim any single number below is right. NUMERIC-TUNING FENCE:
 ## no further HP/output/flinch-threshold micro-tuning until a specific future playtest
-## finding demands it (GAME-RULES calibration-note law), alongside this session's other new AI
-## numbers (detection/leash radii especially — see below).
-@export var move_speed: float = 2.5
-## Engagement spacing (locked defect fix, pre-gate pass): the band an engaged enemy
-## tries to hold — farther than preferred_attack_distance, it approaches; closer than
-## minimum_attack_distance, it backs away; inside the band, it stops and attacks
-## (fixes the earlier defect where a single attack_range threshold let an enemy walk
-## on top of the player before attacking). preferred_attack_distance doubles as the
-## weapon's actual reach passed to register_weapon — keep it <= the attack's real
-## hit range so a settled enemy can always land the attack it fires; content's job to
-## keep those consistent, not sim's to enforce.
-## P28 (2026-08-13): these are DERIVED FROM CONTACT DISTANCE, not chosen freely.
-## minimum_attack_distance = that family's combat contact distance, and preferred is
-## held at least 0.3 beyond it -- otherwise an enemy settles INSIDE the player's body.
-## Ooze needed the real correction (preferred 1.8 -> 2.2, since its contact grew to
-## 1.90); preferred doubles as the weapon's reach, so a bigger body legitimately gets
-## a longer slam. VALIDATED-FOR-M1 at the 2026-08-13 re-gate -- see ROADMAP P28.
-@export var preferred_attack_distance: float = 1.5
-@export var minimum_attack_distance: float = 0.8
+## finding demands it (GAME-RULES calibration-note law).
+
+## DISTANCE BAND (P29) — the range from which the AI may select this action.
+##
+## BOUNDARY CONVENTION (ruled, and the reason a closed interval is wrong): every
+## NON-TERMINAL band is HALF-OPEN [min_range, max_range); only the repertoire's TERMINAL
+## band (the single largest max_range) includes its own maximum. A closed interval on
+## both ends would make adjacent bands BOTH match at the shared edge, violating the
+## overlap law in the very content that introduced it. No epsilon, no tie-breaking:
+## adjacent authored bands must satisfy next.min_range == prev.max_range exactly.
+##
+## A single-action repertoire is by definition terminal, so [0.0, max] is inclusive at
+## both ends — byte-identical to the pre-P29 `distance <= preferred_attack_distance` gate.
+@export var min_range: float = 0.0
+## -1.0 is a SENTINEL, not a band: ContentRegistrar resolves it to the ACTOR's
+## preferred_attack_distance before anything reaches sim (sim never sees -1). This is how
+## a single-action family keeps expressing "my band is exactly my engagement reach"
+## without duplicating the number. It resolves against an ACTOR field, never against a
+## repertoire index.
+@export var max_range: float = -1.0
+
+## How this action resolves: &"melee" (instant cone sweep, register_weapon) or
+## &"projectile" (travel time, register_gun). The scene/registrar branches on this
+## exactly like it already branches GunStats vs SwordStats for player weapons.
+@export var attack_resolution: StringName = &"melee"
+
+## Projectile-only, inert at defaults so every melee action's .tres stays unchanged.
+## Speed is continuous (units/second, mirrors movement); max_lifetime is a sim-tick count
+## (GAME-RULES §3: durations in sim ticks, never seconds in code).
+@export var projectile_speed: float = 0.0
+@export var projectile_hit_radius: float = 0.0
+@export var projectile_max_lifetime_ticks: int = 0
+
+## The resolved max_range doubles as a MELEE action's registered reach — content's job to
+## keep those consistent, not sim's to enforce (a content-lint test asserts it). A
+## projectile action ignores reach entirely; its band bounds SELECTION, never travel.
 @export var cone_half_angle_degrees: float = 90.0
 @export var windup_ticks: int = 20
-## Reused as the shared per-actor cooldown gate (SimWorld._next_fire_tick) — the AI
-## phase never starts a new windup until this elapses, so there is no separate
-## AI-owned cooldown dict.
+## Per-ACTION cadence, but the gate it arms is SHARED PER ACTOR (SimWorld._next_fire_tick)
+## — ruled at P29 for v1. Firing any action starts the cooldown for the whole repertoire,
+## and an interrupted windup arms this value for the action that was actually cancelled.
+## Revisit trigger is filed at ROADMAP P29: per-action cooldown is reconsidered only on
+## evidence that one action is suppressing another's desired availability SPECIFICALLY
+## because they share the gate — "it fires too rarely" is not that evidence.
 @export var fire_interval_ticks: int = 45
 @export var damage: float = 5.0
 ## Locked to force (MECHANICS-REFERENCE.md §2's onboarding rule: ALL enemy damage is
-## the baseline type in M1; typed enemy damage phases in at M2). Kept as an exported
-## field, not a hardcoded literal in sim/, for when that ramp lands.
+## the baseline type in M1-M2; typed enemy damage phases in with typed_damage_ramp).
+## Kept as an exported field, not a hardcoded literal in sim/, for when that ramp lands.
 @export var damage_type: StringName = &"force"
 @export var knockback_distance: float = 0.5
 
-## AI leash/detection (Phase D step 8 Phase 4): enemies start idle with NO initial
-## aggro — detection_radius gates both first acquisition and re-acquisition (only
-## while idle, never mid-return). leash_radius is measured from the enemy's spawn
-## position, not its current position (a fixed home leash, not a drifting one).
-## Widened leash_radius 10.0 -> 18.0 (manual-pass calibration, 2026-08-04): the old
-## 2.0-unit detection-to-leash gap forced running laps in the old 20x20 arena to ever
-## exceed it; sized against the 40x40 arena (arena.tscn) where a straight-line
-## retreat from any plausible re-anchor point gives 30+ units of room. Unvalidated
-## first-pass numbers, revisit at the M1 playtest gate.
-@export var detection_radius: float = 8.0
-@export var leash_radius: float = 18.0
-
 ## Telegraph law (GAME-RULES §3): one flat color stands in for a real type->color
-## palette table until a second reachable enemy damage type exists — M1's enemies are
+## palette table until a second reachable enemy damage type exists — enemies are
 ## Force-only (onboarding rule above), so a whole mapping table has nothing else to
-## map yet.
+## map yet. Authored PER ACTION since P29 so a future TYPED action can carry its own
+## type's color; presentation caches by action_id.
+##
+## CHANNEL LAW CONSEQUENCE, stated because it looks like a bug otherwise: two actions on
+## the same actor that share a damage type MUST share a telegraph color. Colour is owned
+## by the damage type, never by the action — inventing a second hue to make two Force
+## actions "easier to tell apart" would be presentation stealing a channel the type owns.
+## Watcher's two tells are distinguished by WINDUP DURATION instead (pulse 20 ticks vs
+## survey 34, a 70% longer telegraph), plus the projectile tracer the survey produces and
+## the pulse does not. If a playtest finds them still confusable, the fix is a different
+## non-colour channel (disc size, pulse rate), never a colour the type does not own.
 @export var telegraph_color: Color = Color(0.9, 0.4, 0.1)
 
-## ACTION SUSCEPTIBILITY (flinch batch) — how flinchable this enemy is DURING its own
-## attack windup. Per-action authoring is enemy identity: a generous window on one
-## family and none at all on another can both be correct. Never respond to a balance
+## ACTION SUSCEPTIBILITY (flinch batch) — how flinchable this enemy is DURING this
+## action's windup. Per-action authoring is enemy identity: a generous window on one
+## action and none at all on another can both be correct. Never respond to a balance
 ## problem by globally shrinking every window (GAME-RULES §3 telegraph/identity law).
 ##
 ## windup_flinch_mode applies OUTSIDE the interval below:
@@ -79,10 +105,10 @@ extends Resource
 ##
 ## vulnerable_start_tick / vulnerable_end_tick are offsets from WINDUP START (not from
 ## the attack landing), inclusive, in sim ticks. -1/-1 = never vulnerable.
-## M1 authoring (PROVISIONAL): only Watcher carries a window — the final third of its
-## ranged windup, i.e. committed and telegraph-visible, so a well-timed weaker hit
-## punishes it. Fang and Ooze stay -1 so the batch can tell "no window authored" apart
-## from "window mistuned" during the playtest.
+## Only the Watcher's actions carry windows — its lesson is timing, not pressure. Since
+## P29 the window is scoped to the COMMITTED action: SimWorld reads
+## _action_susceptibility[_equipped_weapon[actor]], and commitment sets that, so a
+## Watcher flinched mid-survey uses survey's window and never pulse's.
 @export var windup_flinch_mode: StringName = &"normal"
 @export var vulnerable_start_tick: int = -1
 @export var vulnerable_end_tick: int = -1
