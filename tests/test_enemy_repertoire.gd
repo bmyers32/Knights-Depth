@@ -485,7 +485,7 @@ func test_telegraph_is_emitted_on_the_exact_commitment_tick() -> void:
 ## already resolves at setup. Window = [Event.tick + start, Event.tick + end]. This test
 ## pins the derivation so a future payload change cannot silently break the cue.
 func test_vulnerable_window_is_derivable_from_the_telegraph_payload_alone() -> void:
-	var s: SimWorld = _real_watcher_at(6.0)
+	var s: SimWorld = _real_watcher_frustrated_at(6.0)
 	var events: Array[Event] = s.tick([], 1.0 / 30.0)
 	var telegraph: Event = null
 	for event in events:
@@ -512,6 +512,182 @@ func test_vulnerable_window_is_derivable_from_the_telegraph_payload_alone() -> v
 			"tick %d: presentation's derived window must agree with the sim's authoritative susceptibility" % offset)
 
 
+# --- close-frustration selection (P29 Watcher pass, 2026-08-17) ----------------------
+# Survey is no longer selected by range alone: the Watcher must have genuinely FAILED TO
+# CLOSE for its family's patience, and each failed-close episode grants exactly ONE
+# fallback. These use the REAL Watcher content through ContentRegistrar; the Watcher is
+# pinned (speed 0) so geometry is controlled by moving the PLAYER, isolating selection
+# from locomotion.
+
+const WATCHER_ANCHOR := Vector3(0, 0, -8.0)
+
+
+func _pinned_real_watcher() -> SimWorld:
+	var s := SimWorld.new()
+	s.set_damage_matrix({}, 1.5, 0.5)
+	s.add_entity(PLAYER_ID, Vector3.ZERO, 0.0)
+	s.register_combatant(PLAYER_ID, 1000000.0, &"envoy", 0, 0.45, &"player")
+	ContentRegistrar.register_enemy_body(s, ENEMY_ID, &"watcher", WATCHER_ANCHOR)
+	ContentRegistrar.register_enemy_ai(s, ENEMY_ID, &"watcher", WATCHER_ANCHOR)
+	s._move_speeds[ENEMY_ID] = 0.0
+	s.debug_set_ai_active(ENEMY_ID)
+	return s
+
+
+func _place_player(s: SimWorld, distance: float) -> void:
+	s.entities[PLAYER_ID] = WATCHER_ANCHOR + Vector3(0, 0, distance)
+
+
+func _patience(s: SimWorld) -> int:
+	return int(s._ai_tuning[ENEMY_ID].close_frustration_ticks)
+
+
+func _count_surveys(events: Array[Event]) -> int:
+	return events.filter(func(e): return e.kind == "attack_telegraph" and String(e.payload.get("action_id", "")) == "watcher_survey").size()
+
+
+## THE PINNED CORRECTNESS REQUIREMENT. _ai_last_in_close_band is the last tick the Watcher
+## was ACTUALLY close, refreshed continuously -- NOT the tick it first arrived. A long melee
+## exchange followed by an exit must start the frustration clock at the EXIT, so the full
+## patience still has to elapse. If the timestamp were stamped once on entry, this Watcher
+## would survey the instant the player stepped away.
+func test_frustration_counts_from_the_exit_tick_not_the_entry_tick() -> void:
+	var s: SimWorld = _pinned_real_watcher()
+	# Re-placed every tick: the Watcher's own pulse knockback would otherwise push the player
+	# out of close range within ~60 ticks, and the test would silently stop testing what it
+	# claims to (BRAIN: knockback invalidates a scripted sequence's next-step assumption).
+	for _i in 300:
+		_place_player(s, 1.0)
+		_tick(s, 1)
+	assert_almost_eq(float(s._ai_last_in_close_band[ENEMY_ID]), float(s.tick_count - 1), 1.0,
+		"the proximity fact must have been refreshed every tick while close, not left at entry")
+
+	_place_player(s, 6.0)  # the player steps out
+	var before: Array[Event] = _tick(s, _patience(s) - 2)
+	assert_eq(_count_surveys(before), 0,
+		"the full patience must elapse FROM THE EXIT -- 300 ticks of prior melee must grant no credit")
+	assert_gt(_count_surveys(_tick(s, 30)), 0, "and then it falls back to Survey")
+
+
+## The same law from the displacement direction: being pushed off is not a provocation.
+## This test exists specifically so the mechanic cannot silently become "bump immediately
+## provokes Survey", which is a separate behavioural rule requiring its own evidence.
+func test_displacement_out_of_close_range_does_not_immediately_provoke_survey() -> void:
+	var s: SimWorld = _pinned_real_watcher()
+	for _i in 60:
+		_place_player(s, 1.2)
+		_tick(s, 1)  # settled in close range, held there against knockback
+	# Displace the WATCHER outward, exactly as a bump would.
+	s.entities[ENEMY_ID] = WATCHER_ANCHOR + Vector3(0, 0, -4.0)
+	var immediately: Array[Event] = _tick(s, 20)
+	assert_eq(_count_surveys(immediately), 0,
+		"displacement only STOPS the proximity refresh -- the whole patience is still owed")
+
+
+## REGRESSION PIN: the proximity refresh must precede ALL early-returns in the AI phase.
+##
+## It originally sat inside _decide_single_ai_command, AFTER the FLINCHED return and the
+## mid-windup return -- so the "last tick actually close" fact silently froze for the whole
+## of every windup and every flinch recovery. A Watcher that had been standing in melee the
+## entire time then read as long-frustrated the moment it could act again, and would fall
+## back to Survey from point-blank range.
+##
+## Position is a fact about the WORLD, not about what the actor happens to be doing. This
+## test pins the flinch case specifically, because flinch returns earliest of all.
+func test_proximity_refresh_is_not_skipped_while_flinched() -> void:
+	var s: SimWorld = _pinned_real_watcher()
+	_place_player(s, 1.0)
+	_tick(s, 1)
+	s._flinched_until_tick[ENEMY_ID] = s.tick_count + 30  # flinched, but still standing close
+
+	for _i in 30:
+		_place_player(s, 1.0)
+		var events: Array[Event] = _tick(s, 1)
+		assert_eq(events.filter(func(e): return e.kind == "attack_telegraph").size(), 0,
+			"sanity: a flinched enemy commits nothing")
+		assert_eq(int(s._ai_last_in_close_band[ENEMY_ID]), s.tick_count - 1,
+			"the proximity fact must keep refreshing THROUGH the flinch -- it is a world fact, not an activity fact")
+
+	# And the consequence that matters: it has accrued no frustration credit at all.
+	_place_player(s, 6.0)
+	assert_eq(_count_surveys(_tick(s, _patience(s) - 2)), 0,
+		"30 flinched ticks spent in close range must grant zero frustration credit")
+
+
+## A freshly acquired distant Watcher must not open pre-frustrated (that would recreate the
+## range-triggered defect the engagement opener was introduced to fix).
+func test_a_freshly_acquired_watcher_is_not_pre_frustrated() -> void:
+	var s: SimWorld = _pinned_real_watcher()
+	_place_player(s, 6.0)
+	assert_eq(_count_surveys(_tick(s, _patience(s) - 2)), 0,
+		"acquisition starts the clock; it must not open by surveying")
+	assert_gt(_count_surveys(_tick(s, 30)), 0, "the fallback arrives only after the patience is genuinely spent")
+
+
+## ONE Survey per failed-close episode. Held at range indefinitely, the Watcher does not
+## become a turret on a longer timer -- it does not fire again at all until it re-establishes
+## close range.
+func test_exactly_one_survey_per_failed_close_episode() -> void:
+	var s: SimWorld = _pinned_real_watcher()
+	_place_player(s, 6.0)
+	var run: Array[Event] = _tick(s, 700)
+	assert_eq(_count_surveys(run), 1,
+		"held at range for 700 ticks, the Watcher must fall back exactly ONCE -- the episode is spent, not merely cooling down")
+
+
+## ...and the episode clears ONLY on genuine close re-establishment, after which a NEW
+## failed-close episode must accrue from scratch.
+func test_episode_clears_only_on_genuine_close_re_establishment() -> void:
+	var s: SimWorld = _pinned_real_watcher()
+	_place_player(s, 6.0)
+	assert_eq(_count_surveys(_tick(s, 200)), 1, "sanity: the episode's one fallback was spent")
+
+	for _i in 10:
+		_place_player(s, 1.0)   # genuinely re-establish close range
+		_tick(s, 1)
+	_place_player(s, 6.0)   # and lose it again -- a NEW episode
+	assert_eq(_count_surveys(_tick(s, _patience(s) - 2)), 0, "the new episode must accrue its own patience")
+	assert_eq(_count_surveys(_tick(s, 30)), 1, "then it may fall back once more")
+
+
+## Boundary behaviour: an actor hovering across the close band edge keeps refreshing the
+## proximity fact, so frustration never matures and no episode is ever spent. The band edge
+## must not become a place where state degrades.
+func test_band_edge_flicker_never_matures_frustration_or_corrupts_the_episode() -> void:
+	var s: SimWorld = _pinned_real_watcher()
+	var surveys: int = 0
+	for i in 400:
+		_place_player(s, 1.95 if i % 2 == 0 else 2.05)
+		surveys += _count_surveys(_tick(s, 1))
+	assert_eq(surveys, 0, "flickering at the edge counts as being close -- frustration must never mature")
+	assert_false(s._ai_last_survey_commit.has(ENEMY_ID),
+		"and with no Survey ever committed, no episode may have been marked spent")
+
+
+## Pulse carries no gate and must be entirely unaffected.
+func test_pulse_is_never_gated_by_close_frustration() -> void:
+	var s: SimWorld = _pinned_real_watcher()
+	_place_player(s, 1.0)
+	var events: Array[Event] = _tick(s, 40)
+	assert_gt(events.filter(func(e): return e.kind == "attack_telegraph" and String(e.payload.get("action_id", "")) == "watcher_pulse").size(), 0,
+		"the melee action must fire normally on the shared cooldown, ungated")
+
+
+func test_close_frustration_selection_is_deterministic() -> void:
+	var a: SimWorld = _pinned_real_watcher()
+	var c: SimWorld = _pinned_real_watcher()
+	for i in 400:
+		var distance: float = 6.0 if i % 200 < 150 else 1.0
+		_place_player(a, distance)
+		_place_player(c, distance)
+		var events_a: Array[Event] = a.tick([], 1.0 / 30.0)
+		var events_c: Array[Event] = c.tick([], 1.0 / 30.0)
+		assert_eq(events_a.size(), events_c.size(), "tick %d event count must match" % i)
+		for j in events_a.size():
+			assert_eq(events_a[j].kind, events_c[j].kind)
+			assert_eq(events_a[j].payload, events_c[j].payload)
+
+
 # --- named integration fixture: the REAL Watcher, production path -------------------
 # BRAIN, "Convenience-zeroed defenses in tests hide the interactions worth testing": the
 # synthetic fixtures above protect SIMULATION laws, and every one of them hand-builds its
@@ -531,11 +707,30 @@ func _real_watcher_at(distance: float) -> SimWorld:
 	return s
 
 
+## A real Watcher that has ALREADY failed to close for its authored patience. Ages the
+## literal proximity fact rather than poking any episode flag -- there is no flag to poke,
+## which is the point of deriving episode state from facts.
+func _real_watcher_frustrated_at(distance: float) -> SimWorld:
+	var s: SimWorld = _real_watcher_at(distance)
+	var patience: int = int(s._ai_tuning[ENEMY_ID].close_frustration_ticks)
+	s._ai_last_in_close_band[ENEMY_ID] = s.tick_count - patience
+	return s
+
+
+## RE-BASELINED 2026-08-17 (Watcher contextual selection). DELIBERATE: range alone no longer
+## selects Survey, so the original "at 6.0 units it surveys on tick 1" is no longer the
+## specified behaviour. The assertion now states the RULED rule -- range plus a genuinely
+## failed close -- and the un-frustrated case is asserted alongside it, which is the
+## behaviour change itself rather than a weakening of the test.
 func test_real_watcher_surveys_at_range_and_pulses_up_close() -> void:
-	var far_sim: SimWorld = _real_watcher_at(6.0)
+	var fresh_sim: SimWorld = _real_watcher_at(6.0)
+	assert_eq(_telegraphed_action(_tick(fresh_sim, 1)), "",
+		"range alone must NOT select Survey -- a Watcher that has not yet failed to close has no reason to fall back")
+
+	var far_sim: SimWorld = _real_watcher_frustrated_at(6.0)
 	var far_events: Array[Event] = _tick(far_sim, 1)
 	assert_eq(_telegraphed_action(far_events), "watcher_survey",
-		"the shipped Watcher must choose its ranged action at 6.0 units")
+		"but a Watcher held at 6.0 units past its patience must fall back to Survey")
 	var fired: Array[Event] = _tick(far_sim, 40)
 	assert_gt(fired.filter(func(e): return e.kind == "projectile_fired").size(), 0,
 		"and that action must actually resolve as a projectile through the real content")
@@ -587,8 +782,13 @@ func test_real_content_soaks_1000_ticks_headless() -> void:
 				terminated += 1
 
 	assert_eq(s.tick_count, 1000, "the sim must survive a long headless soak with real content")
-	assert_gt(int(by_action.get("watcher_survey", 0)), 0, "the Watcher must actually use its ranged action over a long run")
-	assert_gt(int(by_action.get("watcher_pulse", 0)), 0, "and its melee action too -- if only one ever fires, the bands are not doing their job")
+	# SURVEY IS DELIBERATELY NOT ASSERTED HERE (2026-08-17). Since Survey became contextual
+	# it requires a sustained FAILED CLOSE, and a soak against a stationary player produces
+	# the opposite -- the Watcher simply walks in and fights. Choreographing a kite here made
+	# the test depend on out-running the leash rather than on the mechanic, so Survey
+	# coverage moved to the deterministic gate tests above, where the episode lifecycle is
+	# actually the subject. What this soak protects is robustness and MELEE coverage.
+	assert_gt(int(by_action.get("watcher_pulse", 0)), 0, "an unopposed Watcher must close and use its melee action")
 	assert_gt(int(by_action.get("fang_bite", 0)), 0, "the single-action family must keep attacking normally alongside it")
 	# Every shot must be accounted for: terminated, or still legitimately in flight.
 	assert_eq(fired, terminated + s._projectiles.size(),

@@ -137,6 +137,23 @@ var _ai_tuning: Dictionary = {}  # actor_id -> {preferred_attack_distance, minim
 ## is_terminal}. is_terminal is DERIVED at registration (the single largest max_range),
 ## never authored -- see _select_action for the half-open boundary convention it serves.
 var _ai_repertoire: Dictionary = {}
+## CLOSE-FRUSTRATION SELECTION (P29 Watcher pass). TWO LITERAL FACTS, one write site each.
+## Episode consumption is DERIVED by comparing them and is never stored as a mutable flag:
+## a flag would need a second write site to clear, and the moment those two writes drift
+## apart the flag lies about the facts it summarises.
+##
+## _ai_last_in_close_band is the last tick the target was ACTUALLY inside the close band --
+## refreshed EVERY tick while close, not stamped once on entry. That distinction is the
+## whole mechanic: frustration must measure time since the actor was LAST able to be close,
+## so a long melee exchange followed by being pushed out starts the clock at the moment it
+## left, never at the moment it first arrived.
+var _ai_last_in_close_band: Dictionary = {}   # actor_id -> tick (literal proximity fact)
+var _ai_last_survey_commit: Dictionary = {}   # actor_id -> tick (literal commitment fact)
+## The resolved close band itself, derived once at registration (the repertoire entry with
+## the lowest min_range that does NOT itself require close frustration). Stored so the
+## per-tick proximity test reuses band_contains() against the AUTHORED band rather than
+## re-deriving "close range" from some other number -- one definition, one predicate.
+var _ai_close_band: Dictionary = {}           # actor_id -> band Dictionary
 var _ai_attack_start_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 var _ai_attack_fire_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 ## FLINCH reaction layer (batch, GAME-RULES §3). FLINCHED is an actor/AI REACTION
@@ -440,7 +457,7 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 ## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
 ## than preferred -> approach, closer than minimum -> back away, inside the band ->
 ## stop. Since P29 they govern MOVEMENT ONLY; attack eligibility is the action band.
-func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0) -> void:
+func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0) -> void:
 	# The TERMINAL band is the one with the largest max_range — the only band that
 	# includes its own maximum (see _select_action). Derived, never authored, so content
 	# cannot accidentally declare two terminals or none.
@@ -457,6 +474,7 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 			"max_range": float(action.max_range),
 			"windup_ticks": int(action.windup_ticks),
 			"is_terminal": is_equal_approx(float(action.max_range), terminal_max),
+			"requires_close_frustration": bool(action.get("requires_close_frustration", false)),
 		})
 		if float(action.min_range) < lowest_min:
 			lowest_min = float(action.min_range)
@@ -471,7 +489,22 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 		"detection_radius": detection_radius,
 		"leash_radius": leash_radius,
 		"engagement_delay_ticks": engagement_delay_ticks,
+		"close_frustration_ticks": close_frustration_ticks,
 	}
+	# The CLOSE band: the innermost action that is not itself frustration-gated. Derived
+	# from authored bands, never from a separate "close range" number, so the proximity test
+	# and the selector agree by construction.
+	_ai_close_band.erase(actor_id)
+	var closest_min: float = INF
+	for action in resolved:
+		if bool(action.requires_close_frustration):
+			continue
+		if float(action.min_range) < closest_min:
+			closest_min = float(action.min_range)
+			_ai_close_band[actor_id] = action
+	for action in resolved:
+		if bool(action.requires_close_frustration) and not _ai_close_band.has(actor_id):
+			push_warning("register_ai [actor %d]: '%s' requires close frustration but the repertoire has no ungated close action -- it could never become selectable" % [actor_id, action.id])
 	# Equip the LOWEST-BAND action so _equipped_weapon is never empty for an AI actor.
 	# Chosen from authored band values, not from array position — element 0 is not
 	# privileged. Commitment overwrites this at every windup start, so the initial pick
@@ -536,6 +569,11 @@ func _acquire_aggro(actor_id: int) -> bool:
 	var delay: int = int(_ai_tuning.get(actor_id, {}).get("engagement_delay_ticks", 0))
 	if delay > 0:
 		_next_fire_tick[actor_id] = max(int(_next_fire_tick.get(actor_id, 0)), tick_count + delay)
+	# Close-frustration starts counting from ACQUISITION, not from zero. Load-bearing:
+	# without this a freshly-acquired distant Watcher would read as already-frustrated and
+	# OPEN by surveying -- recreating exactly the "range-triggered" defect the engagement
+	# opener was introduced to fix.
+	_ai_last_in_close_band[actor_id] = tick_count
 	return true
 
 
@@ -548,6 +586,11 @@ func _acquire_aggro(actor_id: int) -> bool:
 ## instead of arena.gd reaching into the dict directly.
 func debug_set_ai_active(actor_id: int) -> void:
 	_ai_state[actor_id] = "active"
+	# Mirrors _acquire_aggro's initialization (minus the engagement opener, which this hook
+	# deliberately skips): a debug-forced actor must still start UN-frustrated, or it would
+	# survey on its first eligible tick and the hook would silently change behaviour it only
+	# claims to skip detection gating for.
+	_ai_last_in_close_band[actor_id] = tick_count
 
 
 ## Debug-only, setup-time health override (arena.gd's debug_validation_target_health)
@@ -1887,8 +1930,32 @@ func _decide_ai_commands(events: Array[Event]) -> Array[Command]:
 	for actor_id in ai_actor_ids:
 		if _health.get(actor_id, 0.0) <= 0.0:
 			continue  # a dead enemy emits nothing and decides nothing
+		_refresh_close_proximity(actor_id, player_id)
 		commands.append_array(_decide_single_ai_command(actor_id, player_id, events))
 	return commands
+
+
+## LITERAL PROXIMITY FACT, refreshed EVERY tick the target is genuinely inside the close
+## band -- never stamped once on entry, and never skipped because of what the actor happens
+## to be doing. It runs here, ahead of every decision branch, deliberately: an earlier
+## version sat inside _decide_single_ai_command AFTER the flinched and mid-windup early
+## returns, so the fact went stale for the whole of every windup and a Watcher that had been
+## in melee the entire time read as long-frustrated the moment it looked. Position is a fact
+## about the world, not about the actor's current activity.
+##
+## Tested against the AUTHORED close band with the same band_contains() the selector uses,
+## so "close" has exactly one definition in the codebase.
+##
+## This is also precisely why displacement does NOT provoke a Survey: a bump merely stops
+## the refresh, leaving the entire close_frustration_ticks still to elapse.
+func _refresh_close_proximity(actor_id: int, player_id: int) -> void:
+	var close_band: Dictionary = _ai_close_band.get(actor_id, {})
+	if close_band.is_empty():
+		return
+	var to_player: Vector3 = entities.get(player_id, Vector3.ZERO) - entities.get(actor_id, Vector3.ZERO)
+	to_player.y = 0.0
+	if band_contains(close_band, to_player.length()):
+		_ai_last_in_close_band[actor_id] = tick_count
 
 
 func _find_living_player_id() -> int:
@@ -2014,9 +2081,42 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 ## inside engagement range with no code change here.
 func _select_action(actor_id: int, distance: float) -> String:
 	for action in _ai_repertoire.get(actor_id, []):
-		if band_contains(action, distance):
-			return String(action.id)
+		if not band_contains(action, distance):
+			continue
+		if bool(action.requires_close_frustration) and not _close_frustration_satisfied(actor_id):
+			# Eligible by RANGE, not by CONTEXT. Returning "" reuses the already-specified,
+			# already-tested "no action applies" path: ordinary locomotion continues, which
+			# IS "resume movement/decision" -- no new AI state, and no immediate cycling.
+			return ""
+		return String(action.id)
 	return ""
+
+
+## Close-frustration gate for the ONE action that authors it (watcher_survey). Two
+## questions, both answered from literal facts:
+##   1. Has this actor been unable to reach close range for its family's patience?
+##   2. Is this failed-close episode's single fallback still unspent?
+##
+## Episode consumption is DERIVED, never stored: a survey committed more recently than the
+## last moment of genuine close range means this episode already spent its fallback. Because
+## re-entering close range refreshes the proximity fact to *now*, an episode clears itself
+## with no explicit reset and no flag to fall out of sync.
+##
+## CONSUMPTION IS AT COMMITMENT (locked): interrupting a committed survey does NOT restore
+## the opportunity. The Watcher spent its fallback by committing; a new one requires genuine
+## close-range re-establishment followed by a fresh failed-close episode.
+func _close_frustration_satisfied(actor_id: int) -> bool:
+	var required: int = int(_ai_tuning.get(actor_id, {}).get("close_frustration_ticks", 0))
+	# Default to tick_count (zero elapsed) rather than 0: an actor with no recorded
+	# proximity fact must read as NOT frustrated, never as maximally frustrated.
+	var last_close: int = int(_ai_last_in_close_band.get(actor_id, tick_count))
+	if tick_count - last_close < required:
+		return false
+	# has(), not a sentinel: any numeric "never committed" default can compare GREATER than
+	# a legitimately smaller last_close and read as consumed. Absence is the honest test.
+	if not _ai_last_survey_commit.has(actor_id):
+		return true
+	return int(_ai_last_survey_commit[actor_id]) <= last_close
 
 
 ## THE band-eligibility predicate — half-open [min, max) unless terminal, then [min, max].
@@ -2109,6 +2209,10 @@ func _decide_attack_commands(actor_id: int, selected_action_id: String, player_i
 	for action in _ai_repertoire.get(actor_id, []):
 		if String(action.id) == selected_action_id:
 			windup_ticks = int(action.windup_ticks)
+			# LITERAL COMMITMENT FACT -- stamped at COMMIT, which is what makes an
+			# interrupted survey still consume the episode with no un-stamp path.
+			if bool(action.requires_close_frustration):
+				_ai_last_survey_commit[actor_id] = tick_count
 			break
 	_ai_attack_start_tick[actor_id] = tick_count
 	_ai_attack_fire_tick[actor_id] = tick_count + windup_ticks

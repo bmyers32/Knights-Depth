@@ -243,6 +243,37 @@ func test_watcher_ships_the_authored_two_action_repertoire() -> void:
 		"the ranged action pays for its range in commitment -- a longer windup is its counterplay, not an accident")
 
 
+# --- locked flinch-capability map (P29 re-playtest A/B, 2026-08-17) ----------------
+
+## Basic ranged fire cannot cash a flinch; it still builds pressure. Ruled from the live
+## EXPLOIT-vs-NONE comparison ("basic wand flinch is clearly too strong").
+func test_basic_guns_cannot_trigger_flinch_but_still_build_pressure() -> void:
+	for weapon_id in [&"wand_A", &"gun_pierce_A", &"gun_arc_A", &"gun_umbral_A"]:
+		var gun: GunStats = ContentDB.get_resource(&"weapon", weapon_id)
+		assert_eq(gun.flinch_capability, &"none",
+			"%s: basic ranged fire must not trigger flinch (locked 2026-08-17)" % weapon_id)
+		assert_true(gun.contributes_pressure,
+			"%s: pressure CONTRIBUTION is deliberately unchanged -- the wand still builds pressure, it simply cannot cash it" % weapon_id)
+
+
+## The sword map is what the wand ruling's identity consequence RESTS ON: with basic
+## ranged fire at NONE, the direct EXPLOIT route into an enemy's authored window requires
+## closing and landing sword hit 1 or hit 2. If this map ever drifts, that consequence
+## silently changes meaning, so it is pinned rather than assumed.
+##
+## Movement tools (shield bump, the charge's lunge) help CLOSE that distance and are NOT
+## exploit triggers -- traversal is not capability. Nothing in this test treats them as such.
+func test_sword_combo_authors_the_locked_exploit_pressure_map() -> void:
+	var sword: SwordStats = ContentDB.get_resource(&"weapon", &"sword_burn_A")
+	assert_eq(sword.combo_profiles.size(), 3, "sanity: the locked map describes a 3-hit combo")
+	if sword.combo_profiles.size() != 3:
+		return
+	assert_eq(sword.combo_profiles[0].flinch_capability, &"exploit", "hit 1 is an EXPLOIT trigger")
+	assert_eq(sword.combo_profiles[1].flinch_capability, &"exploit", "hit 2 is an EXPLOIT trigger")
+	assert_eq(sword.combo_profiles[2].flinch_capability, &"pressure", "hit 3 cashes PRESSURE, not the window")
+	assert_eq(sword.charge_profile.flinch_capability, &"pressure", "the charge cashes PRESSURE, not the window")
+
+
 ## Fang and Ooze stay single-action: P29 explicitly does not change them, and their
 ## behaviour is held byte-identical by tests/test_ai_backward_compat.gd.
 func test_fang_and_ooze_remain_single_action() -> void:

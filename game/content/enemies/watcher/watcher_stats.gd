@@ -77,10 +77,24 @@ extends Resource
 @export var minimum_attack_distance: float = 1.3
 @export var detection_radius: float = 10.0
 @export var leash_radius: float = 18.0
-## ENGAGEMENT OPENER (P29 iteration) -- see FangStats.engagement_delay_ticks for the
-## mechanism. 10 is PROVISIONAL and explicitly UNVALIDATED: it is a first value chosen to
-## be perceptible without stalling the encounter (a third of the survey's 34-tick windup),
-## and the re-playtest judges the FEEL of having an opener at all. A poor first number is
-## not evidence the approach is wrong -- retune here before concluding anything about
-## architecture.
+## ENGAGEMENT OPENER -- see FangStats.engagement_delay_ticks for the mechanism.
+## **VALIDATED / BANKED PASS at the P29 re-playtest 2026-08-17.** Observed feel, verbatim:
+## "The engagement delay made it feel like it noticed me before acting."
+## HANDS OFF: this value is settled and is not part of any open P29 question. Do not
+## retune it while chasing the survey's cadence or its selection feel -- those are
+## separate findings with their own levers, and moving a banked number to chase an
+## unrelated complaint is how a validated result gets quietly lost.
 @export var engagement_delay_ticks: int = 10
+
+## CLOSE-FRUSTRATION PATIENCE (P29 Watcher selection pass, 2026-08-17) -- how long this
+## family keeps trying to CLOSE before an action authoring requires_close_frustration
+## becomes selectable. Actor-level because it is a TEMPERAMENT, not a property of the bolt:
+## it must never encode assumptions about projectile speed, size or windup, so that a
+## future package pass is a pure content swap and never a selection re-tune.
+##
+## 90 (3.0 s) PROVISIONAL/UNVALIDATED. Chosen longer than the survey's own 34-tick windup
+## so the sequence reads approach -> fail -> commit rather than blurring together; long
+## enough that brief repositioning does not trigger it; short enough that sustained kiting
+## is answered within a few seconds. **Candidate fallback: 60 (2.0 s)** if the replay finds
+## 90 too passive. The replay decides; do not pre-emptively split the difference.
+@export var close_frustration_ticks: int = 90

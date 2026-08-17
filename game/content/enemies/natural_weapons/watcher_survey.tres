@@ -7,6 +7,7 @@ script = ExtResource("1_stats")
 min_range = 2.0
 max_range = 9.0
 attack_resolution = &"projectile"
+requires_close_frustration = true
 projectile_speed = 7.0
 projectile_hit_radius = 0.2
 projectile_max_lifetime_ticks = 60

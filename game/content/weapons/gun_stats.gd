@@ -74,5 +74,27 @@ extends Resource
 ## profile layer beneath it, unlike SwordStats.combo_profiles. They MIGRATE to
 ## per-attack profiles when guns gain basic/charge/burst distinctions (ROADMAP P26).
 ## Do not invent a profile layer for two fields now.
-@export var flinch_capability: StringName = &"exploit"
+## LOCKED 2026-08-17 by the P29 re-playtest A/B (EXPLOIT vs NONE, run on the frozen
+## corrected substrate): "basic wand flinch is clearly too strong." Basic ranged fire no
+## longer triggers flinch. contributes_pressure is UNCHANGED — the wand still builds
+## pressure, it simply cannot cash it.
+##
+## IDENTITY CONSEQUENCE, recorded precisely because it is the point of the ruling: with
+## basic wand at NONE, the Watcher's authored VULNERABLE window is no longer safely
+## cashable from range by basic fire. The direct EXPLOIT route now requires CLOSING and
+## landing sword hit 1 or hit 2 inside the window. Verified against sword_burn_A: hits 1-2
+## author "exploit", hit 3 and the charge author "pressure".
+##
+## Movement tools (shield bump, the sword charge's lunge) help you CLOSE that distance —
+## they are traversal, and they are NOT exploit triggers. Never conflate traversal with
+## capability here or anywhere downstream; a tool that gets you to the window is not a
+## tool that opens it.
+##
+## This is the baseline for ALL basic guns. gun_pierce_A/arc/umbral inherit it and are
+## meant to: they are the same basic weapon in other damage types, and leaving the dev
+## carousel able to exploit-flinch while the shipped wand cannot would actively mislead
+## any future diagnostic pass. A future COMMITTED wand mechanic may earn ranged
+## exploitation on its own terms (ROADMAP P30) — that is a different weapon behaviour,
+## not a restoration of this default.
+@export var flinch_capability: StringName = &"none"
 @export var contributes_pressure: bool = true

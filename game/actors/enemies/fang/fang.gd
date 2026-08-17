@@ -19,8 +19,8 @@ func sync_from_sim(sim_position: Vector3) -> void:
 ## GAME-RULES §3 telegraph law — see TelegraphIndicator for the minimum-viable
 ## (no shader polish) rendering itself; this is just the actor-scoped entry point
 ## the arena driver calls on an "attack_telegraph" Event.
-func show_telegraph(color: Color, duration_seconds: float) -> void:
-	_telegraph.flash(color, duration_seconds)
+func show_telegraph(color: Color, duration_seconds: float, has_vulnerable_window: bool = false) -> void:
+	_telegraph.flash(color, duration_seconds, has_vulnerable_window)
 
 
 ## P29 item 2: the authored VULNERABLE window just opened on this actor's committed

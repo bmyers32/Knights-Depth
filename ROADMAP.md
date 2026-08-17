@@ -37,8 +37,9 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P25 | Weapon-owned state & switch semantics | PROPOSED | Holstered-state categories, switch-reset tech, ammo/heat — all gated on a real consumer |
 | P26 | Ranged weapon identity futures | PROPOSED | Distance bands, committed burst, hazards, marks; identity = changed decision, not new numbers |
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
-| P29 | Enemy action repertoire / distance-conditioned selection | **ITERATE (concept validated) 2026-08-14** | Ranged action works; closure blocked on opener feel, windup/arrival readability, wand A/B |
-| P30 | Wand charge profile | **NEAR-TERM (weapon docket)** | Promoted 2026-08-14; likely home for committed ranged flinch authority, pending the P29 item-4 A/B |
+| P29 | Enemy action repertoire / distance-conditioned selection | **ITERATE (2nd cycle) 2026-08-17** | Opener/geometry/Q8 BANKED PASS; open: vulnerable cue, survey cadence |
+| P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
+| P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -316,6 +317,22 @@ commit — never how that action behaves).
 - **A turret archetype:** stationary, ranged, tiered (single-shot / tri-cone /
   seeking). Seeking needs per-tick projectile steering toward a moving target — a new
   sim capability; today's projectiles travel in a fixed straight line from spawn.
+**BREON'S FANG SKETCHES (verbatim, captured 2026-08-17):**
+> zig-zag rush → windup on arrival
+> burst lunge → readable recovery → decide
+
+**FAMILY TAXONOMY (captured 2026-08-17)** — the axis each family should express, so
+movement identity is authored toward a stated character rather than invented per enemy:
+- **Fang** — aggressive, NONLINEAR, committing.
+- **Ooze** — area-denial, positional.
+- **Watcher** — deliberate; punishable, committed tells.
+
+Note both Fang sketches share a shape P29 does not currently have: movement and attack as
+ONE authored beat (arrive-then-windup, lunge-then-recover-then-decide), rather than
+movement that stops so an attack can start. That is the same seam the held Watcher
+selection trigger points at from the other direction — worth designing together if both
+fire.
+
 **Reasoning:** Identities translated from the reference game's roster, same spirit as
 P2's status roster — each family becomes tactically distinct rather than a reskinned
 pursue-and-hit loop, without adding a second AI code path per family.
@@ -572,6 +589,18 @@ exactly what produced the M1 combo-cadence defect (BRAIN).
 only by the recorded audit above. Do not pre-build.
 
 ### P28 — Global combat-scale coherence pass
+**SPATIAL-COHERENCE DEBT — Ooze vertical artifact (recorded 2026-08-17, P29 re-playtest).**
+Observed: the Ooze's 3D SILHOUETTE and its ground-plane FOOTPRINT disagree — combat
+resolves on a horizontal circle while the model reads as a tall spiked mass, so contact
+can look wrong vertically even when it is horizontally correct.
+**DO NOT touch `combat_radius`.** It is the authoritative body radius shared by Burn
+contact-spread, the melee lunge clamp, bump and (since P29) projectile collision; moving
+it to fix a vertical reading would break four horizontal systems that are correct.
+**Not scheduled.** Schedule only if a future session reports it as UNFAIR rather than
+merely odd-looking. The likely fix lives in presentation or in a future vertical
+dimension to contact, not in the existing radius.
+
+
 **Status: RESOLVED for M1 (2026-08-13) — hypothesis NARROWED BY BETTER MEASUREMENT,
 not confirmed.** The barrier is lifted; live tuning may proceed. Do NOT reopen without
 a concrete new spatial finding.
@@ -696,31 +725,50 @@ this entry, decides whether that worked.**
   the test and nothing else — the fall-through behaviour is already specified and already
   covered by `test_interior_band_gap_falls_through_to_ordinary_locomotion`. Overlap stays
   permanently forbidden.
-**ITERATION LANDED 2026-08-14 (pre-replay).** Items 1-4 of the required closure work are
-implemented and suite-green; the verdict remains ITERATE until the re-playtest renders a
-new one.
+**RE-PLAYTEST 2026-08-17 — VERDICT: ITERATE (second cycle).** Rendered by Breon, verbatim:
+> "P29 — ITERATE. The Watcher is better now and the ranged pressure works. The engagement
+> delay made it feel like it noticed me before acting, the projectile is fair and readable,
+> and I can intentionally parry it. The ranged attack also adds good pressure when I'm
+> fighting something else. But I still can't intentionally identify the vulnerable window,
+> the Watcher shoots too often and still feels too interval-driven, and basic wand flinch
+> is clearly too strong. I want another iteration on those things before I consider P29
+> done."
 
-**REPLAY ATTRIBUTION FENCE (binding on how the next session is read).** The next arena
-session is NOT a pure wand-capability comparison against the original P29 build. Four
-things changed underneath it since the first playtest: projectile collision geometry,
-projectile visual radius, the Watcher engagement delay, and vulnerability presentation.
-Treat the replay as **validation of the current composed P29 iteration**; the wand
-EXPLOIT/NONE toggle isolates only that ONE variable within the new, frozen substrate.
-Do NOT attribute global feel changes solely to the capability toggle.
+**BANKED (settled, hands off — do not retune while chasing an unrelated finding):**
+- Engagement opener PASS at `engagement_delay_ticks = 10`; UNVALIDATED marker removed.
+- Lateral projectile geometry PASS.
+- **Q8 UNBLOCKED and PASSED** — projectile parry is readable and deliberately timeable.
 
-**Remaining P29 queue — entirely arena-side, nothing left to build:**
-1. wand basic EXPLOIT vs NONE A/B (`debug_wand_flinch_none`), pressure contribution unchanged.
-2. Watcher opener feel at `engagement_delay_ticks = 10`.
-3. Vulnerable-window cue legibility.
-4. Projectile visibility + arrival readability + dodge feel under corrected geometry.
-5. Q8 parry re-ask (below).
+**LOCKED — basic wand flinch capability = NONE** (pressure contribution unchanged).
+*Identity consequence, recorded precisely:* with basic wand at NONE the Watcher's
+VULNERABLE window is no longer safely cashable from range by basic fire. The direct
+EXPLOIT route requires CLOSING and landing sword hit 1 or hit 2 during the window
+(locked map, pinned by test: hits 1-2 EXPLOIT, hit 3 PRESSURE, charge PRESSURE).
+Movement tools (bump, charge lunge) help close distance but are **NOT exploit triggers** —
+never conflate traversal with capability in docs, comments or design talk. Future
+committed wand mechanics may earn ranged exploitation on their own terms (P30).
 
-**STOP-LINE:** no further pre-playtest changes of any kind. No selection-architecture
-work, no HP/damage/flinch-threshold tuning, no charge implementation, and no additional
-projectile-radius tuning before the replay. The substrate under the A/B is trustworthy
-and stays still until it is measured.
+**VULNERABILITY CONFOUND — RESOLVED AS UNRECALLED → CONTROLLED PROBE.** No defect is
+inferred from memory. With the cue fix landed, the probe is a REQUIRED step of the next
+playtest: approach with sword, wait for the now-legible vulnerable transition, deliberately
+land hit 1 or 2, and observe whether the survey interrupts.
+- Interrupt occurs → **no defect**; the cue fix closed the whole finding.
+- Confirmed in-window hit with NO interrupt → **mechanical defect**: diagnose
+  `_flinch_mode_of` / window resolution on the survey before anything else.
 
-**Q8 (parry reach) — BLOCKED UPSTREAM, NOT FAILED (2026-08-14).** The question was
+**ITERATION BATCH (second cycle):**
+1. **Vulnerable cue** — unmistakable phase transition (preparation → distinct "open now" →
+   fire). Timing unchanged, derivation unchanged, no new events. LANDED 2026-08-17: the
+   first attempt failed because the disc was already full-size and full-brightness for the
+   whole windup, so the window was a change of DEGREE inside an unchanging presentation.
+   Now understated-and-still while preparing, then a hard pop into a continuous PULSE —
+   a change of KIND, with motion doing the work.
+2. **Survey cadence** — increase `watcher_survey.fire_interval_ticks`. PROVISIONAL, returns
+   for approval before landing.
+3. **Ooze vertical artifact** — recorded to spatial-coherence debt (P28-adjacent) below.
+
+**Q8 (parry reach) — RESOLVED 2026-08-17: UNBLOCKED and PASSED.** History below.
+**Was BLOCKED UPSTREAM, NOT FAILED (2026-08-14).** The question was
 "after parrying a survey at range, can you reach the Watcher while PARRY EXPOSED is still
 useful?" It could not be answered because no perceptible ARRIVAL cue existed to time a
 shield-raise against — the player could not deliberately choose the parry moment, so
@@ -733,6 +781,108 @@ become legitimate to evaluate whether parry reach or window themselves need tuni
 **Re-ask after items 2-3.** The entry criterion is strictly upstream of reach: *can the
 player deliberately choose the parry moment at all?* Only once that is YES does parry
 reach/window tuning become diagnosable — and only then may any parry number move.
+
+**SELECTION ARCHITECTURE — HOLD SUPERSEDED 2026-08-17; WATCHER SELECTION PASS OPENED.**
+Recorded precisely, because the reason matters: **the ROADMAP trigger below did NOT fire.**
+Its planned cue+cadence replay never took place. The hold was instead superseded by a
+stronger Watcher IDENTITY ruling from Breon, verbatim:
+> "It shouldn't be the main choice of action when a certain condition exists. It should be
+> a potential selection that's not chosen every time a condition is met. Turret characters
+> will shoot projectiles at interval. Watcher's should be a unique projectile — maybe large
+> and fastish with a long wind up that it's locked into after it ascertains your location."
+
+**CADENCE PROPOSAL REJECTED (45 -> 80 NOT landed; `fire_interval_ticks` stays 45).** The
+measurement was sound but aimed at the wrong finding: it addressed FREQUENCY, while the
+clarified concern is SELECTION IDENTITY. Making the same automatic choice less often does
+not make it a choice. Do not revive it as a workaround for selection.
+
+**CONTROLLED SWORD EXPLOIT PROBE — MOVED.** It now runs against the REDESIGNED Survey, so
+it is performed once, against the Survey intended to ship, rather than twice against a
+version being replaced.
+
+**Scoping from the superseded hold, retained because it is still true:** cadence evidence
+was clean; architecture evidence was not yet sufficient. The trigger text below is kept as
+the historical record of what would have re-opened this, and is now moot.
+
+**SUPERSEDED — original one-cycle hold (both seats + Breon, 2026-08-17).**
+Scoping recorded so the hold is a decision rather than a delay: **cadence evidence is
+CLEAN** (the survey fires too often — tune now); **architecture evidence is NOT yet
+sufficient** (presentation failed, so counterplay was never actually observed under
+legible conditions).
+
+**ROADMAP TRIGGER, verbatim:**
+> "After cue + cadence fixes: does the Watcher resume fighting/positioning before deciding
+> to survey again, or does it still feel like it is waiting for the survey timer to become
+> legal? If the latter, the trigger has fired and the narrow Watcher-specific
+> approach-frustration seam opens."
+
+**The pattern this would translate** (reference-game shape): attempt approach → melee
+attempts → ranged fallback when closing is frustrated.
+**Sketch, if the trigger fires:** primary desire is a THREAT POSITION; approach succeeds →
+the close option; approach frustrated for an authored duration or attempt count → survey;
+after a survey → resume movement/decision, **never immediate cycling**.
+**Explicitly NOT a utility framework.** Bands remain pure eligibility; this would be a
+narrow, authored, inspectable Watcher-specific seam, not a scoring layer.
+
+**CONTEXTUAL SURVEY SELECTION — IMPLEMENTED 2026-08-17 (awaiting replay).** Survey is
+gated by close-frustration: the Watcher must have failed to reach its close band for
+`close_frustration_ticks` (90, PROVISIONAL; **candidate fallback 60** if the replay finds it
+passive), and each failed-close episode grants exactly ONE fallback. Represented as two
+literal facts — last tick actually inside the close band (refreshed continuously) and last
+tick Survey was committed — with episode consumption DERIVED from their ordering, never a
+mutable flag. Consumption is at COMMITMENT: interrupting a committed Survey does not restore
+the opportunity. Deliberately narrow naming (`requires_close_frustration`,
+`close_frustration_ticks`, `_close_frustration_satisfied`); **generalise only when a second
+real context-conditioned action exists.**
+
+**Emergent consequence to watch at the replay (not a defect, a direct result of the ruled
+design):** a player who kites *indefinitely and never lets the Watcher close* receives
+exactly ONE Survey, ever — the episode never clears because close range is never
+re-established. Mitigating in practice: the arena is bounded, the Watcher keeps closing at
+2.0, and other enemies force engagement. Flagged so it is recognised as the rule working
+rather than the Watcher going inert.
+
+**Ruling on how that evidence may be used, verbatim:**
+> "If infinite-kite ever proves too safe, that becomes evidence for a new episode-reset
+> rule — never a reason to weaken one-survey-per-episode preemptively."
+
+Cross-reference: punishing a player who sustains distance is precisely the **range-maintaining
+("kiting-punisher") family** already recorded as the trigger for action-derived movement
+preference (see the selection-architecture note below and the P17 family-identity docket).
+If infinite-kite reads as too safe, the first question is whether the answer belongs to a
+NEW episode-reset rule or to that family's own design — not to the Watcher's episode
+semantics, which are ruled.
+
+**AIM-LOCK — FUTURE FORK (not opened; GAME-RULES §3 preserved unchanged).** Survey is
+ACTION-locked only: once selected the Watcher cannot abandon the windup, and aim continues
+to be sampled at the fire tick. Correct mechanical description, to be used verbatim in docs,
+comments and any player-facing copy: *"Movement during windup changes the eventual fire-tick
+aim; it does not defeat the shot by invalidating a previously locked target position."*
+**Trigger, verbatim:** *"if later playtest shows continuous tracking makes the long-windup
+survey too turret-like or undermines movement counterplay, compare fire-tick aim vs authored
+aim-lock and amend §3 explicitly if aim-lock wins."* Never worked around.
+
+**PACKAGE ESCALATION — "large / fastish / long-windup" Survey (queued, NOT scheduled).**
+Trigger: the selection pass is judged successful on identity, but Survey still lacks weight
+or distinctiveness as an event. Re-validation costs ride with it: `hit_radius` re-derivation,
+Q8 parry re-verification, and corridor math at the new speed (a reactive escape must remain
+possible at representative engagement distances under fire-tick aim — "fastish" is sized
+against the dodge it must still permit, never chosen as an adjective).
+**Fence, verbatim:** *"If selection does not fix the identity problem, do not try to disguise
+that failure by making the projectile more dramatic."* A failed selection pass is
+re-diagnosed at the selection layer, never masked with content spectacle.
+
+**BUMP-PROVOKES-SURVEY — explicitly NOT implemented.** Displacement already feeds the
+proximity clock naturally: a bump stops the refresh, leaving the full patience still to
+elapse. "Bump instantly provokes Survey" is a separate behavioural rule requiring its own
+evidence; a dedicated test pins that it does not happen today.
+
+**CANDIDATE PROJECT FINDING (captured 2026-08-17, NOT a framework requirement).** Enemy
+identity increasingly depends on HOW an enemy reaches and CHOOSES an attack situation, not
+merely which attack becomes legal at a given distance. Distance-band eligibility answered
+"what may I do from here" and that was the right first step; it does not answer "what am I
+trying to achieve, and is this the moment for it." Recorded as an observation to test, not
+as licence to build a generic selector — see the fence below.
 
 **FUTURE DIRECTION — context/intent-conditioned selection (captured 2026-08-14, NOT
 scheduled).** Bands stay what they are: pure ELIGIBILITY ("which actions are legal from
@@ -751,8 +901,19 @@ colour, GAME-RULES §3 channel law) and are separated by windup duration (20 vs 
 the tracer. If a playtest finds them confusable, the fix is another non-colour channel
 (disc size, pulse rate) — never a colour the damage type does not own.
 
-### P30 — Wand charge profile
-**Status:** NEAR-TERM, promoted to the weapon docket 2026-08-14 out of the P29 playtest.
+### P30 — Wand commitment/reward mechanic
+**Status:** NEAR-TERM, promoted 2026-08-14, **BROADENED 2026-08-17** after the wand A/B
+locked basic ranged flinch to NONE.
+**Broadened scope — evaluate BEFORE implementing, do not assume the charge shape.** The
+question is what a wand's *commitment/reward* mechanic should be, and there are at least
+two candidate shapes that are not the same design:
+- **Charge** — hold to pay up front, spend the commitment before the payoff.
+- **Consecutive-hit empowerment** — the reward accrues from sustained accurate fire, so
+  the commitment is paid in continued exposure rather than in a hold.
+Pick by which one creates a real decision (BRAIN candidate principle 3), not by which is
+easier to author. This is also the earliest legitimate home for RANGED exploitation, now
+that basic fire cannot cash a window — but that authority must be EARNED by the committed
+mechanic, never restored to basic fire.
 **Idea:** give the wand a charge profile — the ranged counterpart to the sword's
 hold-to-charge, which today has no ranged equivalent at all (the wand is deliberately the
 simple baseline, P26).
@@ -773,6 +934,33 @@ per-actor cooldown · does it want its own tracer treatment.
 advanced ranged consumer and "direct charge access for future charge guns". This
 promotes exactly that slice to near-term, with a concrete trigger, rather than leaving it
 in the general ranged-futures pool.
+
+### P31 — Reflected-projectile parry
+**Status:** PROPOSED, captured 2026-08-17. **Requires its own fork review before any
+build** — this would REPLACE the current instant-EXPOSED-on-parry reward, so it is a
+change to a shipped, validated mechanic rather than an addition.
+**Idea (Breon's design intent):** parrying a projectile REFLECTS it rather than simply
+marking the attacker PARRY EXPOSED.
+- **Must-reconnect trigger:** the reflected shot has to actually hit the attacker to pay
+  out. The reward becomes an aimed outcome, not an automatic one.
+- **One reflect per shield raise:** the raise is the resource, so a held shield cannot
+  farm reflections.
+**Why it needs a fork review:** Q8 passed on the CURRENT parry (readable, deliberately
+timeable, instant EXPOSED). Replacing the payout changes what the player is timing FOR,
+and could unsettle a banked PASS. Design questions: does a reflected shot use the
+player's damage or the enemy's; can it be re-parried; what happens on a miss; does
+EXPOSED remain as a fallback or disappear entirely.
+
+### P32 — Melee parry timing (blocked upstream on impact presentation)
+**Status:** BLOCKED UPSTREAM, captured 2026-08-17. Not a failure — a prerequisite.
+**Finding:** projectile parry passed (Q8) precisely because a travelling projectile shows
+its ARRIVAL. Melee has no equivalent: the telegraph says an attack is COMING, but nothing
+says **now**, and "now" is what a parry is timed against.
+**Prerequisite:** an impact/arrival presentation for melee attacks — the melee analogue of
+watching a shot close the distance.
+**Do not** attempt to fix this by widening the melee parry window; that trades a timing
+problem for a leniency problem and leaves the player still unable to aim their timing.
+
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

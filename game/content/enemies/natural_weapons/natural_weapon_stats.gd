@@ -43,6 +43,21 @@ extends Resource
 ## repertoire index.
 @export var max_range: float = -1.0
 
+## CONTEXTUAL SELECTION (P29 Watcher selection pass, 2026-08-17). When true, being inside
+## this action's distance band is NOT sufficient to select it: the actor must also have
+## FAILED TO CLOSE for its family's authored patience, and must not already have spent this
+## failed-close episode's one fallback.
+##
+## Deliberately narrow, deliberately NOT a generic "context gate": there is exactly one
+## consumer (watcher_survey) and the rule it expresses is specifically about close-range
+## frustration. Generalise only when a SECOND real context-conditioned action exists
+## (rule of two) -- a framework built for one consumer is a framework built on a guess.
+##
+## Why it exists: distance-band eligibility made "the player is 2-9 units away" and
+## "Survey happens" the same statement, which reads as turret fire. Ruling: "It shouldn't
+## be the main choice of action when a certain condition exists."
+@export var requires_close_frustration: bool = false
+
 ## How this action resolves: &"melee" (instant cone sweep, register_weapon) or
 ## &"projectile" (travel time, register_gun). The scene/registrar branches on this
 ## exactly like it already branches GunStats vs SwordStats for player weapons.

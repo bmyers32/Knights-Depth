@@ -535,6 +535,18 @@ M3 latency/reconciliation harness — all of which will be read for their number
 session that did not write them. Corollary, learned the same day: this is the
 line-count-cap lesson's sibling — there the tool measured a subtly different quantity;
 here the tool measured nothing at all.
+**Second occurrence, same session, opposite direction — RE-VALIDATE AN INSTRUMENT'S SIGNAL
+SHAPE WHEN THE MECHANIC CHANGES UNDER IT:** the survey-cadence tool computed gaps between
+consecutive fires, so it needed at least TWO fires to say anything. Once Survey became
+contextual it fires exactly ONCE per failed-close episode — and the tool printed "no surveys
+observed", which reads as a dead mechanic when it was in fact the mechanic working
+perfectly. The measurement code was still correct; what had changed was the SHAPE of the
+signal it was built to see. An instrument silently inherits assumptions about its subject
+(here: "this thing is periodic"), and those assumptions expire when the subject is
+redesigned. **Rule:** when a mechanic changes character, re-read every instrument pointed at
+it and make sure its zero/absent/degenerate cases still print something distinguishable —
+"1 fire, not periodic" and "0 fires, gate never opened" are opposite findings and must never
+share an output line.
 
 ### Enforce a rule with the same notion of the thing the rest of the sim uses
 **Incident (P29, 2026-08-14, twice in one feature):** (A) action-band overlap was
@@ -560,6 +572,37 @@ spatial query (M2 room/segment bounds, P20 walls and body-blocking, seeking proj
 any second content lint, and M3 server-side validation, where a server re-deriving "was
 that a legal hit" differently from the sim IS the desync.
 
+
+### Position is a world fact, not an activity fact — refresh it before every early return
+**Incident (P29 Watcher selection pass, 2026-08-17):** the close-frustration mechanic rests
+on one literal fact — the last tick the Watcher was actually inside its close band. The
+refresh was written inside the per-actor decision function, which reads naturally, and was
+placed after the function's existing guard clauses: the FLINCHED return at the top, and the
+mid-windup return below it. Both are early returns, and both are common states — a melee
+enemy spends most of its time in one or the other. So the "where was I" fact silently froze
+for the whole of every windup and every flinch recovery. A Watcher standing in melee the
+entire time accumulated frustration credit as though it had been kept at range, and would
+fall back to its ranged action from point-blank. **Mechanism:** a guard clause answers "is
+this actor able to act right now"; a positional fact answers "where is this actor". Placing
+the second behind the first silently couples a property of the WORLD to the actor's
+ACTIVITY, and every state that skips the decision logic then also skips reality. The bug is
+invisible in code review because the refresh looks obviously present two lines above where
+it is read. **Failure if ignored:** state that describes the world drifts out of sync with
+the world in exactly the states that matter most (mid-action, mid-reaction), and the
+mechanic built on it fires under conditions that never happened. **The rule:** facts about
+the world are refreshed unconditionally, ahead of every branch that can skip work —
+ideally in the phase that iterates actors, not inside the function that decides for one.
+Facts about a decision may live with the decision. **Applies elsewhere:** any future
+positional or environmental fact an AI accumulates (P18 territory/return-to-post, M2 room
+occupancy, threat/aggro tables, and any M3 server-side state that must remain true whether
+or not an actor was eligible to act that tick).
+**Corollary, from the same mechanic the same day — a "never happened" sentinel must be
+smaller than every real value it will be compared against.** Episode consumption was
+derived by comparing two timestamps, with `.get(actor, -1)` standing in for "never
+committed". A test aged the other timestamp negative, `-1 > -90` became true, and a survey
+that had never occurred read as already spent. Numeric sentinels quietly participate in the
+comparisons they were meant to sit outside of. Ask `has()` — absence is the honest test, and
+it cannot be out-ordered.
 
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
@@ -620,6 +663,22 @@ playtest validation.
    while real decisions appeared under multi-enemy pressure. The failure mode this
    guards against is manufacturing "decision-making" metrics by making each enemy a lock
    with exactly one key. Verbatim fence recorded at ROADMAP P29.
+12. **Combat mechanics have outpaced the enemy decision/movement layer.** A CURRENT
+   PROJECT FINDING, not a universal law — recorded because it explains a class of feedback
+   that would otherwise read as unrelated complaints. The P29 re-playtest found the
+   Watcher fair, readable and parryable, and still "too interval-driven": every mechanical
+   property was right and it continued to feel mechanical. The mechanics layer (windups,
+   susceptibility windows, flinch routes, projectile geometry, parry) is now considerably
+   richer than the layer that decides WHEN and WHERE an enemy acts, which is still
+   approach / hold / attack-when-legal. Richness therefore bottlenecks on movement and
+   choice, and further mechanical depth returns less and less until that layer catches up.
+   **How to use it:** when a mechanically-correct enemy still feels flat, check whether the
+   complaint is really about the mechanic or about the decision that preceded it before
+   spending another iteration on the mechanic. **What it does NOT license:** building a
+   selection/utility framework on this observation alone — the standing ROADMAP trigger
+   (does the Watcher resume positioning before surveying again?) is deliberately narrower
+   and must fire on its own evidence.
+
 11. **A feature freeze does not freeze the thing being measured.** A pre-gate fence
    ("no new implementation before the playtest") never prohibits narrow fixes for
    CONFIRMED defects that invalidate the mechanics the gate exists to measure —

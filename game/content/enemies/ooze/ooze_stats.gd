@@ -65,3 +65,8 @@ extends Resource
 ## Engagement opener: see FangStats.engagement_delay_ticks. Ooze stays at 0 (P29
 ## iteration changes the Watcher only).
 @export var engagement_delay_ticks: int = 0
+
+## Close-frustration patience: see WatcherStats.close_frustration_ticks. 0 here because
+## this family authors no action requiring it -- the field is actor-level, so it exists on
+## every family, but it is inert without a consumer action.
+@export var close_frustration_ticks: int = 0

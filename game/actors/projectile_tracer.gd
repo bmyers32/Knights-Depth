@@ -45,6 +45,12 @@ extends MeshInstance3D
 ## widen collision to buy visibility, and never widen the drawn width past the collision
 ## radius: lateral radius is gameplay geometry, not a display setting.
 ##
+## **VALIDATED / BANKED PASS at the P29 re-playtest 2026-08-17**: lateral projectile
+## geometry and projectile readability both passed — "the projectile is fair and readable,
+## and I can intentionally parry it." Q8 (deliberate parry timing), previously BLOCKED
+## UPSTREAM, is now UNBLOCKED and PASSED. Treat the width/geometry pairing as settled:
+## no further projectile-radius movement without a new, specific finding.
+##
 ## HISTORY: the tracer originally drew a fixed 0.18 against an authoritative 0.40/0.50 —
 ## under half — which is what "apparent hits that miss" partly was. VISUAL_SCALE is the
 ## one named knob; 1.0 draws exactly the projectile's own volume, and values below 1.0

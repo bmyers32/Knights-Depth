@@ -101,3 +101,8 @@ extends Resource
 ## 0 = off, and Fang/Ooze deliberately stay at 0: this iteration changes ONE family, so
 ## the re-playtest can attribute any felt difference to the Watcher alone.
 @export var engagement_delay_ticks: int = 0
+
+## Close-frustration patience: see WatcherStats.close_frustration_ticks. 0 here because
+## this family authors no action requiring it -- the field is actor-level, so it exists on
+## every family, but it is inert without a consumer action.
+@export var close_frustration_ticks: int = 0

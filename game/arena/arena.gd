@@ -82,14 +82,6 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## band gap is diagnosable on sight instead of presenting as "the enemy mysteriously
 ## stopped attacking." Pure observability, default off.
 @export var debug_show_action_selection: bool = false
-## P29 item 4 — the wand EXPLOIT-vs-NONE A/B (ROADMAP 9.14, deferred since M1).
-## true flips every registered GUN's flinch_capability from its authored value to "none"
-## for this run, so the same build plays both arms of the comparison by toggling ONE
-## export. Deliberately NOT a redesign: no new capability values, no change to pressure
-## contribution, no content edit — the authored .tres is untouched and the flag only
-## rewrites the RESOLVED profile at setup, exactly like debug_flinch_threshold_override.
-## Seconds to flip, invariant across runs; the comparison itself is the player's to make.
-@export var debug_wand_flinch_none: bool = false
 
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
@@ -153,7 +145,6 @@ func _ready() -> void:
 	# scene, no generic VFX framework.
 	_cache_gun_visuals(loadout_weapon_ids)
 
-	_apply_wand_flinch_ab()
 
 	if debug_loadout_override:
 		# Loud on purpose (AGENTS.md Invariable #2) -- a silent override would read
@@ -178,23 +169,6 @@ func _ready() -> void:
 
 	var shield: ShieldStats = ContentDB.get_resource(&"shield", &"default")
 	sim.register_shield(envoy.actor_id, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance, shield.bump_padding, shield.bump_distance, shield.bump_slide_ticks, shield.bump_cooldown_ticks, shield.parry_window_ticks, shield.parry_exposure_ticks, shield.parry_damage_multiplier)
-
-
-## P29 item 4: the B arm of the wand EXPLOIT-vs-NONE comparison. Rewrites the RESOLVED
-## profile only (sim's own table), never the .tres — so the authored content stays the A
-## arm and flipping back is just clearing the export. Loud on purpose: an A/B that
-## silently reports the wrong arm is worse than no A/B at all (BRAIN: never stamp a
-## verdict the human hasn't rendered — that starts with knowing which build was played).
-func _apply_wand_flinch_ab() -> void:
-	if not debug_wand_flinch_none:
-		return
-	var flipped: Array[String] = []
-	for weapon_id: String in sim._weapons:
-		var weapon: Dictionary = sim._weapons[weapon_id]
-		if weapon.get("resolution", "") == "projectile" and weapon.get("flinch_capability", "none") != "none":
-			weapon.flinch_capability = "none"
-			flipped.append(weapon_id)
-	print("!!! A/B ARM B ACTIVE — gun flinch_capability forced to NONE for: ", flipped, " !!!")
 
 
 ## Resolves tracer speed/colour for any GunStats in the given ids. Colour comes from the
@@ -416,9 +390,13 @@ func _report_events(events: Array[Event]) -> void:
 				var action_id: String = String(event.payload.get("action_id", ""))
 				if _enemies.has(actor_id) and _action_telegraphs.has(action_id):
 					var telegraph: Dictionary = _action_telegraphs[action_id]
-					_enemies[actor_id].show_telegraph(telegraph.color, telegraph.duration_seconds)
+					var has_window: bool = int(telegraph.vulnerable_start) >= 0 and int(telegraph.vulnerable_end) >= int(telegraph.vulnerable_start)
+					# An action with a window opens in the UNDERSTATED preparing phase, so the
+					# window's arrival has somewhere to pop to; one with none keeps the flat
+					# telegraph unchanged (Fang, Ooze).
+					_enemies[actor_id].show_telegraph(telegraph.color, telegraph.duration_seconds, has_window)
 					_windup_cues.erase(actor_id)
-					if int(telegraph.vulnerable_start) >= 0 and int(telegraph.vulnerable_end) >= int(telegraph.vulnerable_start):
+					if has_window:
 						_windup_cues[actor_id] = {
 							"opens_tick": event.tick + int(telegraph.vulnerable_start),
 							"ends_tick": event.tick + int(telegraph.windup_ticks),
