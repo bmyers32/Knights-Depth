@@ -37,7 +37,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P25 | Weapon-owned state & switch semantics | PROPOSED | Holstered-state categories, switch-reset tech, ammo/heat — all gated on a real consumer |
 | P26 | Ranged weapon identity futures | PROPOSED | Distance bands, committed burst, hazards, marks; identity = changed decision, not new numbers |
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
-| P29 | Enemy action repertoire / distance-conditioned selection | **ITERATE (2nd cycle) 2026-08-17** | Opener/geometry/Q8 BANKED PASS; open: vulnerable cue, survey cadence |
+| P29 | Enemy action repertoire / distance-conditioned selection | **PASS / CLOSED 2026-08-18** | Frozen point `9378316`; follow-ups dispatched to P17/P28/P30/P31/P32 |
 | P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
@@ -662,8 +662,50 @@ capsule extents.
 before flinch exists would tune spacing against combat that has no reaction layer yet.
 
 ### P29 — Enemy action repertoire / distance-conditioned action selection
-**Status:** **ITERATE — concept validated.** Playtest verdict rendered by Breon
-2026-08-14, verbatim:
+**Status:** **PASS — CLOSED 2026-08-18.** Frozen point: commit `9378316`
+(`9378316964ab94f4223ca9e447563477e2ec6294`).
+
+Closing verdict rendered by Breon 2026-08-18, verbatim:
+> "P29 — PASS. The Watcher now feels like it is making a contextual decision instead of
+> automatically shooting because I entered a range band. It chases first, uses Survey as a
+> fallback after being kept out, and one Survey per failed-close episode feels sensible
+> rather than repetitive. The Survey itself is fair and readable, I can intentionally parry
+> it, and I can now identify the vulnerable phase; the exploit route also works mechanically
+> when I am positioned to use it. The remaining animation, projectile-package, aim-lock,
+> reflected-parry, wand-reward, and broader movement-identity ideas are follow-up work, not
+> blockers for this Watcher selection slice."
+
+**What this verdict does and does not certify**, since the follow-up docket is large: it
+certifies the SELECTION SLICE — contextual choice over range-triggered fire, the
+one-Survey-per-failed-close-episode economy, Survey's fairness/readability, deliberate
+parry, an identifiable vulnerable phase, and the exploit route working mechanically when
+positioned for it. It explicitly does NOT certify melee-range animation readability, the
+projectile package, aim behaviour, parry payout design, wand reward design, or movement
+identities — all named by Breon as follow-up work rather than blockers, and all dispatched
+with triggers below.
+
+**PROVENANCE OF THE CLOSING VERDICT (diff-verified, not asserted).** The replay ran on the
+working tree, because the prior frozen commit `51d16b5` crashed on attack. The only
+gameplay delta between the played tree and `9378316` is the `set_active()` restoration —
+21 insertions, 0 deletions — which was present during the replay; everything else differing
+was tests and documentation. The verdict therefore attaches to `9378316` honestly.
+
+**FOLLOW-UP DOCKET — DISPATCHED, each with its named trigger:**
+| Item | Home | Trigger |
+|---|---|---|
+| Melee-range animation readability | P32 (+ P28's open revalidation trigger) | Melee parry stays blocked until an impact/arrival presentation exists; P28 re-checks weapon-reach/contact alignment once real attack visuals land |
+| Survey package escalation (+ disguise fence) | P29 (below) | Selection judged successful on identity, but Survey still lacks weight as an event |
+| Aim-lock fork | P29 (below) | Continuous tracking makes the long-windup Survey too turret-like or undermines movement counterplay |
+| Reflected-projectile parry | P31 | Requires its own fork review — it REPLACES a banked mechanic |
+| Wand commitment/reward | P30 | Evaluate charge vs consecutive-hit empowerment before implementing |
+| Family movement identities | P17 | M2 content pass; Fang sketches + taxonomy captured |
+| Kiting-punisher family | P17 / selection note | **Owns the infinite-kite answer** — if infinite-kite proves too safe, it is evidence for a new episode-reset rule, never a reason to weaken one-survey-per-episode |
+
+**HISTORY — the two prior verdicts that produced this closure are recorded in full below:
+the first playtest (2026-08-14) immediately following, and the re-playtest (2026-08-17)
+further down under RE-PLAYTEST.**
+
+**HISTORY — first playtest verdict, rendered by Breon 2026-08-14, verbatim:**
 > "P29 — ITERATE, concept validated. The Watcher's ranged action materially improves
 > group-combat pressure, feels fair, preserves both close and ranged approaches, and
 > strengthens the Watcher's 'read the windup' identity. P29 is not closed because the

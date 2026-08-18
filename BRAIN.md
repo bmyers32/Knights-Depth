@@ -608,6 +608,10 @@ it cannot be out-ordered.
 **THE LESSON, verbatim:** *"Boot-clean is not interact-clean — smoke verification must
 exercise at least one core player verb, not just scene load."*
 
+**PROCESS LESSON banked at P29 close (2026-08-18), verbatim:** *"A green suite and clean
+scene boot only prove the paths they actually exercise. Shared presentation components need
+at least one smoke that executes a core player verb through the real scene."*
+
 **Incident (P29, 2026-08-17):** the vulnerable-cue rewrite replaced `TelegraphIndicator`
 wholesale, carrying `flash()` forward and adding `mark_vulnerable()`/`clear()` — and
 dropping `set_active()`, which no enemy uses and the ENVOY does, for its charge-ready cue.
