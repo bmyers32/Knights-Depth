@@ -604,6 +604,35 @@ that had never occurred read as already spent. Numeric sentinels quietly partici
 comparisons they were meant to sit outside of. Ask `has()` — absence is the honest test, and
 it cannot be out-ordered.
 
+### Boot-clean is not interact-clean
+**THE LESSON, verbatim:** *"Boot-clean is not interact-clean — smoke verification must
+exercise at least one core player verb, not just scene load."*
+
+**Incident (P29, 2026-08-17):** the vulnerable-cue rewrite replaced `TelegraphIndicator`
+wholesale, carrying `flash()` forward and adding `mark_vulnerable()`/`clear()` — and
+dropping `set_active()`, which no enemy uses and the ENVOY does, for its charge-ready cue.
+The component lives under `game/actors/enemies/` and reads as enemy-only; it is shared with
+the player. The build was committed and declared frozen on two green signals: 416/416 tests
+and a clean headless arena boot. It crashed on the first mouse click, in
+`_report_events -> envoy.clear_charge_ready() -> set_active()`.
+**Mechanism — three independent gaps lining up, none of which is individually unreasonable:**
+(1) GDScript resolves a method at CALL time, so a deleted method is not a parse error and
+nothing failed at import; (2) the suite is deliberately presentation-free (CLAUDE.md exempts
+presentation), so no test ever loads an actor scene or calls these methods; (3) the smoke
+check ran `--headless --quit-after`, which loads the scene, ticks the sim, and exits —
+**it never sends an attack**, and the charge cue only fires on a `charge_ready` Event that
+only a player melee hold produces. Every signal was honest about what it measured; none of
+them measured the thing that broke. **Failure if ignored:** a build passes every automated
+gate and every reviewer, is tagged frozen, handed over for a playtest, and dies on the
+first input — costing the playtest session itself, which is the scarcest resource in a solo
+hobby project. **The rule:** a component under one subsystem's folder may still have
+consumers elsewhere — grep the callers before deleting a method — and smoke verification
+must drive at least one real player verb (attack, block, switch) through the real scene,
+not merely construct it. **Applies elsewhere:** every future shared presentation component
+(the projectile tracer already has two consumers), every "frozen build" handoff, and the M2
+elevator/floor-transition and run-end flows, whose failure modes are likewise invisible to
+a boot that never interacts.
+
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
 (no incident produced them) and NOT law yet. Governance ladder — the only path to

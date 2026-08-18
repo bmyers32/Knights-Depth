@@ -688,6 +688,103 @@ func test_close_frustration_selection_is_deterministic() -> void:
 			assert_eq(events_a[j].payload, events_c[j].payload)
 
 
+# --- CONTROLLED VULNERABILITY PROBE (P29, banked 2026-08-17) -------------------------
+# Ruled scope: MECHANICAL verification only. This asks one question -- does an EXPLOIT-capable
+# sword hit landing inside the Survey's visibly active window produce the intended interrupt?
+# It is explicitly NOT a claim that normal ranged Survey situations leave enough travel time
+# to reach the Watcher; positioning determines which counterplay is available, and the
+# window's perceptibility already passed on its own.
+#
+# WHY THIS PROBE CANNOT PASS FOR THE WRONG REASON: sword_burn_A authors
+# interrupt_strength = 0 on hits 1 and 2 (only hit 3 carries 1). Graded interruption
+# therefore cannot cancel the windup here, so a cancel can ONLY have come from the flinch
+# route. The negative control below closes the loop from the other side.
+
+func _survey_probe_sim() -> SimWorld:
+	var s := SimWorld.new()
+	s.set_damage_matrix({}, 1.5, 0.5)
+	s.add_entity(PLAYER_ID, Vector3.ZERO, 4.0)
+	s.register_combatant(PLAYER_ID, 100000.0, &"envoy", 0, 0.45, &"player")
+	ContentRegistrar.register_enemy_body(s, ENEMY_ID, &"watcher", WATCHER_ANCHOR)
+	ContentRegistrar.register_enemy_ai(s, ENEMY_ID, &"watcher", WATCHER_ANCHOR)
+	ContentRegistrar.register_weapon(s, &"sword_burn_A")
+	s.set_equipped_weapon(PLAYER_ID, &"sword_burn_A")
+	s._move_speeds[ENEMY_ID] = 0.0
+	s.debug_set_ai_active(ENEMY_ID)
+	_place_player(s, 4.0)
+	s._ai_last_in_close_band[ENEMY_ID] = s.tick_count - 200  # already failed to close
+	return s
+
+
+## Drives a committed Survey, teleports the player into sword reach, and swings so the hit
+## lands at `press_offset`+ ticks into the windup. Returns every event after commitment.
+func _probe_survey_with_sword(press_offset: int) -> Dictionary:
+	var s: SimWorld = _survey_probe_sim()
+	var telegraph_tick: int = -1
+	for _t in 5:
+		for event in s.tick([], 1.0 / 30.0):
+			if event.kind == "attack_telegraph":
+				telegraph_tick = event.tick
+	# Teleported rather than walked: this is a mechanical probe of the WINDOW, and the ruling
+	# explicitly separates that from whether travel time permits the approach.
+	_place_player(s, 1.9)
+
+	var collected: Array[Event] = []
+	for _t in 60:
+		var commands: Array[Command] = []
+		var offset: int = s.tick_count - telegraph_tick
+		if offset == press_offset:
+			commands.append(Command.new(s.tick_count, PLAYER_ID, "attack", {"aim": Vector3(0, 0, -1), "phase": "pressed"}))
+		if offset == press_offset + 2:
+			commands.append(Command.new(s.tick_count, PLAYER_ID, "attack", {"aim": Vector3(0, 0, -1), "phase": "released"}))
+		collected.append_array(s.tick(commands, 1.0 / 30.0))
+	return {"telegraph_tick": telegraph_tick, "events": collected, "sim": s}
+
+
+func _offset_of(result: Dictionary, kind: String) -> int:
+	for event in result.events:
+		if event.kind == kind:
+			return event.tick - int(result.telegraph_tick)
+	return -1
+
+
+## THE PROBE. An EXPLOIT hit inside the visibly active window interrupts the Survey.
+func test_sword_hit_inside_the_survey_window_interrupts_it() -> void:
+	var survey: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", &"watcher_survey")
+	var result: Dictionary = _probe_survey_with_sword(22)
+
+	var hit_offset: int = _offset_of(result, "hit")
+	assert_between(hit_offset, survey.vulnerable_start_tick, survey.vulnerable_end_tick,
+		"SANITY: the probe must actually land its hit inside the authored window, or it proves nothing")
+
+	assert_eq(_offset_of(result, "windup_interrupted"), hit_offset, "the committed Survey must be cancelled by that hit")
+	for event in result.events:
+		if event.kind == "flinched":
+			assert_eq(String(event.payload.get("reason", "")), "exploit",
+				"and the cancel must come from the VULNERABILITY route -- hits 1-2 author interrupt_strength 0, so nothing else could have done it")
+	assert_eq(result.events.filter(func(e): return e.kind == "flinched").size(), 1, "exactly one flinch")
+	assert_eq(result.events.filter(func(e): return e.kind == "projectile_fired").size(), 0,
+		"and the shot must never leave -- the window was punished before release")
+
+
+## NEGATIVE CONTROL. The identical hit BEFORE the window changes nothing: no flinch, no
+## cancel, and the Survey fires normally. Without this, the probe above could be passing
+## because any sword hit cancels a windup.
+func test_the_same_sword_hit_before_the_window_does_not_interrupt() -> void:
+	var survey: NaturalWeaponStats = ContentDB.get_resource(&"natural_weapon", &"watcher_survey")
+	var result: Dictionary = _probe_survey_with_sword(6)
+
+	var hit_offset: int = _offset_of(result, "hit")
+	assert_gt(hit_offset, -1, "SANITY: the control must still land its hit")
+	assert_lt(hit_offset, survey.vulnerable_start_tick, "SANITY: and land it BEFORE the window opens")
+
+	assert_eq(result.events.filter(func(e): return e.kind == "flinched").size(), 0,
+		"outside the window an EXPLOIT-capable hit must not flinch -- hit 1 is 8 damage against a threshold of 24, and its capability is exploit, so no pressure route exists either")
+	assert_eq(result.events.filter(func(e): return e.kind == "windup_interrupted").size(), 0, "so nothing cancels the windup")
+	assert_eq(result.events.filter(func(e): return e.kind == "projectile_fired").size(), 1,
+		"and the Survey completes and fires as authored")
+
+
 # --- named integration fixture: the REAL Watcher, production path -------------------
 # BRAIN, "Convenience-zeroed defenses in tests hide the interactions worth testing": the
 # synthetic fixtures above protect SIMULATION laws, and every one of them hand-builds its

@@ -97,6 +97,27 @@ func clear() -> void:
 	visible = false
 
 
+## Persistent on/off variant (Slice B charge-ready cue, used by the ENVOY — this component
+## is shared with the player, not enemy-only). Unlike flash() it never self-hides on a
+## timer: the charge-ready state has no fixed duration (the player may hold indefinitely
+## once saturated), so ONLY an explicit active=false call turns it off — driven by Events
+## (charge_ready / melee_swing / melee_hold_canceled), never by polling sim state.
+##
+## Bumps _generation so a previously-scheduled flash timer can never hide this, and pins
+## the PLAIN phase so the P29 windup animation (_process) leaves it alone. The two cues
+## share one node and must not fight over its transform.
+func set_active(color: Color, active: bool) -> void:
+	_generation += 1
+	_phase = Phase.PLAIN
+	scale = Vector3.ONE
+	if active:
+		_base_color = color
+		_material.albedo_color = color
+		visible = true
+	else:
+		visible = false
+
+
 ## Presentation animation only (GAME-RULES §1.8 permits exactly this in _process).
 ## Gameplay never reads this transform, and nothing here feeds back into the sim.
 func _process(delta: float) -> void:

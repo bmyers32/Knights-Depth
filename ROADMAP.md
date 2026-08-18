@@ -748,6 +748,21 @@ Movement tools (bump, charge lunge) help close distance but are **NOT exploit tr
 never conflate traversal with capability in docs, comments or design talk. Future
 committed wand mechanics may earn ranged exploitation on their own terms (P30).
 
+**VULNERABILITY ROUTE — BANKED PASS 2026-08-17.** The controlled close-position probe
+passed: an EXPLOIT-capable sword hit landing at offset 26, inside the authored 23-34 window,
+produced `windup_interrupted` and `flinched` with `reason: "exploit"`, and the shot never
+left. **It could not have passed for the wrong reason** — sword_burn_A authors
+`interrupt_strength = 0` on hits 1-2 (only hit 3 carries 1), so graded interruption cannot
+cancel a windup here and the cancel can only have come from the vulnerability route. A
+negative control pins the other side: the identical hit BEFORE the window produces no flinch,
+no cancel, and the Survey fires as authored. Both are permanent tests.
+
+**SCOPE OF THE BANK, ruled explicitly:** this is MECHANICAL verification. It is **not** a
+claim that normal ranged Survey situations leave enough travel time to reach the Watcher.
+**Positioning determines which counterplay is available**, and `vulnerable_start_tick` is
+NOT to be changed to make the window reachable from arbitrary ranged positioning — the
+window's perceptibility passed on its own. Survey timing stays frozen.
+
 **VULNERABILITY CONFOUND — RESOLVED AS UNRECALLED → CONTROLLED PROBE.** No defect is
 inferred from memory. With the cue fix landed, the probe is a REQUIRED step of the next
 playtest: approach with sword, wait for the now-legible vulnerable transition, deliberately
