@@ -316,6 +316,37 @@ func test_bump_during_a_committed_windup_never_disturbs_its_timeline() -> void:
 	assert_false(sim._ai_attack_fire_tick.has(ENEMY_ID), "it fired on schedule, from wherever it now is")
 
 
+## RULED 2026-08-19, NEWLY REVIEWED — not a backdated intention. The P16 record was checked
+## and contained only the OPPOSITE proposition (a bump never INFLICTS flinch: LEXICON's BUMP
+## entry, and test_bump_during_a_committed_windup_never_disturbs_its_timeline above). What a
+## flinch does to an actor ALREADY sliding was unspecified and untested; it fell out of
+## _advance_bump_slides() not being gated by _flinched_until_tick.
+##
+## PRINCIPLE: flinch suppresses AGENCY. Externally imposed displacement is not agency, so
+## already-imparted forced motion completes. Pinned here because a rule that lives only in a
+## comment is a rule that drifts — and because the opposite ruling is expected for
+## self-propelled commitments (ROADMAP P17's scurry), which makes the boundary worth holding.
+func test_a_flinched_actor_still_completes_an_imparted_bump_slide() -> void:
+	sim.entities[ENEMY_ID] = Vector3(0, 0, -1.0)
+	sim.set_flinch_tuning(90, 20)
+	sim.register_flinch_profile(ENEMY_ID, 1.0)
+	sim._weapons["sword"].flinch_capability = "pressure"
+
+	var start_z: float = sim.entities[ENEMY_ID].z
+	_block(true)  # impart the slide
+	assert_true(sim._bump_slides.has(ENEMY_ID), "sanity: a slide is in progress")
+
+	var events: Array[Event] = _player_attacks()  # flinch it mid-slide
+	assert_eq(_of(events, "flinched").size(), 1, "sanity: the mechanism fired -- the actor really is flinched")
+	assert_true(sim.tick_count < int(sim._flinched_until_tick[ENEMY_ID]), "sanity: still inside the flinch window")
+
+	for _i in range(BUMP_SLIDE_TICKS):
+		sim.tick([], DT)
+	assert_false(sim._bump_slides.has(ENEMY_ID), "the slide ran to completion rather than being aborted")
+	assert_almost_eq(sim.entities[ENEMY_ID].z, start_z - BUMP_DISTANCE, 0.001,
+		"and it delivered its FULL authored displacement -- flinch withholds an actor's own Commands, it does not undo motion imposed on it")
+
+
 # --- 4. determinism / inertness -----------------------------------------------------
 
 func test_shield_without_p16_content_behaves_exactly_as_before() -> void:

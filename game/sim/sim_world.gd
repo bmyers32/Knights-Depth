@@ -1745,6 +1745,28 @@ func _apply_shield_bump(actor_id: int, shield: Dictionary) -> Array[Event]:
 ## become real; do not pull that work forward for this Treat.
 ## Autonomous-phase law (see tick()): sorted ids, no mutation of the collection while
 ## iterating -- completed slides are collected first and erased afterwards.
+## FLINCH DOES NOT ABORT A SLIDE — ruled 2026-08-19, and NEWLY REVIEWED, not backdated.
+##
+## Recorded honestly because the record was checked first and came back empty: P16 banked
+## the "§3 non-flinching-displacement law" (LEXICON's BUMP entry;
+## test_bump_during_a_committed_windup_never_disturbs_its_timeline), but that is the
+## OPPOSITE PROPOSITION — it says a bump never INFLICTS flinch/interruption on the actor it
+## displaces. Whether an actor already sliding, flinched by something ELSE, keeps sliding
+## was never specified, never tested, and fell out of this phase simply not being gated by
+## _flinched_until_tick. It is a consequence that was reviewed and then ruled deliberate; it
+## was not intended all along, and must never be described as though it were.
+##
+## THE PRINCIPLE (the part that generalises): FLINCH SUPPRESSES AGENCY. Externally imposed
+## displacement is not agency, so already-imparted forced motion COMPLETES. The flinch
+## early-return lives in _decide_single_ai_command, which withholds an actor's own Commands
+## — exactly the right place for a rule about agency, and exactly why this phase is
+## correctly outside it.
+##
+## SAME PRINCIPLE, OPPOSITE ANSWER, for anything self-propelled: a committed mobility action
+## an actor CHOSE (ROADMAP P17's proposed scurry) is agency, so a successful flinch must
+## abort it and forfeit the remaining authored movement. Do not read this comment as
+## precedent for "authored displacement always completes" — the question is always whose
+## agency the motion expresses, never whether the motion is authored.
 func _advance_bump_slides() -> void:
 	var actor_ids: Array = _bump_slides.keys()
 	actor_ids.sort()
