@@ -154,12 +154,6 @@ var _ai_last_survey_commit: Dictionary = {}   # actor_id -> tick (literal commit
 ## per-tick proximity test reuses band_contains() against the AUTHORED band rather than
 ## re-deriving "close range" from some other number -- one definition, one predicate.
 var _ai_close_band: Dictionary = {}           # actor_id -> band Dictionary
-## APPROACH WEAVE (P17) — present ONLY for actors whose content authors a usable weave.
-## Absence is the "off" state: no flag, no zero-valued record to accidentally read as
-## authored. GAME-RULES §3 channel law assigns baseline motion PATH to the FAMILY, so this
-## is content-owned shape, never an AI behaviour mode -- there is no weave state machine
-## and nothing here is written after registration.
-var _ai_weave: Dictionary = {}                # actor_id -> {degrees, half_period, release_distance, phase_offset}
 var _ai_attack_start_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 var _ai_attack_fire_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 ## FLINCH reaction layer (batch, GAME-RULES §3). FLINCHED is an actor/AI REACTION
@@ -463,7 +457,7 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 ## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
 ## than preferred -> approach, closer than minimum -> back away, inside the band ->
 ## stop. Since P29 they govern MOVEMENT ONLY; attack eligibility is the action band.
-func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0, approach_weave_degrees: float = 0.0, approach_weave_period_ticks: int = 0, approach_weave_release_distance: float = 0.0, approach_weave_phase_stride_ticks: int = 0) -> void:
+func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0) -> void:
 	# The TERMINAL band is the one with the largest max_range — the only band that
 	# includes its own maximum (see _select_action). Derived, never authored, so content
 	# cannot accidentally declare two terminals or none.
@@ -511,7 +505,6 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 	for action in resolved:
 		if bool(action.requires_close_frustration) and not _ai_close_band.has(actor_id):
 			push_warning("register_ai [actor %d]: '%s' requires close frustration but the repertoire has no ungated close action -- it could never become selectable" % [actor_id, action.id])
-	_register_approach_weave(actor_id, approach_weave_degrees, approach_weave_period_ticks, approach_weave_release_distance, approach_weave_phase_stride_ticks)
 	# Equip the LOWEST-BAND action so _equipped_weapon is never empty for an AI actor.
 	# Chosen from authored band values, not from array position — element 0 is not
 	# privileged. Commitment overwrites this at every windup start, so the initial pick
@@ -519,57 +512,6 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 	# that one action, identical to pre-P29.
 	if lowest_band_id != "":
 		set_equipped_weapon(actor_id, lowest_band_id)
-
-
-## APPROACH WEAVE registration (P17). Resolves authored content into the exact three
-## numbers the per-tick path expression needs, ONCE, so nothing is re-derived 30x/second
-## and there is no way for the decide path to disagree with what content said.
-##
-## ABSENCE IS OFF. A record is stored only when the weave is genuinely usable; every other
-## family (and every hand-registered test enemy) simply has no entry and takes the
-## untouched straight-approach path. That is what makes P17 a no-op everywhere it is not
-## authored, rather than a zero-valued rotation applied to everyone.
-##
-## period < 2 cannot express a half-period, so it is treated as OFF and WARNED rather than
-## silently flooring to a 0-tick flip (the same "content that would otherwise fail
-## SILENTLY is warned, never silently accepted" precedent as _lint_flinch_capability and
-## _lint_band_overlap).
-##
-## The stride warning enforces GAME-RULES §3's BINDING CONSEQUENCE at the only place that
-## can see it: a weave phased purely off tick_count with no per-actor offset makes every
-## Common actor of that family zig in unison, which reads as CLAIMED coordination -- family
-## identity impersonating the state channel. Sim cannot know how many actors will exist, so
-## it warns rather than blocks; tests/test_approach_weave.gd proves the de-correlation.
-func _register_approach_weave(actor_id: int, degrees: float, period_ticks: int, release_distance: float, phase_stride_ticks: int) -> void:
-	_ai_weave.erase(actor_id)
-	if is_zero_approx(degrees):
-		return
-	if period_ticks < 2:
-		push_warning("register_ai [actor %d]: approach_weave_degrees %.2f authored with period %d -- a period below 2 ticks has no half-period, weave treated as OFF" % [actor_id, degrees, period_ticks])
-		return
-	if phase_stride_ticks <= 0:
-		push_warning("register_ai [actor %d]: approach weave authored with no per-actor phase stride -- GAME-RULES §3 requires a deterministic per-actor offset for globally-phased family motion, or several Common actors weave in unison and read as Claimed" % actor_id)
-	_ai_weave[actor_id] = {
-		"degrees": degrees,
-		# Stored as the HALF period: the sign flips every half period, so this is the
-		# number the path expression actually divides by. Integer by construction -- an
-		# odd authored period floors here deliberately (a 31-tick period flips every 15),
-		# which is a sub-tick asymmetry no player can perceive and no float can fix.
-		"half_period": maxi(1, period_ticks / 2),
-		"release_distance": release_distance,
-		# The per-actor offset, resolved at registration from actor_id. Deterministic and
-		# RNG-free on purpose: genuine randomness in AI movement arrives with idle wander
-		# and gets its OWN seeded stream (ROADMAP P18 / GAME-RULES §1.3). Reaching for
-		# randomness here would pre-empt that decision and put an unseeded draw in sim.
-		#
-		# NORMALIZED against the full period (2 x half_period), which is the ruled contract:
-		# actor_id shifts PHASE and only phase -- never the period, never the waveform, never
-		# the amplitude. Behaviourally this is a no-op (adding a whole period leaves the
-		# half-period quotient's parity unchanged), and that is exactly why it belongs here:
-		# it makes the invariant structural instead of emergent, so a large actor_id is
-		# provably just a shifted copy of the same wave rather than incidentally one.
-		"phase_offset": (actor_id * phase_stride_ticks) % (2 * maxi(1, period_ticks / 2)),
-	}
 
 
 ## Registration-time enforcement of GAME-RULES §3's "authored bands may not overlap"
@@ -2112,78 +2054,9 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		return [Command.new(tick_count, actor_id, "move", {"direction": -to_player.normalized()})]
 
 	if distance_to_player > tuning.preferred_attack_distance:
-		# P17: the APPROACH is the only branch that carries family path identity. Retreat
-		# above and hold below stay straight deliberately -- a weaving retreat reads as
-		# fleeing indecision rather than aggression, and a weaving hold is jitter.
-		return [Command.new(tick_count, actor_id, "move", {"direction": _approach_direction(actor_id, to_player.normalized(), distance_to_player)})]
+		return [Command.new(tick_count, actor_id, "move", {"direction": to_player.normalized()})]
 
 	return []  # in band, weapon on cooldown: hold position and wait
-
-
-## THE approach-path expression (P17) — GAME-RULES §3 assigns BASELINE MOTION PATH to the
-## FAMILY (the spatial channel), so this shapes the direction content authored and nothing
-## else. It is a pure function of (actor_id, straight heading, distance, tick_count): no
-## stored weave state, no RNG, nothing written. Returns the straight heading unchanged for
-## every actor without an authored weave, which is every family but Fang.
-##
-## SQUARE WAVE, not a sine: the sketch this implements is a zig-ZAG, and a sharp reversal
-## every half period is what makes the path read as committed direction changes rather than
-## a serpentine drift. Consequence stated so it is never mistaken for a bug: closing speed
-## scales by cos(degrees), so an authored weave is ALSO a deliberate ~cos% slower approach
-## (35 deg = ~18%). That is the mechanic's price, tracked as P17 packet Q6 against the
-## banked engagement_delay_ticks, not a number to compensate for elsewhere.
-##
-## RELEASE HINGE: inside release_distance the path straightens, producing the authored beat
-## "zig-zag rush -> straighten -> arrive -> windup". Without it the weave is still swinging
-## while the actor tries to settle at preferred_attack_distance and the settle boundary
-## visibly jitters.
-##
-## The rotated heading also becomes this actor's FACING, because _apply_move derives facing
-## from movement direction. That is intended (a weaving Fang leans into its turns) and is
-## the subject of P17 packet Q4; combat is unaffected either way, since attack aim is
-## sampled fresh at the fire tick, never from stored facing.
-func _approach_direction(actor_id: int, straight: Vector3, distance: float) -> Vector3:
-	var weave: Dictionary = _ai_weave.get(actor_id, {})
-	if weave.is_empty() or distance <= float(weave.release_distance):
-		return straight
-	return straight.rotated(Vector3.UP, deg_to_rad(float(weave.degrees) * _weave_sign(actor_id, weave)))
-
-
-## The zig-zag's sign for THIS tick. Extracted so the debug accessor and the path
-## expression cannot disagree about which way the actor is currently leaning -- the same
-## one-predicate discipline band_contains() exists for.
-##
-## phase_offset is what stops N actors of the same family sharing tick_count's phase and
-## rendering as synchronized (GAME-RULES §3 binding consequence). tick_count and
-## phase_offset are both non-negative, so integer division needs no negative-floor guard.
-func _weave_sign(actor_id: int, weave: Dictionary) -> int:
-	var phase: int = tick_count + int(weave.phase_offset)
-	return 1 if (phase / int(weave.half_period)) % 2 == 0 else -1
-
-
-## Read-only weave snapshot (AGENTS.md Invariable #2: every mechanic must be observable).
-## Exists so "why did that Fang drift left" is answerable on sight instead of by reasoning
-## about tick parity -- and specifically so the per-actor de-correlation the channel law
-## BINDS can be seen live with two Fangs on screen, not merely asserted in a test. Never
-## called from sim itself; the scene driver polls it behind a debug_* export.
-func debug_describe_approach_weave(actor_id: int, player_id: int) -> Dictionary:
-	var weave: Dictionary = _ai_weave.get(actor_id, {})
-	if weave.is_empty():
-		return {"actor_id": actor_id, "authored": false}
-	var to_player: Vector3 = entities.get(player_id, Vector3.ZERO) - entities.get(actor_id, Vector3.ZERO)
-	to_player.y = 0.0
-	var distance: float = to_player.length()
-	var released: bool = distance <= float(weave.release_distance)
-	return {
-		"actor_id": actor_id,
-		"authored": true,
-		"distance": distance,
-		"released": released,           # true = straightened for the final approach
-		"sign": 0 if released else _weave_sign(actor_id, weave),
-		"degrees": float(weave.degrees),
-		"half_period": int(weave.half_period),
-		"phase_offset": int(weave.phase_offset),
-	}
 
 
 ## P29 ACTION SELECTOR — the AI's one new power, and deliberately its only one: "which of

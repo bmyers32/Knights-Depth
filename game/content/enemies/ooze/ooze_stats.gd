@@ -70,14 +70,3 @@ extends Resource
 ## this family authors no action requiring it -- the field is actor-level, so it exists on
 ## every family, but it is inert without a consumer action.
 @export var close_frustration_ticks: int = 0
-
-
-## APPROACH WEAVE (P17) — inert here. The four fields are ACTOR-level, so they exist on
-## every family, but 0 degrees means the approach runs straight and this family's motion
-## path is byte-identical to pre-P17. The canonical explanation lives in FangStats.
-## P17 deliberately changes ONE family so the re-playtest can attribute any felt
-## difference to the Fang alone (same discipline P29's iteration used for the Watcher).
-@export var approach_weave_degrees: float = 0.0
-@export var approach_weave_period_ticks: int = 0
-@export var approach_weave_release_distance: float = 0.0
-@export var approach_weave_phase_stride_ticks: int = 0

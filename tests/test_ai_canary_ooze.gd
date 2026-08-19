@@ -1,12 +1,16 @@
 extends GutTest
 ## THE ACTIVE GATE on the shared locomotion/decision path (P17 baseline split).
 ##
-## Ooze is named here for one reason and it must stay true: **P17 does not touch it.** The
-## approach weave is authored on Fang alone, so any drift this test reports came from the
-## shared machinery in `_decide_single_ai_command` / `_apply_move`, not from an intended
-## content change. That is what a canary is for, and it is why the gate moved to a family
-## that is explicitly unaffected rather than staying on one that legitimately moved
-## (see tests/test_ai_backward_compat.gd for the retired artifact and the reasoning).
+## Ooze is named here for one reason and it must stay true: **no family-identity work
+## touches it.** P17's approach weave was authored on Fang alone and has since been reverted
+## as falsified; Ooze was unaffected throughout, in both directions. So any drift this test
+## reports came from the shared machinery in `_decide_single_ai_command` / `_apply_move`,
+## never from an intended content change -- which is exactly what a canary is for, and why
+## the gate sits on an explicitly unaffected family rather than on one that moves.
+##
+## THIS OUTLIVED THE MECHANIC THAT PROMPTED IT, deliberately. The three-artifact discipline
+## is preserved independently of P17's verdict: the shared locomotion path still needs an
+## honest gate, and Fang will move again when P17's successor lands.
 ##
 ## THE CONTRACT: byte-identical, with NO additive-key allow-list. The P29 baseline needed
 ## one because P29 was mid-flight when it was recorded; this artifact was recorded against
@@ -64,11 +68,3 @@ func test_canary_actually_exercises_the_shared_path() -> void:
 	for required in ["moved", "attack_telegraph", "hit", "melee_swing"]:
 		assert_true(kinds.has(required), "canary must exercise '%s' -- otherwise it cannot see a regression in it" % required)
 	assert_gt(moved_ticks.size(), 30, "the canary must contain a substantial ENEMY approach, or it is not gating locomotion at all")
-
-
-## The canary's own premise, asserted rather than trusted: Ooze must author NO weave. If a
-## future content pass gives Ooze a motion path, this family stops being an unaffected
-## subject and the gate has to move again -- deliberately, not silently.
-func test_ooze_authors_no_approach_weave() -> void:
-	var stats: Resource = ContentDB.get_resource(&"enemy", &"ooze")
-	assert_eq(stats.approach_weave_degrees, 0.0, "Ooze must remain weave-free to serve as the unaffected canary")

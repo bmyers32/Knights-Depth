@@ -5,7 +5,7 @@ extends GutTest
 ## live behaviour and required byte-identity after normalization: the M1-preservation gate
 ## for the single-action families (Fang and Ooze).
 ##
-## WHY ITS GATING AUTHORITY ENDED. P17 gives Fang an authored approach weave — a lawful,
+## WHY ITS GATING AUTHORITY ENDED. P17 gave Fang an authored approach weave — a lawful,
 ## dated behaviour change under GAME-RULES §3's amended channel law (families own baseline
 ## motion PATH). The fixture records Fang's per-tick positions, so the comparison could only
 ## be kept alive one of two ways, and both are forbidden:
@@ -23,8 +23,20 @@ extends GutTest
 ##      could; `tools/record_family_locomotion.gd` deliberately cannot write it.
 ##   2. `tests/test_ai_canary_ooze.gd` — the ACTIVE gate on the shared locomotion/decision
 ##      path, carried by a family P17 explicitly does not touch.
-##   3. `tests/test_ai_baseline_p17_fang.gd` — the new governing baseline for Fang,
-##      recorded only after the approved P17 behaviour existed.
+##   3. `tests/test_ai_baseline_p17_fang.gd` — the governing baseline for Fang under the
+##      weave; itself retired to EXPERIMENT EVIDENCE on 2026-08-19 when the playtest
+##      falsified the mechanic and it was reverted.
+##
+## ROLE UPDATE, 2026-08-19 (the weave revert). This artifact now holds TWO roles at once,
+## which is worth stating precisely because the whole point of the split was that no
+## artifact should:
+##   * HISTORICAL EVIDENCE — unchanged, permanent, the "before" of the P17 experiment.
+##   * AND, incidentally, an accurate description of Fang's LIVE behaviour again, because
+##     the revert restored the straight approach it recorded.
+## The second is a FACT, not a restored authority. Gating stays with the Ooze canary. A
+## fixture does not silently reacquire gating power because the world happened to move back
+## toward it — re-blessing in reverse is still re-blessing, and the next lawful Fang change
+## would quietly break a gate nobody deliberately re-armed.
 ##
 ## WHAT THIS FILE STILL DOES. Exactly one job: prove the evidence still exists, intact and
 ## parseable, and still contains what it claims to. An artifact silently deleted or

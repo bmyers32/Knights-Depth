@@ -19,7 +19,11 @@ extends SceneTree
 const SCENARIO_PATH: String = "res://tests/helpers/family_locomotion_scenario.gd"
 
 ## family_key -> output fixture. Ooze is the ACTIVE canary (an explicitly unaffected
-## family); Fang is the new governing baseline for the P17 approach weave.
+## family). The Fang entry recorded the P17 approach weave, which was FALSIFIED and
+## reverted on 2026-08-19: its artifact is now experiment evidence and re-running this
+## against `fang` would overwrite that evidence with post-revert (straight) behaviour.
+## Left in place for the successor mechanic, which will need a freshly DATED artifact of
+## its own -- never this one overwritten.
 const ARTIFACTS: Dictionary = {
 	&"ooze": "res://tests/fixtures/ai_canary_ooze.json",
 	&"fang": "res://tests/fixtures/ai_baseline_p17_fang.json",
