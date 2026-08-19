@@ -83,6 +83,13 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## stopped attacking." Pure observability, default off.
 @export var debug_show_action_selection: bool = false
 
+## P17 approach-weave snapshot: which way each weaving actor is currently leaning, whether
+## it has passed its release hinge, and its per-actor phase offset. The offset is the point:
+## GAME-RULES §3 BINDS a deterministic per-actor phase so several Common actors cannot weave
+## in unison and read as Claimed coordination — this makes that visible live with two Fangs
+## on screen, rather than only assertable in a test. Pure observability, default off.
+@export var debug_show_approach_weave: bool = false
+
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 var _debug_equipped_index: int = 0
@@ -260,6 +267,12 @@ func _physics_process(delta: float) -> void:
 			var selection: Dictionary = sim.debug_describe_action_selection(actor_id, envoy.actor_id)
 			if not selection.is_empty():
 				print("action selection: ", selection)
+
+	if debug_show_approach_weave:
+		for actor_id: int in _enemies.keys():
+			var weave: Dictionary = sim.debug_describe_approach_weave(actor_id, envoy.actor_id)
+			if bool(weave.get("authored", false)):
+				print("approach weave: ", weave)
 
 
 ## Dev-only debug input, deliberately NOT an InputMap action — edge-detected raw

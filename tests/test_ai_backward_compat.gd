@@ -1,77 +1,90 @@
 extends GutTest
-## THE M1-PRESERVATION GATE for P29 (enemy action repertoire).
+## RETIRED GATE — `tests/fixtures/ai_baseline_pre_p29.json` is now HISTORICAL EVIDENCE.
 ##
-## P29 rewrites the AI's attack-eligibility gate in `_decide_single_ai_command` — a
-## change to a SHARED decision function's condition order. BRAIN records that the last
-## time that function's order changed, three AI tests broke that had never asserted
-## anything about attacks: their ISOLATION depended on the surrounding control flow, not
-## on their own assertions. Per-test review cannot catch that class of drift on its own,
-## so this fixture compares the whole observable behaviour of the single-action families
-## against a recording made BEFORE the change.
+## WHAT IT WAS. From P29 until 2026-08-18 this file ran the recorded pre-P29 stream against
+## live behaviour and required byte-identity after normalization: the M1-preservation gate
+## for the single-action families (Fang and Ooze).
 ##
-## THE CONTRACT (ruled): literal stream identity is impossible because attack_telegraph
-## intentionally gains `action_id`. The comparison therefore runs through a normalizer
-## whose explicit additive-key allow-list is EXACTLY
-##     attack_telegraph -> action_id
-## and nothing else (AiBaselineScenario.ADDITIVE_KEY_ALLOWLIST). After normalization the
-## streams must be byte-identical: decisions, timing, movement, attack resolution,
-## damage, cooldowns and reactions all unchanged.
+## WHY ITS GATING AUTHORITY ENDED. P17 gives Fang an authored approach weave — a lawful,
+## dated behaviour change under GAME-RULES §3's amended channel law (families own baseline
+## motion PATH). The fixture records Fang's per-tick positions, so the comparison could only
+## be kept alive one of two ways, and both are forbidden:
 ##
-## ANY ADDITIONAL DIFFERENCE IS A REGRESSION REQUIRING EXPLANATION, never another
-## normalization exception and never a re-record. Regenerate the fixture only for a
-## DELIBERATE, dated behaviour change (tools/record_ai_baseline.gd).
+##   * RE-RECORD IT. Procedurally legal ("a deliberate, dated behaviour change"), and it
+##     destroys the artifact's whole point. BRAIN: "Never rewrite yesterday's baseline to
+##     describe today — retire its gating role, preserve its evidence role. A historical
+##     fixture's value is proving what changed."
+##   * COMPARE ONLY ITS OOZE ROWS. That leaves one artifact whose authority varies by row —
+##     half-retired, and unreadable to anyone who finds it later.
+##
+## WHAT REPLACED IT (the three-artifact split, one job each):
+##   1. THIS artifact — frozen byte-for-byte, evidence of pre-P29 behaviour. Never
+##      re-recorded, and `tools/record_ai_baseline.gd` remains the only thing that ever
+##      could; `tools/record_family_locomotion.gd` deliberately cannot write it.
+##   2. `tests/test_ai_canary_ooze.gd` — the ACTIVE gate on the shared locomotion/decision
+##      path, carried by a family P17 explicitly does not touch.
+##   3. `tests/test_ai_baseline_p17_fang.gd` — the new governing baseline for Fang,
+##      recorded only after the approved P17 behaviour existed.
+##
+## WHAT THIS FILE STILL DOES. Exactly one job: prove the evidence still exists, intact and
+## parseable, and still contains what it claims to. An artifact silently deleted or
+## truncated is an artifact that was never preserved.
 
 const BASELINE_PATH: String = "res://tests/fixtures/ai_baseline_pre_p29.json"
 
 
 func _load_baseline() -> Array:
 	var file := FileAccess.open(BASELINE_PATH, FileAccess.READ)
-	assert_not_null(file, "baseline fixture missing at %s -- regenerate with tools/record_ai_baseline.gd" % BASELINE_PATH)
+	assert_not_null(file, "HISTORICAL EVIDENCE MISSING at %s -- this artifact is preserved deliberately and must never be deleted (BRAIN: retire the gating role, preserve the evidence role)" % BASELINE_PATH)
 	if file == null:
 		return []
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	file.close()
-	assert_true(parsed is Array, "baseline fixture must be a JSON array")
+	assert_true(parsed is Array, "evidence fixture must still be a JSON array")
 	return parsed if parsed is Array else []
 
 
-func test_single_action_families_behave_exactly_as_before_p29() -> void:
+func test_pre_p29_evidence_is_preserved_intact() -> void:
 	var baseline: Array = _load_baseline()
-	assert_gt(baseline.size(), 0, "sanity: the baseline must not be empty")
-
-	var sim := SimWorld.new()
-	AiBaselineScenario.build(sim)
-	var current: Array = AiBaselineScenario.run(sim)
-
-	# Report the FIRST divergence with its index rather than only a size mismatch: a
-	# stream that diverges at event 40 and a stream that diverges at event 240 are very
-	# different bugs, and "arrays differ" names neither.
-	var limit: int = min(baseline.size(), current.size())
-	for i in limit:
-		if baseline[i] != current[i]:
-			fail_test("first divergence at event %d of %d\n  baseline: %s\n  current:  %s" % [i, limit, baseline[i], current[i]])
-			return
-	assert_eq(current.size(), baseline.size(), "event COUNT changed (streams agree up to event %d) -- P29 must not add, drop or reorder events for single-action families" % limit)
-	if current.size() == baseline.size():
-		pass_test("%d events byte-identical after normalization" % current.size())
+	assert_gt(baseline.size(), 0, "the preserved evidence must not be empty")
+	for entry in baseline:
+		assert_true(entry is String, "every evidence row is a serialized event string")
 
 
-## The allow-list is a CONTRACT, not a convenience. If a future change widens it, this
-## test fails and forces the widening to be a deliberate, reviewed decision rather than
-## a quiet edit that makes the gate above go green again.
-func test_additive_key_allowlist_is_exactly_the_ruled_contract() -> void:
-	assert_eq(AiBaselineScenario.ADDITIVE_KEY_ALLOWLIST.size(), 1, "exactly one event kind may gain a key")
-	assert_true(AiBaselineScenario.ADDITIVE_KEY_ALLOWLIST.has("attack_telegraph"))
-	assert_eq(AiBaselineScenario.ADDITIVE_KEY_ALLOWLIST["attack_telegraph"], ["action_id"])
-
-
-## Guards the fixture itself: a baseline that never reaches the reaction layer would
-## pass forever while proving nothing about the branches P29 actually touches. These are
-## the kinds the scenario was tuned to produce (verified against the recording).
-func test_baseline_exercises_the_branches_p29_can_disturb() -> void:
+## The evidence is only worth preserving if it still shows what pre-P29 behaviour looked
+## like across the branches it was recorded to cover. This is a statement ABOUT THE FILE,
+## never a comparison against live behaviour -- that is precisely the authority that was
+## retired.
+func test_pre_p29_evidence_still_shows_the_branches_it_was_recorded_for() -> void:
 	var baseline: Array = _load_baseline()
 	var kinds: Dictionary = {}
 	for entry in baseline:
 		kinds[String(entry).split("|")[1]] = true
 	for required in ["moved", "melee_swing", "hit", "attack_telegraph", "attack_rejected", "flinched", "windup_interrupted", "died", "projectile_fired", "weapon_switched"]:
-		assert_true(kinds.has(required), "baseline must exercise '%s' -- otherwise the gate cannot see a regression in it" % required)
+		assert_true(kinds.has(required), "evidence must still contain '%s' -- a truncated record proves nothing about what changed" % required)
+
+
+## Fang's pre-P29 APPROACH was a straight line. Keeping that specific fact assertable is
+## what makes this artifact EVIDENCE rather than a museum piece: it is the "before" half of
+## "prove what changed", and P17's whole claim is that this line is no longer straight.
+##
+## Scoped to the pure approach window (ticks 0-17, before the recorded player throws its
+## first attack at tick 18). Past that point the recording legitimately contains lateral
+## motion from knockback and from the player's own diagonal movement — first appearing at
+## tick 66 — which says nothing about the enemy's authored path. Asserting over the whole
+## stream would fail on displacement that was never locomotion.
+const APPROACH_WINDOW_END_TICK: int = 18
+
+func test_pre_p29_evidence_records_a_straight_fang_approach() -> void:
+	var baseline: Array = _load_baseline()
+	var samples: int = 0
+	for entry in baseline:
+		var row: String = String(entry)
+		if not row.contains("|moved|") or not row.contains("actor_id=1"):
+			continue
+		if int(row.split("|")[0]) >= APPROACH_WINDOW_END_TICK:
+			continue
+		samples += 1
+		var lateral: float = float(row.split("position=(")[1].trim_suffix(")").split(",")[0])
+		assert_almost_eq(lateral, 0.0, 0.0001, "pre-P29 Fang approached with zero lateral offset -- this is the recorded 'before' that P17's weave is measured against")
+	assert_gt(samples, 10, "the approach window must actually contain Fang movement rows, or this proves nothing")

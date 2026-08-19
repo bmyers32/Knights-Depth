@@ -106,3 +106,62 @@ extends Resource
 ## this family authors no action requiring it -- the field is actor-level, so it exists on
 ## every family, but it is inert without a consumer action.
 @export var close_frustration_ticks: int = 0
+
+## ---------------------------------------------------------------------------------
+## APPROACH WEAVE (P17, 2026-08-18) — Fang's BASELINE MOTION PATH.
+##
+## GAME-RULES §3 channel law (P17 amendment): FAMILIES own baseline motion PATH (the
+## spatial channel); entity STATES own motion RHYTHM/COORDINATION (the temporal channel).
+## Orthogonal but composable. A zig-zag approach is therefore family identity, and it does
+## NOT make a Common Fang read as Drifted -- provided it never impersonates the temporal
+## channel (see the stride field below, which is what keeps that promise).
+##
+## Taxonomy this expresses (ROADMAP P17): Fang = aggressive, NONLINEAR, committing.
+## Scope: the APPROACH branch only. Retreat, in-band hold, windup-freeze and flinch are
+## untouched -- a weaving retreat would read as fleeing indecision, not aggression.
+##
+## ALL FOUR VALUES ARE PROVISIONAL/UNVALIDATED (first playtest: P17 packet Q1-Q7). They
+## are deliberately OUTSIDE the M1 NUMERIC FENCE -- this is a new mechanic, not a retune
+## of fenced HP/flinch/output. A felt difficulty change here is evidence about the weave
+## and is never permission to move Fang's fenced durability numbers.
+## ---------------------------------------------------------------------------------
+
+## Half-amplitude of the zig-zag, in degrees off the straight-to-player heading. The path
+## alternates +/- this angle, so the full sweep is twice this. 0 = weave OFF entirely,
+## which is the default for every other family and the reason this ships as a no-op
+## everywhere it is not authored.
+## KNOWN COST, not a defect: closing speed scales by cos(degrees). At 35 deg that is ~18%
+## slower detection-to-band (~2.8s -> ~3.4s at move_speed 3.0). That interaction with the
+## banked engagement_delay_ticks is P17 packet Q6.
+@export var approach_weave_degrees: float = 0.0
+
+## Full zig-zag period in sim ticks (GAME-RULES §3: durations in ticks, never seconds).
+## The heading flips sign every HALF period. Must be >= 2 for a half-period to exist;
+## sim treats anything smaller as OFF and warns.
+## At 30 ticks (1.0s) and move_speed 3.0 the lateral excursion is ~0.86 units per
+## half-beat -- just under Fang's 0.9 combat_radius, i.e. a body-width swing that reads as
+## intent. Probed at 20 ticks it computes to ~0.57 and is expected to read as jitter.
+@export var approach_weave_period_ticks: int = 0
+
+## The RELEASE HINGE: inside this distance the approach straightens and runs at the player
+## directly. This is what makes the authored beat "zig-zag rush -> straighten -> arrive ->
+## windup" instead of a wobble that is still swinging while the actor tries to settle at
+## preferred_attack_distance (1.65). Author it comfortably outside the engagement band.
+## 0 = no hinge (weave right up to the band); kept expressible, deliberately not used.
+@export var approach_weave_release_distance: float = 0.0
+
+## PER-ACTOR PHASE STRIDE — ticks of phase offset applied per actor_id, so N Fangs on
+## screen do not zig and zag in unison.
+##
+## THIS FIELD IS THE GAME-RULES §3 BINDING CONSEQUENCE, in data. The amendment requires
+## that any family-owned path shape phased off a GLOBAL clock carry a deterministic
+## per-actor offset -- without it, several Common Fangs render synchronized and read as
+## CLAIMED, which is family identity stealing the state channel by accident. Verified by
+## P17 packet Q7 and by tests/test_approach_weave.gd's de-correlation test.
+##
+## Deterministic (a pure function of actor_id), NOT random: no RNG stream is opened here.
+## Idle wander is where genuine randomness arrives, with its own seeded stream (ROADMAP
+## P18, GAME-RULES §1.3) -- this must not pre-empt that decision.
+## 7 against a 30-tick period spreads consecutive actor_ids to phases 7/14/21/28/5/12...
+## -- no small group lands in unison. 0 = no offset (single-actor scenes only).
+@export var approach_weave_phase_stride_ticks: int = 0

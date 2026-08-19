@@ -4,3 +4,7 @@
 
 [resource]
 script = ExtResource("1_stats")
+approach_weave_degrees = 35.0
+approach_weave_period_ticks = 30
+approach_weave_release_distance = 3.0
+approach_weave_phase_stride_ticks = 7

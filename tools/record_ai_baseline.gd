@@ -1,4 +1,19 @@
 extends SceneTree
+## RETIRED TOOL — DO NOT RUN (P17 baseline split, 2026-08-18).
+##
+## The artifact this writes, tests/fixtures/ai_baseline_pre_p29.json, is no longer a gate.
+## It was retired to HISTORICAL EVIDENCE when P17 lawfully changed Fang's motion path; see
+## tests/test_ai_backward_compat.gd for the full reasoning. Running this tool would
+## overwrite the "before" half of "prove what changed" — the exact failure BRAIN's entry
+## "Never rewrite yesterday's baseline to describe today" names.
+##
+## Kept, not deleted, because it documents how the preserved evidence was produced.
+## For the LIVE artifacts (Ooze canary, P17 Fang baseline) use
+## tools/record_family_locomotion.gd, which deliberately cannot write this path.
+##
+## ------------------------------------------------------------------------------------
+## Original header follows.
+## ------------------------------------------------------------------------------------
 ## Regenerates the P29 backward-compat golden baseline (tests/fixtures/).
 ##
 ## Run:  & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s tools/record_ai_baseline.gd

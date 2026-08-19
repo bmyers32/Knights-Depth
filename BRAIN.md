@@ -637,6 +637,35 @@ not merely construct it. **Applies elsewhere:** every future shared presentation
 elevator/floor-transition and run-end flows, whose failure modes are likewise invisible to
 a boot that never interacts.
 
+### Never rewrite yesterday's baseline to describe today
+**Lesson (verbatim):** "Never rewrite yesterday's baseline to describe today — retire its
+gating role, preserve its evidence role. A historical fixture's value is proving what
+changed." **Incident (P17 Fang recon — caught in recon, before it was suffered):**
+`tests/fixtures/ai_baseline_pre_p29.json` records Fang's per-tick positions, built through
+the production `ContentRegistrar` from the real `.tres`. Any authored change to Fang
+locomotion turns it red. Because "a deliberate, dated behaviour change" is the sanctioned
+reason to regenerate, the obvious move — re-record it — is *procedurally legal* and
+destroys exactly what the artifact is for. **Mechanism:** a golden baseline holds two
+distinct roles at once. Its GATING role ("nothing has drifted since") is meaningful only
+while the recorded system is unchanged. Its EVIDENCE role ("this is what the system did on
+that date") survives the change and is the only record of the prior state. Re-recording
+silently swaps the evidence for a fresh assertion of the present — the artifact keeps its
+authoritative name while proving strictly less. **Failure if ignored:** the suite goes
+green, the fixture's header still calls itself a preservation gate, and nothing anywhere
+proves what the change actually altered — so a later *unintended* drift through the same
+shared decision function has nothing left to be caught against. **The rule:** when a
+historical artifact becomes obsolete because the system lawfully changed, do not edit the
+old artifact until it appears to have anticipated the new behaviour. Split the roles into
+separate artifacts, each with exactly one job: preserve the original byte-for-byte as
+evidence and retire its gating authority *in its own consuming test*; put the active gate
+on an explicitly-named unaffected subject; create the new governing baseline separately,
+only once the new behaviour actually exists. No half-retired fixtures, and no artifact
+whose authority varies by row. **Applies elsewhere:** M2's golden-seed FloorPlan baselines,
+M3 recorded net-traces, M4 save-schema round-trip fixtures. Shares a root with "Reordering
+a shared decision's priority invalidates test setups, not just assertions" (the artifact
+that catches such drift must stay honest) and "Never stamp a verdict the human hasn't
+rendered" — an artifact must not claim authority it no longer earns.
+
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
 (no incident produced them) and NOT law yet. Governance ladder — the only path to
