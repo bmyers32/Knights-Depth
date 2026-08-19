@@ -666,6 +666,34 @@ a shared decision's priority invalidates test setups, not just assertions" (the 
 that catches such drift must stay honest) and "Never stamp a verdict the human hasn't
 rendered" — an artifact must not claim authority it no longer earns.
 
+### A different path is not a different decision
+**Incident (P17, Fang approach weave, falsified 2026-08-19):** the playtest finding was
+"enemy approach behavior feels too uniform". The answer shipped was a content-authored
+zig-zag: Fang stopped walking a straight line and started weaving toward the player. It
+worked exactly as designed, was fully tested, and the verdict was still ITERATE — "same
+approach with wobble". **Mechanism:** the weave changed the SHAPE OF THE PATH while leaving
+every quantity the player actually plays against untouched — spacing, timing, threat window,
+and the difficulty of tracking the target with a ranged weapon. Two playtest questions
+failed together (Q2 "does this read as a different family" and Q5 "is it harder to track")
+and they were the same failure wearing two hats: nothing the player *does* changed, so the
+new geometry registered as decoration on the old encounter. The tell was available before
+the build — the design's own notes predicted "closing speed drops ~18%" and predicted
+nothing at all about what the player would have to do differently. **Failure if ignored:**
+you spend a full implement/test/playtest/revert cycle to learn something a single question
+would have surfaced, and worse, the failure reads as "the numbers need tuning" (more
+amplitude! shorter period!) when no value of a parameter fixes a mechanic that was never
+addressing the finding. **The rule:** before building a behavior identity, state the
+sentence "the player must now do X instead of Y". If X and Y are the same, the design
+changes what the enemy LOOKS like, not what it IS, and no amount of tuning will convert one
+into the other. Movement identity lives in the decision it forces — reach, timing, spacing,
+commitment, punish window — never in the curve it traces getting there. **Applies
+elsewhere:** every remaining P17 family identity, P18's idle wander, P19's mass/knockback
+factor, and any future "make X feel more distinct" finding. Corollary earned the same day:
+the falsified mechanic still paid for itself, because the experiment was *disposable by
+construction* — content-authored, default-off, one sim expression, its own test file, and
+its own dated baseline. Design experiments should be built to be deleted; the cost of being
+wrong is exactly the cost of the revert.
+
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
 (no incident produced them) and NOT law yet. Governance ladder — the only path to

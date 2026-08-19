@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **FANG SHIPPED 2026-08-18 / AWAITING PLAYTEST** | Approach weave (content-authored motion path). Ooze/Watcher unstarted; burst lunge deferred; §3 amendment approved but UNAPPLIED |
+| P17 | Per-family engagement identities | **WEAVE FALSIFIED 2026-08-19 / SUCCESSOR RECON DONE** | Approach weave reverted (geometry is not identity). §3 law, guard seam, baseline discipline and the release/straighten requirement preserved; Fang situational-mobility recon filed |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -347,109 +347,128 @@ addition" precedent.
 
 ---
 
-**STATUS 2026-08-18 — FANG SHIPPED (approach weave), AWAITING PLAYTEST.**
-Scope held to Fang alone: Ooze and Watcher are untouched, so the replay can attribute any
-felt difference to one family (the same discipline P29's iteration used for the Watcher).
+**STATUS 2026-08-19 — FANG WEAVE FALSIFIED AND REVERTED. Successor recon below.**
 
-**WHAT SHIPPED — the approach weave.** A square-wave zig-zag applied to the APPROACH
-branch only, authored entirely as content on `FangStats`. Direction alternates ±`degrees`
-off the live straight-to-player heading, flipping every half period, and straightens inside
-a release hinge so the authored beat is "zig-zag rush → straighten → arrive → windup".
-Retreat, in-band hold, windup-freeze and flinch are asserted UNCHANGED.
+**VERDICT: ITERATE — weave hypothesis FALSIFIED, P17 finding REINFORCED.** The original
+playtest finding (enemy approach feels too uniform) still stands; the weave was the wrong
+answer to it, and knowing that is the experiment's return.
 
-| Field | Fang | Meaning |
-|---|---|---|
-| `approach_weave_degrees` | 35.0 | half-amplitude off the straight heading; 0 = off |
-| `approach_weave_period_ticks` | 30 | full zig-zag period; <2 = off (warned) |
-| `approach_weave_release_distance` | 3.0 | inside this, the path straightens |
-| `approach_weave_phase_stride_ticks` | 7 | per-actor phase offset (see deviation below) |
+**RAW ANSWERS (verbatim):** readable but repetitive · same approach with wobble (Q2 FAIL,
+the finding under test) · release hinge PASS · facing acceptable · wand tracking unchanged
+(Q5 FAIL) · opener PASS · Q7 unanswered, carried to the successor design.
 
-ALL FOUR PROVISIONAL/UNVALIDATED, and deliberately OUTSIDE the M1 NUMERIC FENCE — this is
-a new mechanic, not a retune of fenced HP/flinch/output.
+**WHY IT FAILED, stated once so the successor does not repeat it.** Q2 and Q5 failed
+together and they are the same failure: the weave changed the SHAPE OF THE PATH without
+changing the DECISION the player faces. Tracking with `wand_A` was unchanged, spacing was
+unchanged, timing was unchanged — so a wobble is what was left. Geometry is not identity.
 
-**DEVIATION FROM THE APPROVED SCOPE, flagged not buried.** The approval said *three*
-fields; four shipped. `approach_weave_phase_stride_ticks` is the fourth, and it exists
-because the approved §3 amendment makes a deterministic per-actor phase offset a BINDING
-consequence. A binding, feel-affecting number cannot live as a literal in `sim/` under
-Prime Directive 3, so it had to be data. It is the only addition; the weave's *shape* is
-the three approved fields. Sim warns when a weave is authored without it.
+**REVERTED** (a falsified mechanic does not stay in live code merely because it is tested):
+the sim expression and its registration/observability surface, all four `FangStats` fields,
+the inert copies on Ooze/Watcher, the registrar pass-through, `arena.gd`'s debug export, and
+`tests/test_approach_weave.gd`. Verified byte-complete: live behaviour is 294/294 events
+identical to `ai_baseline_pre_p29.json` again.
 
-**Sim surface** (`_decide_single_ai_command` approach branch only): `_approach_direction`,
-`_weave_sign`, `_register_approach_weave`, `debug_describe_approach_weave`, `_ai_weave`.
-Absence of an `_ai_weave` record IS the off state — no flag, no zero-valued rotation
-applied to everyone. Observability: `arena.gd::debug_show_approach_weave` (default off).
-No RNG: the weave is a pure function of (actor_id, tick). Genuine randomness in AI movement
-still arrives first at P18's idle wander, with its own seeded stream (GAME-RULES §1.3).
+**PRESERVED — the experiment's durable yield, none of it dependent on the mechanic:**
+- **GAME-RULES §3 channel-law amendment + §7 row.** A design law is not dependent on its
+  first consumer surviving. Families own BASELINE MOTION PATH (spatial); states own MOTION
+  RHYTHM/COORDINATION (temporal); orthogonal but composable. The BINDING per-actor
+  phase-offset consequence stands and will bind the successor if it is globally phased.
+- **The guard's approved-amendment seam** (`scripts/guard.py --amend`) + its 27 adversarial
+  checks. Governance infrastructure, unrelated to what it was first used to record.
+- **The three-artifact baseline discipline**, including the recorder's inability to
+  overwrite the historical fixture.
+- **THE RELEASE/STRAIGHTEN FINDING (Q3 PASS) — carried forward as a REQUIREMENT, not a
+  suggestion.** The one validated piece: a committed movement must STRAIGHTEN AND SETTLE
+  before the next decision, rather than flowing straight into a windup. Any successor
+  mobility mechanic must end in a settle beat.
 
-**KNOWN COST, accepted:** closing speed scales by cos(degrees) — ~18% slower
-detection-to-band at 35°. That is the mechanic's price, tracked as Q6, never a number to
-compensate for elsewhere.
+**FIXTURE ROLES after the revert (all three files byte-untouched, roles stated in their
+consuming tests):**
+1. `ai_baseline_pre_p29.json` — historical evidence, AND once again an accurate description
+   of Fang's live behaviour. The second is a FACT, not a restored authority: gating stays
+   with the Ooze canary, because re-blessing in reverse is still re-blessing.
+2. `ai_canary_ooze.json` — unchanged, still the ACTIVE gate on the shared locomotion path.
+3. `ai_baseline_p17_fang.json` — retired to EXPERIMENT EVIDENCE, falsified 2026-08-19. Its
+   consuming test documents the verdict and no longer gates; it asserts the evidence still
+   shows the weave, so the verdict above stays backed by something.
 
-**P17 PLAYTEST PACKET (Q1–Q7).** Q6 pre-registered; Q7 verifies the amendment's binding
-consequence alongside its first consumer.
-1. **Q1 — Readability.** At 35° / 30 ticks, does the weave read as an intentional
-   aggressive rush, or as jitter/indecision?
-2. **Q2 — Uniformity (the finding under test).** With Fang weaving and Ooze/Watcher
-   straight, does the encounter read as three families approaching differently, or as one
-   approach with a wobble bolted on?
-3. **Q3 — Arrival/release.** Does the 3.0 release hinge produce a clean
-   "rush → straighten → arrive → windup", or does straightening read as losing interest?
-4. **Q4 — Facing.** `_apply_move` derives facing from movement direction, so a weaving Fang
-   runs visibly crab-wise. Aggressive nonlinearity, or broken animation?
-5. **Q5 — Threat.** Does the weave make Fang meaningfully more *interesting/challenging* to
-   track with `wand_A`, or merely more annoying/random-looking to hit? Fang's HP/flinch sit
-   inside the NUMERIC FENCE: a felt difficulty change here is evidence about the weave and
-   is never permission to move fenced durability.
-6. **Q6 — Opener interaction.** Closure now slows by approximately 18%
-   (detection-to-band ~2.8s → ~3.4s). `engagement_delay_ticks = 10` was banked against the
-   straight-approach behavior. With the new closure behavior, does the opener still read as
-   "noticed, then engaged"? *Pre-registered interpretation:* if **yes**, no action required;
-   if **no**, the tuning lever is **Fang-side content**. **The banked Watcher value does not
-   move as a consequence of this playtest question.** This is an interaction check between
-   changed closure timing and an already-banked opener value — NOT permission to reopen the
-   Watcher decision merely because another system now reaches the interaction later.
-7. **Q7 — Coordination.** With multiple Fangs approaching, do the per-actor phase offsets
-   read as individual predators, or does any moment read as accidental coordination?
+**§3/§7 PROVENANCE (unchanged, retained).** Approved in-conversation 2026-08-18; applied via
+`python scripts/guard.py --amend <manifest> --i-have-explicit-user-approval`; pre `4d4f3471…`
+to post `2956edfb…`; delta confined to two hunks; LF-only/no-BOM/UTF-8 preserved.
 
-**BASELINE RULING — three artifacts, one job each** (BRAIN: "Never rewrite yesterday's
-baseline to describe today"). No half-retired fixtures; no artifact whose authority varies
-by row.
-1. `tests/fixtures/ai_baseline_pre_p29.json` — **byte-for-byte untouched**, retired ENTIRELY
-   to historical evidence. `tests/test_ai_backward_compat.gd` documents the retirement and
-   now asserts only that the evidence survives intact, including that pre-P29 Fang's
-   approach window was straight — the "before" half of proving what changed.
-   `tools/record_ai_baseline.gd` is marked DO-NOT-RUN.
-2. `tests/fixtures/ai_canary_ooze.json` — the **active gate** on the shared
-   locomotion/decision path, carried by an explicitly unaffected family. No additive-key
-   allow-list. `tests/test_ai_canary_ooze.gd` also asserts Ooze authors no weave, so the
-   canary's own premise cannot silently lapse.
-3. `tests/fixtures/ai_baseline_p17_fang.json` — the new governing Fang baseline, recorded
-   only AFTER the approved behaviour existed, and asserted to contain a genuinely woven
-   path (real lateral displacement + centre crossings) so it can never "pass" a dead weave.
-Both live artifacts come from `tests/helpers/family_locomotion_scenario.gd` via
-`tools/record_family_locomotion.gd`, which deliberately cannot write artifact 1.
+---
 
-**GAME-RULES §3 / §7 PROVENANCE — RESOLVED. The law landed first, in its own commit,
-before this consumer existed.**
+## P17 SUCCESSOR RECON — FANG SITUATIONAL MOBILITY (recon only, nothing implemented)
 
-| | |
-|---|---|
-| **Approved text** | Revised channel-law wording (families own BASELINE MOTION PATH / spatial; states own MOTION RHYTHM/COORDINATION / temporal; ORTHOGONAL BUT COMPOSABLE; "never merge" explicitly rejected as false to legitimate composition; deterministic per-actor phase offset BINDING) + the accepted PHASE NORMALIZATION ruling, plus the matching §7 Change Log row. |
-| **Approval** | Breon, in-conversation 2026-08-18: "P17 PACKAGE APPROVED TO CROSS THE §3 MUTATION BOUNDARY, with amendments." Cited verbatim in the manifest's `approval` field, which the seam refuses to run without. |
-| **Path/tool** | `python scripts/guard.py --amend <manifest> --i-have-explicit-user-approval`. NOT an ordinary edit: the PreToolUse guard still hard-blocks Edit/Write on GAME-RULES.md, unchanged. Two earlier attempts were refused (`Edit` by the guard; an ad-hoc Bash splice by the sandbox) — which is why the seam exists at all. |
-| **Transformation** | None. Pre-edit `sha256 4d4f3471…` matched the manifest exactly (fail-closed), post-edit `sha256 2956edfb…`. File stays LF-only, no BOM, valid UTF-8; `→` 29→29 and `×` 5→5 unchanged, `§` 36→37 and `—` 27→32 accounted for entirely by the new text. `git diff --numstat` = 14 added / 2 removed across exactly two hunks (the channel-law block and the §7 row). |
+Target shape: pursue → retreat/denial condition → **scurry commitment** → fast authored
+displacement → settle/straighten → fresh decision → bite windup if appropriate.
+FENCES: Fang-specific · no generic movement or retreat-detection framework · no Fang
+HP/damage/flinch tuning · no Ooze/Watcher changes.
 
-The seam itself is narrow and adversarially tested (`scripts/test_guard_amendment.py`,
-27 checks): normal writes stay blocked, amendment mode needs an explicit second flag, only
-a pre-declared exact payload applies, it fails closed on both the pre-edit hash and the
-verbatim old text, it refuses no-ops and non-law targets, and any post-write verification
-failure ROLLS BACK rather than leaving domain law half-amended.
+**1. MOBILITY-VS-ATTACK — YES, representable, and the precedent already exists.**
+`_bump_slides` (P16 shield bump) is already exactly "a short authoritative multi-tick
+displacement that is neither ordinary locomotion nor an attack", and it does **not** touch
+`_melee_hold`: its own dict, its own `_advance_bump_slides()` tick phase running *before*
+`_decide_ai_commands`, clamping through the shared `_find_earliest_lunge_contact`, and
+suppressing the actor's own `move` Command for its duration. Blocked = the slide ends, never
+chases. Its progress is counted in STEPS rather than compared against an end tick — a
+deliberate anti-off-by-one lesson worth inheriting verbatim.
+- Currently player-side only (shield bump), but the machinery is allegiance-agnostic.
+- **FORK (rule of two):** bump is consumer #1; a scurry is #2, which is exactly §1.4's
+  threshold. Copy the shape a second time (fences-compliant; §1.4 literally says copy twice
+  before abstracting) **vs.** extract a shared authored-displacement concept now.
+  Surfaced, not decided.
 
-**FOLLOW-ONS.** Burst lunge (movement and attack as ONE authored beat) stays DEFERRED
-pending weave evidence; it needs enemy actions to reach the executing-record path
-(`_advance_melee_execution_tick`), which touches flinch, cancellation and the shared
-cooldown at once — a cost worth paying only with playtest evidence behind it. Ooze and
-Watcher path identities remain unstarted.
+**2. RETREAT SIGNAL — the sim retains NO movement history. The absence IS the finding.**
+Per-actor movement state is exactly `entities` (current position), `_move_speeds` (a
+constant), and `_facings` (last movement DIRECTION, normalized). There is no previous
+position, no velocity, and no history buffer anywhere. `_facings` is the only residue of
+motion and it is unusable as a movement signal: magnitude-free, and *also written by attacks*
+(`_apply_attack` sets it on any accepted attack). Forks, in ascending cost:
+- **(c) failed-closure window** — needs NO new state class: it is P29's existing pattern.
+- **(b) distance increasing N ticks while pursuing** — one remembered distance + one
+  counter. A *relation*, not a velocity.
+- **(a) away-projected player velocity** — requires genuinely new retained per-actor state
+  that every other system must then maintain honestly. Most expensive, most general.
+**P29 TRANSFER: yes, structurally, and it is the strongest lead.** `_refresh_close_proximity`
+stores an honest timestamp of a world FACT, refreshed before every decision branch, never
+stamped once and never skipped for what the actor happens to be doing; the episode is then
+DERIVED from two timestamps rather than stored as a flag that can desync. "Player retreating
+while I pursue" is the sibling fact of "unable to close" and takes the same shape.
+- **FENCE COLLISION TO SURFACE:** P29's naming fence says `requires_close_frustration` /
+  `close_frustration_ticks` stay deliberately narrow and generalise to a context framework
+  **only** when a second real consumer exists. A retreat-triggered scurry would BE that
+  second consumer. This is the moment that fence gets tested — flagged, not decided.
+
+**3. TARGETING FORK (surfaced, not decided).**
+- **Current position** — what the AI already uses; zero new machinery.
+- **Projected position** — needs player velocity, i.e. fork 2(a)'s new retained state.
+- **Positional relation ("get in front")** — needs a committed DESTINATION. Note the §3
+  interaction: aim is sampled at the FIRE TICK precisely so a windup cannot commit to a
+  stale target position. A destination committed at scurry start is the same class of thing.
+  Precedent cuts both ways: bump already commits a direction at commit time and never
+  re-evaluates — but bump lasts a few ticks, and a scurry would last longer, which is
+  exactly the span over which "committed" becomes "stale".
+
+**4. CANCELLATION / FLINCH / RECOVERY — currently UNSPECIFIED, and load-bearing here.**
+`_advance_bump_slides()` runs in its own phase and is **not** gated by `_flinched_until_tick`
+— the flinch early-return lives in `_decide_single_ai_command`, which suppresses *Commands*
+only. So a scurry built on the bump shape would **continue through a flinch** unless
+explicitly cancelled. There is no cancellation path for a slide today; bump never needed one
+at 1–3 ticks (it is cleared with reaction state, nothing more). A longer commitment makes
+these real decisions: does a flinch abort the scurry, freeze it, or let it finish? Does an
+aborted scurry consume its trigger episode (P29 ruled consumption-at-commitment for the
+survey — a direct precedent)? What arms the cooldown on an aborted one?
+
+**5. NARROWEST CONTENT SHAPE (candidate, Fang-only).** Displacement per step + step count
+(inherit bump's counter, not an end tick) · settle/recovery ticks · one trigger parameter
+matching whichever fork in 2 is chosen · a cooldown so it cannot chain. The carried Q3
+requirement lands here: the settle beat is **not** optional trim — it is the part that
+playtested PASS, and it must exist before the fresh decision.
+
+**OPEN FROM THE PREVIOUS EXPERIMENT:** Q7 (multiple Fangs — individual predators, or
+accidental coordination?) is unanswered and carries to the successor, along with §3's
+binding per-actor phase-offset consequence if the successor is globally phased.
 
 ### P18 — Idle wander + return-to-post + room territory
 **Idea:** Three related post-disengage behaviors, captured together since they all
