@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **CUTOFF DESIGN RECORD / NOT IMPLEMENTED** | Weave and scurry both falsified and reverted. Detector falsified by autopsy; rapid-closure response SUPERSEDED/UNPROVEN, dormant fallback at `9691931`. Approved successor: observed-route fact + two-segment cutoff. No code |
+| P17 | Per-family engagement identities | **CUTOFF PRE-CODE SPEC / NOT IMPLEMENTED** | Weave and scurry both falsified and reverted. Approved successor spec: two-bucket recent-locomotion fact + two-segment clearance cutoff, θ/G deleted by the representation. No code |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -578,172 +578,207 @@ knobs and no dormant runtime seams left behind merely because they were tested.
 
 ---
 
-## P17 SUCCESSOR RECON — FANG CUTOFF / INTERCEPT
-**APPROVED DESIGN RECORD · NOT IMPLEMENTED · no code exists.**
+## P17 SUCCESSOR — FANG CUTOFF · **PRE-CODE SPECIFICATION**
+**APPROVED · NOT IMPLEMENTED · no code exists.** Committed before implementation so the design
+is a fixed target the code is measured against, not a description written afterwards to match
+whatever got built (the discipline that made the scurry verdict legible).
 
-**NEW PLAYER-DECISION TARGET.** Before: *"I can maintain my current route while firing and
-Fang simply follows."* After: *"If I maintain a predictable route while firing, Fang threatens
-the space ahead strongly enough that I sometimes redirect before it arrives."*
+**PLAYER-DECISION TARGET.** Before: *"I can maintain my current route while firing and Fang
+simply follows."* After: *"If I maintain a predictable route while firing, Fang threatens the
+space ahead strongly enough that I sometimes redirect before it arrives."*
 
-### 1. THE OBSERVED-ROUTE FACT
-**ONE sim-owned fact, keyed by the OBSERVED actor — never one copy per Fang.**
+### 1. THE TWO-BUCKET RECENT-LOCOMOTION FACT
+Named deliberately: it is a **two-bucket recent-locomotion fact**, NOT a motion/velocity system.
+One sim-owned fact keyed by the OBSERVED actor — never one copy per Fang.
 
-**PRECEDENT — this is the sim's first OBSERVED-ACTOR fact.** Every AI record to date is
-OBSERVER-INTERNAL: `_ai_last_in_close_band`, `_ai_last_survey_commit`, `_ai_state`,
-`_ai_spawn_position` and the late `_ai_closest_approach` are all keyed by the observer and
-describe the observer's OWN experience. This one describes the OBSERVED actor and multiple
-observers read it. Where it lives sets the pattern for how one actor's knowledge of another is
-represented, and **the second observed-actor fact will cite this decision.** Inspect and name
-it; do NOT globalize it into a perception/knowledge system.
+```
+_route[actor_id] = { previous_vector, current_vector, current_bucket }
 
-**TERMINOLOGY, RULED — it is a LOCOMOTION ROUTE, not world-space motion:**
+normalize(actor):                          # called on WRITE and on READ
+    b = floor(tick_count / N)
+    d = b - current_bucket
+    if   d == 0: unchanged
+    elif d == 1: previous_vector = current_vector ; current_vector = ZERO
+    else:        previous_vector = ZERO           ; current_vector = ZERO
+    current_bucket = b
 
-> **"The observed-route fact describes sustained ordinary locomotion intent, not every
-> displacement applied to the body."**
+write (accepted locomotion delta):  normalize ; current_vector += delta
+read:                               normalize ; recent_route = previous + current
+```
 
-Attack-authored movement (the melee lunge), bump/forced displacement, knockback and any future
-imposed motion must NEVER silently become route intent. The fact is established from **accepted
-Move Commands plus authoritative positions**. It is still one truth shared by all observers.
+`recent_route` therefore always covers between **N and 2N ticks** of ordinary locomotion.
 
-**`_facings` is unusable as an input** — `_apply_attack` writes it on any accepted attack, so
-it is contaminated by aim. (Found during recon; it would have looked correct and misbehaved
-only while attacking.)
+**WHY NORMALIZATION MUST RUN ON READ AS WELL AS WRITE — the corrected defect.** An earlier
+draft rolled buckets only from `_apply_move`. A stopped actor issues no locomotion writes, so
+its buckets would never roll and stale route evidence would survive indefinitely — while the
+design claimed it aged out within 2N. Bucketing on `floor(tick / N)` and normalizing at both
+ends makes ageing a function of AUTHORITATIVE TIME rather than of write activity.
+Lazy normalization during a read has repo precedent: `_pressure_sum` prunes expired
+contributions as it reads, for the same reason (no per-tick scan anywhere).
 
-**Consequence that falls straight out of ownership — the single biggest correction over v1:**
-Fang's own attack/flinch/leash lifecycle must NEVER erase the player's route history. v1's fact
-was observer-internal, so its boundaries 2 and 4 cleared it on the Fang's own events — coherent
-for "my pursuit attempt", incoherent for "where the player is going".
+**REVIEW LESSON, RECORDED.** *When a representation change deletes rules, each dead rule's job
+description becomes an audit item against the survivor.* θ's absorption was verified (a turn
+cancels inside the window); **G's was asserted but not verified — and G's job, "the actor who
+stops writing", was exactly where the maintenance defect lived.** Deletion cascades are
+trustworthy only after every absorbed job is traced to its structural replacement.
+*(BRAIN candidate; not yet promoted.)*
 
-Everything a consumer needs is DERIVED, nothing else stored — no `is_retreating`, no
-`is_travelling`:
-`travel_vector` = current position − anchor position · `travel_direction` = its normalization,
-meaningful only above the noise floor · `travel_age` = tick_count − anchor tick.
+**Excluded by construction:** bump, knockback and attack-authored lunge write `entities[]`
+directly and never pass through the locomotion write path, so they can never enter the fact.
+`_facings` is unusable as an input — `_apply_attack` writes it on any accepted attack.
 
-**ANTI-SAWTOOTH, stated because v1 died of its sibling:** deliberately NO fixed-window
-re-anchor. A rolling window zeroes travel distance periodically — structurally the same defect
-as v1's resetting minimum in a new costume. The anchor persists while the actor keeps going the
-same way, so a long straight run reads as MORE committed, not less. Eligibility tests a
-threshold, never magnitude, so unbounded growth is harmless.
+**Ownership consequence, the correction over v1:** Fang's own attack/flinch/leash lifecycle
+must NEVER touch the player's route fact. v1's was observer-internal and cleared on the Fang's
+own events — coherent for "my pursuit attempt", incoherent for "where the player is going".
 
-**Lifetime rules (exact semantics due in the next return):** STOP — grace of `G` ticks without
-an accepted Move Command, then re-anchor · TURN/REVERSAL — intent diverging from the anchored
-direction by more than `θ` re-anchors; a reversal is just a large turn and needs no special
-case · DEATH/DESPAWN — erased with the actor, never a ledger outliving the body · INSUFFICIENT
-DISPLACEMENT — the fact persists and simply yields no direction; it must NOT re-anchor for
-being below the floor, or the anchor chases the actor and never accumulates.
+**θ and G are REMOVED.** Finite history handles turns and stops structurally: a turn partially
+cancels inside the window and reads short; a stop stops contributing and empties within 2N.
+The three-state apparatus collapses to two — a valid recent route, or not — and `broken_tick`,
+`last_move_tick` and any recency threshold disappear with it. **N inherits the sentence-test
+seat** (*"changing N changes what the sim says recent travel IS"*) and is the SINGLE
+world-level parameter.
 
-### 2. θ / G OWNERSHIP TEST
-Every proposed world-level parameter must first pass:
+Bucket boundaries are globally tick-aligned, **deliberately not per-actor** — per-actor phase
+would smuggle in the de-correlation that the tie-break ruling already refused.
 
-> **"Does changing this change what the sim says the player's route IS, or only what Fang is
-> willing to react to?"**
+### 2. HORIZON vs TRUST THRESHOLD — different jobs, never conflate
+- `route_window_ticks` (N) governs **how much recent history shapes the derived direction**.
+  At N=15 that is a 0.5–1.0 s horizon under continuous travel.
+- `cutoff_min_route_distance` governs **how much coherent travel the consumer requires before
+  trusting that direction**. At 1.2 units and Envoy speed 4.0 that is reached in ~0.3 s.
 
-Only the former may belong to the shared observed-route fact. Consumer interpretation — minimum
-route distance, minimum age — stays on Fang content (P29's naming-fence precedent). The stored
-anchor stays raw and untuned. No generic velocity/history framework.
+These are recorded at BOTH definition sites. Future tuning must not treat one as a proxy for
+the other.
 
-### 3. CUTOFF ELIGIBILITY
-Derived only: Fang in ordinary pursuit/context · a valid sustained travel direction ·
-consumer-authored minimum route distance/age · cooldown and action availability. **No stored
-`is_retreating`.**
+**KNOWN BOUNDARY, flagged for observation not pre-solved:** magnitude halves at each rollover
+(2N-worth → N-worth). At full speed that is 4.0 → 2.0 units, comfortably above 1.2. Sustained
+travel below ~60% of full speed sits near the threshold and can flicker eligibility across a
+rollover. If play reports "sometimes it just doesn't react", this is the first suspect.
 
-**Circling/tangential travel MUST remain visible to this signal.** A tangential route has a
-sustained direction at constant radius — exactly what v1's radial detector was structurally
-blind to, and exactly where "get in front" means most.
+### 3. ELIGIBILITY
+Derived only, no stored flag: Fang in ordinary pursuit · `recent_route.length() >=
+cutoff_min_route_distance` · cooldown and action availability.
+`travel_direction = recent_route.normalized()`.
+
+Circling/tangential travel MUST remain visible — a tangential route has a sustained recent
+direction at constant radius, exactly what v1's radial detector was structurally blind to.
 
 ### 4. MOBILITY DESTINATION AND THE §3 LAYER SPLIT
-`lead_point = player_position + sustained_travel_direction * authored_lead_distance`, committed
-at mobility commitment. It is **MOBILITY state, not attack aim.**
+`lead_point = player_position + travel_direction * cutoff_lead_distance`, committed at mobility
+commitment. **MOBILITY state, not attack aim.**
 
-Verified against the law text rather than assumed: §3 rules that *"Selection commits at windup
-start and is never re-evaluated during that windup. Aim is sampled at the fire tick, not at
-action commitment."* That governs action selection and ATTACK aim, so a committed mobility
-DESTINATION does not collide with it. After cutoff ends: fresh ordinary AI decision · Bite
-remains independent · Bite continues to obey existing selection and fire-time aim law · **no
-Bite target is carried through cutoff.** Concretely, the mobility action must not
-`set_equipped_weapon` and must not touch `_ai_attack_fire_tick`.
+Verified against the law text: §3 rules that *"Selection commits at windup start and is never
+re-evaluated during that windup. Aim is sampled at the fire tick, not at action commitment."*
+That governs action selection and ATTACK aim, so a committed mobility DESTINATION does not
+collide with it. After cutoff ends: fresh ordinary AI decision · Bite independent · Bite obeys
+existing selection and fire-time aim law · **no Bite target carried through cutoff.** The
+mobility action must not `set_equipped_weapon` and must not touch `_ai_attack_fire_tick`.
 
-### 5. TWO-SEGMENT GEOMETRY (approved shape for the next experiment)
-**Segment 1** — lateral/outside movement relative to the PLAYER'S TRAVEL DIRECTION (not the
-Fang→player line): the read is "getting off your tail and onto a flanking line".
+`cutoff_lead_distance` is an authored constant, NOT a solved intercept — it overshoots when
+Fang is close and undershoots when far. That is the accepted cost of the no-intercept-equations
+fence, stated rather than discovered later.
+
+### 5. TWO-SEGMENT GEOMETRY
+**Segment 1 — CLEARANCE (banked, mechanical).** Directly behind a fleeing player, a straight
+path toward the lead point intersects the player's contact corridor and can terminate on their
+back. The lateral leg must establish a usable outside line before segment 2 runs. Readability
+is a consequence, not the purpose — clearance sets the distance (contact is 0.4 + 0.9 = 1.3, so
+2.0 clears with margin).
+
 **Segment 2** — straight movement toward the committed lead point.
 
-Side and destination commit ONCE and are never re-evaluated. No homing. **No smoothing of the
+**SIDE.** Outside the tie, geometry decides: `side = sign(cross(travel_direction,
+fang_position - player_position).y)` — the side Fang is already on, which is the shorter route
+and never crosses the player's line. Lateral direction is `travel_direction` rotated 90° by
+`side`. **Degenerate case explicitly detected:** `abs(cross(...)) < ε`, ε a stated NAMED
+constant, never float noise → **canonical `side = +1`.** No actor parity.
+*Doctrine: determinism requires a tie-break; it does not require de-correlation.* Parity is
+recorded as a candidate de-correlation solution, adoptable only on Q7 observational evidence.
+
+Side and lead point commit ONCE and are never re-evaluated. No homing. **No smoothing of the
 corner before play** — if the behavior works and the corner reads mechanical, smoothing becomes
 an earned presentation refinement.
 
-**SIDE CHOICE.** Outside the tie, geometry decides: the side Fang is already on —
-`sign(cross(travel_direction, fang_position − player_position).y)` — which is the shorter route
-to the lead point and the off-the-tail side, and never crosses the player's line (crossing
-would read absurdly and be trivially dodged).
+### 6. BLOCKAGE — distinct from flinch abort
+- **Segment 1 blocked → the whole cutoff ENDS.** The clearance objective failed; continuing
+  would run segment 2 into the player's body and clamp on their back.
+- **Segment 2 blocked → displacement ends, the PLANT IS STILL OWED**, cooldown arms.
+- Termination vocabulary stays distinct from FLINCH ABORT vocabulary if events are authored.
 
-**DEGENERATE CASE, explicitly detected:** `abs(cross(travel_direction, fang_offset)) < ε`, with
-`ε` a stated NAMED constant, never an accident of float noise. **At the tie: canonical
-`side = +1`.** Two identical sims choose identically by construction.
+### 7. FACING AND THE PLANT — option B
+Cutoff displacement writes facing consistently with its movement direction. The plant
+introduces **no new stationary-facing capability and no third `_facings` writer.**
 
-> **Doctrine: determinism requires a tie-break; it does not require de-correlation.**
+Intentional consequence: if the player redirects and beats the cutoff, Fang may plant facing
+the abandoned committed destination — which communicates that the mobility was committed.
+Option A (a narrow authoritative facing-write while stationary) remains a FALLBACK ONLY, built
+if play proves the plant needs an explicit face-player action.
 
-**Actor-parity fan-out is RECORDED as a candidate de-correlation solution**, adoptable only
-after Q7 observation supplies evidence.
+Banked requirement, unchanged: **special mobility must transition readably into the next
+ordinary attack decision.** Bite is never guaranteed after cutoff.
 
-**ADVISORY CONCESSION ON RECORD:** the parity rule was endorsed in recon as a "free" answer to
-Q7. It was not free — it would have silently pre-solved the deferred multi-Fang coordination
-question by fanning symmetric Fangs to opposite sides, embedding pack behavior before any
-observation justified it. **There are no free design decisions, only unexamined ones.** Same
-failure shape as the phantom "parry on arrival" that entered the scurry criterion unexamined.
-
-### 6. PLANT / ORIENT — CAPABILITY UNRESOLVED, THREE FORKS COSTED
-**Finding:** a stationary orient beat cannot currently do what its name promises. `_facings` is
-written at exactly two sites — `_apply_move` (movement) and `_apply_attack` (aim). Authored
-displacement (the bump slide, and any cutoff built on its shape) writes `entities[]` directly
-and never touches facing at all. **Do not implement an invisible "orient" that merely stands
-still.**
-
-| Fork | Cost | Observable |
-|---|---|---|
-| **A. Narrow authoritative facing-write while stationary** | A third `_facings` writer, so the invariant "facing derives from movement or aim" gains a named exception. Smallest form: ONE write at plant start (`normalize(player − fang)`), never continuous — continuous tracking would be homing-by-facing and would read as re-aiming during a committed beat. No new state beyond the plant record; presentation already reads facing, so it renders for free. Risk: sets the precedent for sim writing facing outside movement/attack — must stay scoped and named or it becomes a general orientation system. | A visible turn toward the player at the moment of arrival |
-| **B. Final displacement establishes facing; plant does not turn** | Also a new write site, but "facing follows movement" is consistent with `_apply_move`'s existing rule — a much smaller conceptual step. | **Fang faces the LEAD POINT, not the player's current position**, weakening the "cut you off and turned toward you" read; by arrival the player has usually moved off the lead point |
-| **C. Drop explicit orient; keep only a short no-attack plant** | Zero implementation cost. | **None — this is the falsified invisible settle, renamed.** |
-
-**Advisory argument riding with the fork (not a ruling):** two experiments produced a weak
-settle signal — Q5 *"didn't really get to feel it"*, and the weave's Q3 PASS was about
-STRAIGHTENING, a direction change, not a pause. That evidence says **stillness communicates
-nothing**, which makes the facing change the only candidate observable a plant has.
-
-**No ruling yet.** Do not build generic orientation/facing machinery merely to satisfy the word
-"orient". The only banked requirement remains: **special mobility must transition readably into
-the next ordinary attack decision.** Bite is never guaranteed after cutoff.
-
-### 7. AGENCY / EXTRACTION — UNCHANGED
+### 8. AGENCY / INTERRUPTION / EXTRACTION
 P16 imposed bump COMPLETES through flinch (pinned at `77e23c0`). Fang self-propelled cutoff
 ABORTS on successful flinch: remainder forfeited, never freeze-and-resume, fresh decision after
 ordinary recovery.
 
-Cutoff would again be consumer #2. Rule-of-two deliberately evaluated: **NO EXTRACTION** for
-the experiment. Revisit only after a second consumer survives and establishes shared laws, or
-duplication causes demonstrable drift.
+Cutoff is consumer #2 for authored displacement. Rule-of-two deliberately evaluated:
+**NO EXTRACTION.** Revisit only after a second consumer survives and establishes shared laws,
+or duplication causes demonstrable drift.
 
-### 8. SUCCESS / FALSIFICATION CRITERION — UNCHANGED
+### 9. PROVISIONAL NUMERIC PACKAGE (all PROVISIONAL/UNVALIDATED, outside the M1 numeric fence)
+
+| Field | Level | Value | Reasoning |
+|---|---|---|---|
+| `route_window_ticks` (N) | **world** | 15 | 0.5–1.0 s recent-history horizon; chord lags true tangent 14°–29° at radius 4. Governs what recent travel IS |
+| `cutoff_min_route_distance` | Fang | 1.2 | ~0.5 s of net travel at speed 4.0 is 2.0 units; 1.2 sits at 60% of the minimum-horizon maximum so eligibility does not flicker at rollover. Governs how much coherent travel Fang TRUSTS |
+| `cutoff_lead_distance` | Fang | 2.5 | ≈ player travel while Fang covers a typical 4-unit engagement at 9.0 u/s |
+| `cutoff_lateral_distance` | Fang | 2.0 | Clearance: exceeds the 1.3 contact distance with margin |
+| `cutoff_step_distance` | Fang | 0.30 | 9.0 u/s, 3× ordinary pursuit — carried from scurry, which was never the falsified part |
+| `cutoff_max_steps` | Fang | 30 | Bounds total commitment at 1.0 s; segment 2's length is geometry-dependent |
+| `cutoff_plant_ticks` | Fang | 12 | 0.4 s — matches the bite windup, a tell length the player already reads |
+| `cutoff_cooldown_ticks` | Fang | 120 | 4.0 s from displacement end |
+
+Note the earlier 2.0 rationale is **corrected**: it corresponds to ~0.5 s of net travel at
+player speed 4.0 and is large relative to close-combat spatial scale. It must NOT be equated
+with Fang's 1.65 engagement radius — a distance the player travels and a radius Fang holds are
+different quantities that merely share units.
+
+### 10. STANDING TESTS
+**Recent-route fact:** straight travel stays valid · diagonal travel stays valid · **sustained
+circling stays valid long-term and tracks recent tangential travel rather than historical
+displacement** (the test that killed the unbounded accumulator) · gradual multi-step turns age
+into the new route with no single tick exceeding any threshold · jitter never establishes a
+strong route · **bump, knockback and melee-lunge displacement never enter the fact** ·
+validity does not flicker at bucket rollover (full-speed travel) · **establish a valid route,
+then stop with zero Move Commands for >2N, and a later READ returns no valid route** (the
+corrected lifecycle) · stop for >2N then resume in a new direction shows no stale-direction
+contamination · identical runs agree.
+
+**Geometry and lifecycle:** side chosen by geometry outside the tie, canonical `+1` at the ε
+tie, two identical sims agree · side and lead point committed once, unchanged under a
+teleporting player · segment 1 blocked ends the whole cutoff · segment 2 blocked still owes the
+plant · flinch during displacement aborts with the remainder forfeited and no freeze/resume ·
+flinch during plant is NOT an abort · Fang's bite/flinch/leash never touch the route fact ·
+determinism across identical runs.
+
+### 11. SUCCESS / FALSIFICATION CRITERION
 **BEFORE:** *"I can maintain my current route while firing and Fang simply follows."*
 **AFTER:** *"If I maintain a predictable route while firing, Fang threatens the space ahead
 strongly enough that I sometimes redirect before it arrives."*
 
-Critical observable: **Breon voluntarily redirects because the incoming cutoff is readable and
-threatens the route ahead.** Unchanged routing = FALSIFIED. Also falsified if the movement
-merely looks more dynamic, if Fang reaches the lead point without influencing route choice, if
-the redirect happens only after collision/contact, or if it reads as random diagonal movement
-rather than anticipatable cutoff.
-
-### NEXT RETURN MUST COST
-Exact observed-route sampling/lifetime semantics · θ/G ownership against the §2 test ·
-two-segment distances and state · the plant/orient facing-write fork · the provisional numeric
-package.
+Critical observable: **the player VOLUNTARILY CHANGES ROUTE in response to anticipated cutoff
+pressure.** Unchanged routing = FALSIFIED. Also falsified if the movement merely looks more
+dynamic, if Fang reaches the lead point without influencing route choice, if the redirect
+happens only after collision/contact, or if it reads as random diagonal movement rather than
+anticipatable cutoff.
 
 ### FENCES
-No pathfinding framework · no steering framework · no generalized velocity system · no
-Ooze/Watcher changes · no damaging tackle · no v1 scurry salvage or tuning · no multi-Fang
-coordination solution before observation · Bite remains a separate attack decision · the human
-fun verdict remains Breon's authority.
+No pathfinding framework · no steering framework · no generalized velocity/motion system (this
+is a two-bucket recent-locomotion fact, and the name is load-bearing) · no Ooze/Watcher changes
+· no damaging tackle · no v1 scurry salvage or tuning · no multi-Fang coordination before
+observation · Bite remains a separate attack decision · the human fun verdict remains Breon's
+authority.
 
 ### P18 — Idle wander + return-to-post + room territory
 **Idea:** Three related post-disengage behaviors, captured together since they all
