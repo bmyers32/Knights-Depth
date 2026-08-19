@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **WEAVE FALSIFIED 2026-08-19 / SUCCESSOR RECON DONE** | Approach weave reverted (geometry is not identity). §3 law, guard seam, baseline discipline and the release/straighten requirement preserved; Fang situational-mobility recon filed |
+| P17 | Per-family engagement identities | **SCURRY PROPOSED / NOT IMPLEMENTED** | Weave falsified and reverted 2026-08-19 (geometry is not identity). Successor filed: Fang scurry — retreat-triggered committed closure, six content fields, pre-registered falsification criterion. Awaiting approval |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -469,6 +469,124 @@ playtested PASS, and it must exist before the fresh decision.
 **OPEN FROM THE PREVIOUS EXPERIMENT:** Q7 (multiple Fangs — individual predators, or
 accidental coordination?) is unanswered and carries to the successor, along with §3's
 binding per-actor phase-offset consequence if the successor is globally phased.
+
+---
+
+## P17 SUCCESSOR — FANG SCURRY · **PROPOSED / NOT IMPLEMENTED** (filed 2026-08-19)
+
+Status: awaiting approval. No code exists. Three amendments folded in (closest-approach
+lifetime · counterplay correction · two flinch regimes); direction, field count and Q7
+ratified.
+
+### The decision change (stated first, per BRAIN "A different path is not a different decision")
+- **Y — today:** the Envoy moves at 4.0, Fang at 3.0. The player outruns it by 1.0 u/s
+  permanently, so retreating while shooting is free and never answered. That gap is the
+  whole reason the encounter reads uniform.
+- **X — proposed:** sustained retreat may provoke a committed rapid closure the player must
+  answer — by leaving the committed line, by disrupting the Fang with available control, or
+  by exploiting the mandatory settle after the movement ends.
+
+**PRE-REGISTERED FALSIFICATION CRITERION (corrected):** *"Sustained retreat may provoke a
+committed rapid closure. The player can leave the committed line, disrupt the Fang with
+available control, or exploit the mandatory settle after the movement ends. Falsified if
+optimal player behavior is unchanged."*
+
+**ADVISORY CONCESSION ON RECORD.** An earlier draft listed "meet it with shield/parry on
+arrival" as counterplay. Scurry v1 is MOBILITY ONLY — no damaging arrival event exists, so
+nothing crosses the shield gate and no parry is reachable. The phantom counterplay entered
+the falsification criterion unexamined, and its danger was specific: a mechanic measured
+against a description mentioning parry is under quiet pressure to grow a damaging tackle in
+order to satisfy its own success criterion. Removed before it could steer the design.
+
+### Retreat signal — one honest fact, derived signal, no episode concept
+```
+_ai_closest_approach[actor_id] = {distance, tick}   # best gap of the CURRENT pursuit attempt
+separation = current_distance - closest.distance
+elapsed    = tick_count - closest.tick
+```
+Trigger requires BOTH `separation >= scurry_trigger_separation` AND
+`elapsed >= scurry_trigger_ticks`, evaluated only in the pursue branch, only off cooldown.
+Separation alone fires on a sidestep; elapsed alone is failed-closure (P29's territory, not
+retreat). No episode-consumption concept: a completed scurry writes a new minimum, which
+zeroes `separation` on its own. The cooldown is a RATE LIMIT, never an episode.
+
+Does NOT cross P29's naming fence: no shared context framework, no generalisation of
+`requires_close_frustration`. Same shape, separate implementation.
+
+### THE LIFETIME RULE (amendment 1)
+The record describes **the current continuous ordinary pursuit attempt**. It is
+REINITIALIZED to `{current_distance, tick_count}` on the first ordinary-pursuit tick after
+acquisition or after any completed combat commitment, and CLEARED whenever such a commitment
+begins. An honest fact with an undefined lifetime is a dishonest fact.
+
+| Boundary case | Ruling |
+|---|---|
+| Reaching close range | **Persists and keeps refreshing.** Arriving is pursuit succeeding, not ending — and this is the case that makes the mechanic work ("I had you, then you ran"). |
+| Committing Bite | **Cleared at windup commit.** A committed attack ends the pursuit attempt. |
+| Finishing Bite | **Reinitialized** on the first tick ordinary pursuit resumes. This is the anti-hair-trigger rule: without it, the bite's own duration has already satisfied `elapsed`, and a stale close-range minimum fires a scurry on the first tick of recovery. |
+| Being flinched | **Cleared at flinch onset; reinitialized when pursuit resumes.** Distance the player gained while the Fang had no agency is not separation the Fang's pursuit lost. |
+| Completing a scurry | **Reinitialized when ordinary pursuit resumes after settle** (or after flinch recovery, if aborted). With the cooldown, this is what makes chaining structurally impossible rather than merely rate-limited. |
+| Leash/disengage then reacquisition | **Cleared on disengage; initialized fresh at the first ordinary-pursuit tick after reacquisition.** Hooks on `_acquire_aggro`, the single acquisition seam P29 built for exactly this class of "when an enemy engages" logic. |
+| Holding in range without attacking | **Persists and refreshes.** Holding is pursuit that has arrived, not a separate cycle; the gap genuinely is that small. |
+
+**PINNED BY TEST:** a stationary player at long range never becomes "retreating" through
+elapsed time alone. It holds structurally, not by tuning — while Fang approaches a stationary
+player its distance only decreases, so the minimum refreshes every tick and BOTH `separation`
+and `elapsed` stay at zero.
+
+**Known bounded impurity, declared not hidden:** the minimum refreshes in the retreat branch
+too (keeping it a world fact refreshed before every branch, per P29's lesson), so Fang's own
+backing-away contributes at most `preferred - minimum` = 0.30 units of self-inflicted
+"separation" — two orders below any sane trigger value. Recorded so it is never rediscovered
+as a bug.
+
+### Lifecycle
+| Beat | Behavior |
+|---|---|
+| Trigger | pursue branch only, off cooldown, both conditions met |
+| Commit | direction = unit vector to the player's CURRENT position, captured once; `scurry_committed` Event |
+| Displace | N steps, contact-clamped via `_find_earliest_lunge_contact`, own locomotion suppressed; blocked = displacement ends |
+| (end of displacement) | **cooldown arms here, in every path** — completion, blockage, or abort |
+| Settle | stationary, cannot start an attack; runs even if displacement was blocked early. The banked Q3 requirement and the punish window |
+| Decide | ordinary AI decision resumes; `_ai_closest_approach` reinitializes |
+
+**RATIFIED:** direction is fixed at commit from the player's current position and never
+re-evaluated in v1. Re-aiming per step would be homing, which deletes the counterplay and
+contradicts the word "commitment".
+
+### TWO FLINCH REGIMES (amendment 3) — one principle, two answers
+| Regime | Rule |
+|---|---|
+| **During active displacement** | Successful flinch **ABORTS**. Remaining authored movement FORFEITED, never frozen-and-resumed (matching the lunge clamp's established forfeiture law). Settle is **SKIPPED** — flinch recovery replaces it. Cooldown arms. Event: `scurry_aborted`. |
+| **During settle** | Movement is already complete. Ordinary hit/flinch rules apply, and FLINCHED may supersede the remaining settle ticks. This is **NOT an abort**: it emits no scurry-abort event and must never borrow that vocabulary. Cooldown already armed at end of displacement, so nothing further happens. |
+
+This is the P16 agency principle applied in the opposite direction: a bump is imposed on an
+actor and completes through flinch; a scurry is chosen by the actor and therefore dies with
+its agency. Tests distinguish the two regimes explicitly.
+
+### Content — six fields, Fang-only, all default 0 = off, no additions before play
+| Field | Provisional | Reasoning (all PROVISIONAL/UNVALIDATED, outside the M1 NUMERIC FENCE) |
+|---|---|---|
+| `scurry_trigger_separation` | 2.5 | At the permanent 1.0 u/s speed deficit this is ~2.5 s of sustained retreat — a commitment by the player, not a sidestep |
+| `scurry_trigger_ticks` | 45 | 1.5 s since the last improvement. Secondary guard; separation is normally the binding condition |
+| `scurry_step_distance` | 0.30 | 9.0 u/s — exactly 3x ordinary pursuit, and 2.25x the Envoy, so it reads as a different kind of motion |
+| `scurry_steps` | 15 | 0.5 s, 4.5 units authored. Against a fleeing Envoy that is ~2.5 units of NET closure — it converts a triggered retreat back to roughly bite range, without teleporting into contact |
+| `scurry_settle_ticks` | 18 | 0.6 s, deliberately longer than the 12-tick bite windup so the opening is genuinely usable |
+| `scurry_cooldown_ticks` | 90 | 3.0 s from end of displacement, well past settle, so a second scurry is a decision point rather than a rhythm |
+
+### Q7, pre-registered (no phase or random offsets before observation)
+*"With 2-3 Fangs pursuing the same retreating player, do scurry commitments read as
+individual predators responding to the situation, or accidental synchronized coordination?"*
+Note the risk is real and structural: the trigger is deterministic from world facts several
+Fangs partly share. GAME-RULES §3's binding per-actor phase offset does NOT apply (nothing
+here is clock-phased), so if synchrony appears it needs its own answer — observed first,
+never pre-solved.
+
+### Fences held
+Fang-specific · no generic movement or retreat-detection framework · COPY-FIRST on the
+displacement shape (extraction re-opens only on the ruled triggers) · no Fang HP/damage/flinch
+tuning · no Ooze/Watcher changes · does not touch the Watcher's banked infinite-kite ruling.
+
 
 ### P18 — Idle wander + return-to-post + room territory
 **Idea:** Three related post-disengage behaviors, captured together since they all
