@@ -154,26 +154,6 @@ var _ai_last_survey_commit: Dictionary = {}   # actor_id -> tick (literal commit
 ## per-tick proximity test reuses band_contains() against the AUTHORED band rather than
 ## re-deriving "close range" from some other number -- one definition, one predicate.
 var _ai_close_band: Dictionary = {}           # actor_id -> band Dictionary
-## SCURRY (P17) — a self-propelled MOBILITY COMMITMENT: not locomotion, not an attack.
-##
-## Four separate dicts rather than one record, because they have four different lifetimes and
-## conflating them is how a state machine acquires an inconsistent middle:
-##   _ai_scurry            authored config; present only for a family that authors one.
-##   _ai_closest_approach  the retreat SIGNAL's one honest fact: {distance, tick} of the best
-##                         gap achieved during THIS continuous ordinary pursuit attempt.
-##                         Its lifetime is specified exhaustively at _refresh_closest_approach
-##                         -- an honest fact with an undefined lifetime is a dishonest fact.
-##   _scurry_active        present only DURING displacement.
-##   _scurry_settle_until  absolute deadline tick of the mandatory settle beat.
-## COPY-FIRST (ruled 2026-08-19): this deliberately mirrors _bump_slides' shape rather than
-## sharing an abstraction with it. The two agree on four mechanical ingredients and diverge on
-## nine laws -- above all on flinch, where a bump COMPLETES and a scurry ABORTS. Extraction
-## re-opens only on the triggers recorded in ROADMAP P17.
-var _ai_scurry: Dictionary = {}
-var _ai_closest_approach: Dictionary = {}     # actor_id -> {distance: float, tick: int}
-var _scurry_active: Dictionary = {}           # actor_id -> {direction, step_distance, steps_remaining}
-var _scurry_settle_until_tick: Dictionary = {}  # actor_id -> int
-var _next_scurry_tick: Dictionary = {}        # actor_id -> int, cooldown armed at END OF DISPLACEMENT
 var _ai_attack_start_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 var _ai_attack_fire_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 ## FLINCH reaction layer (batch, GAME-RULES §3). FLINCHED is an actor/AI REACTION
@@ -477,7 +457,7 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 ## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
 ## than preferred -> approach, closer than minimum -> back away, inside the band ->
 ## stop. Since P29 they govern MOVEMENT ONLY; attack eligibility is the action band.
-func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0, scurry_trigger_separation: float = 0.0, scurry_trigger_ticks: int = 0, scurry_step_distance: float = 0.0, scurry_steps: int = 0, scurry_settle_ticks: int = 0, scurry_cooldown_ticks: int = 0) -> void:
+func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0) -> void:
 	# The TERMINAL band is the one with the largest max_range — the only band that
 	# includes its own maximum (see _select_action). Derived, never authored, so content
 	# cannot accidentally declare two terminals or none.
@@ -525,7 +505,6 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 	for action in resolved:
 		if bool(action.requires_close_frustration) and not _ai_close_band.has(actor_id):
 			push_warning("register_ai [actor %d]: '%s' requires close frustration but the repertoire has no ungated close action -- it could never become selectable" % [actor_id, action.id])
-	_register_scurry(actor_id, scurry_trigger_separation, scurry_trigger_ticks, scurry_step_distance, scurry_steps, scurry_settle_ticks, scurry_cooldown_ticks)
 	# Equip the LOWEST-BAND action so _equipped_weapon is never empty for an AI actor.
 	# Chosen from authored band values, not from array position — element 0 is not
 	# privileged. Commitment overwrites this at every windup start, so the initial pick
@@ -533,32 +512,6 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 	# that one action, identical to pre-P29.
 	if lowest_band_id != "":
 		set_equipped_weapon(actor_id, lowest_band_id)
-
-
-## SCURRY registration (P17). ABSENCE IS OFF: a record exists only when content authors a
-## usable commitment, so every other family (and every hand-registered test enemy) takes the
-## untouched pursuit path with no zero-valued mechanic evaluated on its behalf.
-##
-## Requires BOTH a positive step distance and a positive step count -- either alone describes
-## a displacement of zero, which would arm a cooldown and a settle beat for no movement at
-## all. Warned rather than silently accepted, matching every other content lint here.
-func _register_scurry(actor_id: int, trigger_separation: float, trigger_ticks: int, step_distance: float, steps: int, settle_ticks: int, cooldown_ticks: int) -> void:
-	_ai_scurry.erase(actor_id)
-	if is_zero_approx(step_distance) and steps <= 0:
-		return  # not authored at all -- the ordinary case for every family but Fang
-	if step_distance <= 0.0 or steps <= 0:
-		push_warning("register_ai [actor %d]: scurry authored with step_distance %.3f and steps %d -- a displacement of zero would still arm a cooldown and a settle beat, so the scurry is treated as OFF" % [actor_id, step_distance, steps])
-		return
-	if trigger_separation <= 0.0:
-		push_warning("register_ai [actor %d]: scurry authored with no trigger separation -- it would commit on elapsed time alone, which is failed-closure (P29's fact), not retreat" % actor_id)
-	_ai_scurry[actor_id] = {
-		"trigger_separation": trigger_separation,
-		"trigger_ticks": trigger_ticks,
-		"step_distance": step_distance,
-		"steps": steps,
-		"settle_ticks": settle_ticks,
-		"cooldown_ticks": cooldown_ticks,
-	}
 
 
 ## Registration-time enforcement of GAME-RULES §3's "authored bands may not overlap"
@@ -680,10 +633,6 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# sliding actor's own move Command (issued below) is suppressed this same tick, and
 	# so the AI re-evaluates fresh geometry the tick after the slide completes.
 	_advance_bump_slides()
-	# SCURRY displacement advances in the same window and for the same reasons as the bump
-	# slide: before AI decisions, so a displacing actor's own move Command is suppressed this
-	# same tick, and so the AI re-evaluates fresh geometry the tick after it ends.
-	events.append_array(_advance_scurry_displacement())
 	# AI (Phase D step 8 Phase 4) decides enemy Commands here, right before dispatch,
 	# so its output (move/attack) feeds through the exact same handlers below a
 	# player's own Commands would — no separate resolution path. It also appends any
@@ -704,11 +653,6 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 			# locomotion for its duration, the same rule the lunge follows. This
 			# suppresses MOVEMENT ONLY -- the actor's attack timeline is untouched.
 			if _bump_slides.has(command.actor_id):
-				continue
-			# A scurrying actor does not steer either -- authored displacement replaces
-			# locomotion for its duration. Enforced here as well as at the decision site so
-			# the law holds for any future non-AI consumer, exactly as bump's does.
-			if _scurry_active.has(command.actor_id):
 				continue
 			events.append(_apply_move(command, dt))
 		elif command.kind == "attack":
@@ -919,11 +863,6 @@ func _clear_reaction_state(actor_id: int) -> void:
 	_parry_exposed_until_tick.erase(actor_id)
 	_parry_exposed_damage_multiplier.erase(actor_id)
 	_bump_slides.erase(actor_id)
-	# P17 scurry state dies with the actor for the same reason: temporary states on a living
-	# body, never a ledger that outlives it or transfers to a respawn.
-	_scurry_active.erase(actor_id)
-	_scurry_settle_until_tick.erase(actor_id)
-	_ai_closest_approach.erase(actor_id)
 
 
 func _clear_clamps_targeting(dead_actor_id: int) -> void:
@@ -1558,17 +1497,6 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		var already_flinched: bool = tick_count < int(_flinched_until_tick.get(target_id, -1))
 		if not already_flinched:
 			_flinched_until_tick[target_id] = tick_count + _flinch_recovery_ticks
-			# P17, ruled 2026-08-19: a scurry is SELF-PROPELLED, so a successful flinch aborts
-			# it -- remaining authored movement forfeited, settle skipped, cooldown armed.
-			# Gated on a genuine flinch WRITE, not merely on a pressure-capable hit, so chip
-			# damage during an already-running recovery cannot re-abort something already gone.
-			# A settle in progress is deliberately untouched: by then the movement is complete,
-			# and the flinch just runs alongside it in absolute tick space. Not an abort, and
-			# it must never emit abort vocabulary.
-			events.append_array(_abort_scurry(target_id))
-			# LIFETIME boundary 4: distance the player gained while this actor had no agency is
-			# not separation its pursuit lost, so the fact restarts when pursuit resumes.
-			_ai_closest_approach.erase(target_id)
 		events.append(Event.new(tick_count, "flinched", {
 			"actor_id": target_id,
 			"attacker_id": attacker_id,
@@ -1835,7 +1763,7 @@ func _apply_shield_bump(actor_id: int, shield: Dictionary) -> Array[Event]:
 ## correctly outside it.
 ##
 ## SAME PRINCIPLE, OPPOSITE ANSWER, for anything self-propelled: a committed mobility action
-## an actor CHOSE (ROADMAP P17's proposed scurry) is agency, so a successful flinch must
+## an actor CHOSE is agency, so a successful flinch must
 ## abort it and forfeit the remaining authored movement. Do not read this comment as
 ## precedent for "authored displacement always completes" — the question is always whose
 ## agency the motion expresses, never whether the motion is authored.
@@ -2025,7 +1953,6 @@ func _decide_ai_commands(events: Array[Event]) -> Array[Command]:
 		if _health.get(actor_id, 0.0) <= 0.0:
 			continue  # a dead enemy emits nothing and decides nothing
 		_refresh_close_proximity(actor_id, player_id)
-		_refresh_closest_approach(actor_id, player_id)
 		commands.append_array(_decide_single_ai_command(actor_id, player_id, events))
 	return commands
 
@@ -2110,11 +2037,6 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		_ai_state[actor_id] = "idle"
 		_ai_attack_start_tick.erase(actor_id)
 		_ai_attack_fire_tick.erase(actor_id)
-		# LIFETIME (P17, boundary 6): disengaging definitively ends this pursuit attempt, so
-		# its closest-approach fact dies with it. Carrying it across a leash would let a
-		# re-acquired enemy read stale close range from a fight that already ended.
-		_ai_closest_approach.erase(actor_id)
-		_scurry_settle_until_tick.erase(actor_id)
 		return []
 
 	# Attack priority over movement (locked defect fix): preferred/minimum distance
@@ -2134,21 +2056,6 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 	#   3. Only if neither of the above applies does movement preference run:
 	#      closer than minimum -> retreat, farther than preferred -> approach,
 	#      inside the band (here only because the weapon is on cooldown) -> hold.
-	# SCURRY, both phases, checked before any ordinary decision. Displacement is advanced by
-	# its own tick phase, and settle is a stationary commitment -- in both cases this actor
-	# yields NO Command at all, which is what makes "cannot start an attack during settle"
-	# structural rather than a second gate someone can forget.
-	#
-	# The settle deadline lives in ABSOLUTE tick space, exactly like the attack cooldown, so a
-	# flinch landing during settle simply runs alongside it and the effective delay is
-	# max(recovery, settle) rather than their sum. THAT is what the ruling "FLINCHED may
-	# supersede remaining settle ticks" means mechanically -- it needs no code, emits no event,
-	# and is NOT an abort. Aborts exist only during displacement (see _abort_scurry).
-	if _scurry_active.has(actor_id):
-		return []
-	if tick_count < int(_scurry_settle_until_tick.get(actor_id, -1)):
-		return []
-
 	if _ai_attack_fire_tick.has(actor_id):
 		return _decide_attack_commands(actor_id, "", player_id, events)
 
@@ -2169,202 +2076,9 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		return [Command.new(tick_count, actor_id, "move", {"direction": -to_player.normalized()})]
 
 	if distance_to_player > tuning.preferred_attack_distance:
-		# P17: the ONLY site a scurry may commit. Pursuit is the only state in which "the
-		# player is creating separation while I pursue" is even a meaningful claim.
-		if _should_scurry(actor_id, distance_to_player):
-			events.append(_commit_scurry(actor_id, to_player.normalized()))
-			return []
 		return [Command.new(tick_count, actor_id, "move", {"direction": to_player.normalized()})]
 
 	return []  # in band, weapon on cooldown: hold position and wait
-
-
-## THE RETREAT SIGNAL'S ONE HONEST FACT (P17): the best gap this actor has achieved during
-## the CURRENT CONTINUOUS ORDINARY PURSUIT ATTEMPT, with the tick it was achieved. Everything
-## the trigger needs is DERIVED from it -- separation and elapsed are both subtractions, never
-## stored, so there is no flag to fall out of sync. Same shape as P29's proximity fact, and
-## deliberately a separate implementation of that shape: P29's naming fence says its
-## close-frustration vocabulary generalises only when a second consumer shares its MEANING,
-## and "the player is pulling away" is a different fact from "I cannot reach close range".
-##
-## LIFETIME (the whole point -- an honest fact with an undefined lifetime is a dishonest fact).
-## The record exists ONLY during ordinary pursuit. Absence means "reinitialize on the next
-## ordinary-pursuit tick", which is how every boundary below resolves without a state machine:
-##   1. REACHING CLOSE RANGE ....... persists and keeps refreshing. Arriving is pursuit
-##      succeeding, not ending -- and it is the case that makes the mechanic work at all.
-##   2. COMMITTING BITE ............ cleared (a committed attack ends the pursuit attempt).
-##   3. FINISHING BITE ............. reinitialized on the first tick pursuit resumes. THE
-##      ANTI-HAIR-TRIGGER RULE: without it, the bite's own duration has already satisfied the
-##      elapsed condition and a stale close-range minimum fires a scurry on the first tick of
-##      recovery, off a retreat that happened while the Fang was busy.
-##   4. BEING FLINCHED ............. cleared at onset, reinitialized on resumption. Distance
-##      gained while this actor had no agency is not separation its pursuit lost.
-##   5. COMPLETING A SCURRY ........ reinitialized after settle. With the cooldown this makes
-##      chaining structurally impossible rather than merely rate-limited: the new minimum
-##      zeroes the separation term outright.
-##   6. LEASH / DISENGAGE .......... cleared on disengage; fresh on reacquisition (above).
-##   7. HOLDING IN RANGE ........... persists and refreshes. Holding is pursuit that has
-##      arrived, not a separate cycle; the gap genuinely is that small.
-##
-## DECLARED BOUNDED IMPURITY: the refresh also runs while this actor is BACKING AWAY, because
-## the fact is refreshed before every decision branch (P29: position is a world fact, not an
-## activity fact). A retreating Fang can therefore self-inflict at most
-## preferred - minimum = 0.30 units of apparent separation -- two orders below any authored
-## trigger. Recorded here so it is never rediscovered as a bug.
-func _refresh_closest_approach(actor_id: int, player_id: int) -> void:
-	if not _ai_scurry.has(actor_id):
-		return  # no consumer, no fact
-	if not _in_ordinary_pursuit(actor_id):
-		return
-	var to_player: Vector3 = entities.get(player_id, Vector3.ZERO) - entities.get(actor_id, Vector3.ZERO)
-	to_player.y = 0.0
-	var distance: float = to_player.length()
-	var record: Dictionary = _ai_closest_approach.get(actor_id, {})
-	if record.is_empty() or distance < float(record.distance):
-		_ai_closest_approach[actor_id] = {"distance": distance, "tick": tick_count}
-
-
-## "Ordinary pursuit" = active, and not inside any commitment or reaction. Written as one
-## predicate because the lifetime rule above is only coherent if every caller agrees on what
-## a pursuit attempt IS.
-func _in_ordinary_pursuit(actor_id: int) -> bool:
-	if _ai_state.get(actor_id, "idle") != "active":
-		return false
-	if tick_count < int(_flinched_until_tick.get(actor_id, -1)):
-		return false
-	if _ai_attack_fire_tick.has(actor_id):
-		return false
-	if _scurry_active.has(actor_id):
-		return false
-	return tick_count >= int(_scurry_settle_until_tick.get(actor_id, -1))
-
-
-## BOTH conditions, never either. Separation alone fires on a sidestep or a knockback;
-## elapsed alone is "I have not improved my best gap", which is failed-closure -- P29's fact,
-## about a stationary target, not a retreating one. Requiring both is what makes
-## "a stationary player at long range can never become retreating through elapsed time alone"
-## structurally true rather than a tuning artifact: while this actor closes on a stationary
-## target its distance only decreases, so the minimum refreshes every tick and BOTH terms
-## stay at zero.
-func _should_scurry(actor_id: int, distance: float) -> bool:
-	var config: Dictionary = _ai_scurry.get(actor_id, {})
-	if config.is_empty():
-		return false
-	if tick_count < int(_next_scurry_tick.get(actor_id, 0)):
-		return false
-	var record: Dictionary = _ai_closest_approach.get(actor_id, {})
-	if record.is_empty():
-		return false
-	if distance - float(record.distance) < float(config.trigger_separation):
-		return false
-	return tick_count - int(record.tick) >= int(config.trigger_ticks)
-
-
-## COMMITMENT. Direction is captured ONCE, toward the player's position at this instant, and
-## never re-evaluated (ratified for v1). Re-aiming per step would be homing: it would delete
-## the counterplay the whole mechanic exists to create, and contradict the word commitment.
-## The player's answer is to leave the committed line.
-##
-## The closest-approach fact is cleared here rather than at settle end because the pursuit
-## attempt that produced it is over the moment its conclusion is committed to.
-func _commit_scurry(actor_id: int, direction: Vector3) -> Event:
-	var config: Dictionary = _ai_scurry[actor_id]
-	_scurry_active[actor_id] = {
-		"direction": direction,
-		"step_distance": float(config.step_distance),
-		# Counted in STEPS, never against an end tick -- this record is created during one
-		# tick's decisions and first advances on the NEXT, which makes tick arithmetic
-		# off-by-one bait. Inherited verbatim from _advance_bump_slides.
-		"steps_remaining": int(config.steps),
-	}
-	_ai_closest_approach.erase(actor_id)
-	return Event.new(tick_count, "scurry_committed", {
-		"actor_id": actor_id, "direction": direction, "steps": int(config.steps),
-	})
-
-
-## Displacement, deliberately shaped like _advance_bump_slides (COPY-FIRST, ruled): per-tick
-## step, contact clamp through the one shared sweep, blocked means it ENDS rather than chases.
-## The divergence is what follows: a blocked scurry still owes its settle beat, because settle
-## is the commitment's price and not a reward for arriving.
-func _advance_scurry_displacement() -> Array[Event]:
-	var events: Array[Event] = []
-	var actor_ids: Array = _scurry_active.keys()
-	actor_ids.sort()
-	for actor_id in actor_ids:
-		var scurry: Dictionary = _scurry_active[actor_id]
-		var start: Vector3 = entities.get(actor_id, Vector3.ZERO)
-		var end: Vector3 = start + scurry.direction * float(scurry.step_distance)
-		var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
-		if not contact.is_empty():
-			entities[actor_id] = contact.entry_position
-			events.append(_end_scurry_displacement(actor_id, "blocked", true))
-			continue
-		entities[actor_id] = end
-		scurry.steps_remaining = int(scurry.steps_remaining) - 1
-		if int(scurry.steps_remaining) <= 0:
-			events.append(_end_scurry_displacement(actor_id, "completed", true))
-	return events
-
-
-## THE ONE EXIT from displacement, used by all three paths. Cooldown arms HERE, not at settle
-## end -- that single choice is what lets the two flinch regimes fall out with no separate
-## cooldown rules, and it means an aborted scurry cannot be farmed into an instant retry.
-func _end_scurry_displacement(actor_id: int, reason: String, start_settle: bool) -> Event:
-	var config: Dictionary = _ai_scurry.get(actor_id, {})
-	_scurry_active.erase(actor_id)
-	_next_scurry_tick[actor_id] = tick_count + int(config.get("cooldown_ticks", 0))
-	if start_settle:
-		_scurry_settle_until_tick[actor_id] = tick_count + int(config.get("settle_ticks", 0))
-	return Event.new(tick_count, "scurry_ended", {"actor_id": actor_id, "reason": reason})
-
-
-## ABORT -- and ONLY reachable during active displacement (GAME-RULES agency principle, ruled
-## 2026-08-19): flinch suppresses AGENCY, and a scurry is agency, so a flinch kills it. The
-## remaining authored movement is FORFEITED, never frozen and resumed, matching the melee
-## lunge clamp's established forfeiture law. Settle is SKIPPED: flinch recovery replaces it,
-## so the punish window is the recovery the player just earned rather than two stacked ones.
-##
-## The mirror image of the bump ruling recorded at _advance_bump_slides: motion IMPOSED on an
-## actor completes through a flinch, motion the actor CHOSE does not. Same principle, opposite
-## answer, and the difference is whose agency the motion expresses.
-##
-## A settle in progress is NOT aborted here and must never be: by then the movement is already
-## complete, ordinary reaction rules apply, and nothing in this vocabulary belongs to it.
-func _abort_scurry(actor_id: int) -> Array[Event]:
-	if not _scurry_active.has(actor_id):
-		return []
-	return [_end_scurry_displacement(actor_id, "aborted", false)]
-
-
-## Read-only scurry snapshot (AGENTS.md Invariable #2: every mechanic must be observable).
-## Reports the DERIVED trigger terms, not just the stored fact, so "why has it not committed"
-## is answerable on sight instead of by recomputing subtractions by hand.
-func debug_describe_scurry(actor_id: int, player_id: int) -> Dictionary:
-	if not _ai_scurry.has(actor_id):
-		return {"actor_id": actor_id, "authored": false}
-	var to_player: Vector3 = entities.get(player_id, Vector3.ZERO) - entities.get(actor_id, Vector3.ZERO)
-	to_player.y = 0.0
-	var distance: float = to_player.length()
-	var record: Dictionary = _ai_closest_approach.get(actor_id, {})
-	var config: Dictionary = _ai_scurry[actor_id]
-	var phase: String = "idle"
-	if _scurry_active.has(actor_id):
-		phase = "displacing"
-	elif tick_count < int(_scurry_settle_until_tick.get(actor_id, -1)):
-		phase = "settling"
-	return {
-		"actor_id": actor_id,
-		"authored": true,
-		"phase": phase,
-		"distance": distance,
-		"has_record": not record.is_empty(),
-		"separation": 0.0 if record.is_empty() else distance - float(record.distance),
-		"elapsed": 0 if record.is_empty() else tick_count - int(record.tick),
-		"needs_separation": float(config.trigger_separation),
-		"needs_elapsed": int(config.trigger_ticks),
-		"cooldown_remaining": maxi(0, int(_next_scurry_tick.get(actor_id, 0)) - tick_count),
-	}
 
 
 ## P29 ACTION SELECTOR — the AI's one new power, and deliberately its only one: "which of
@@ -2522,11 +2236,6 @@ func _decide_attack_commands(actor_id: int, selected_action_id: String, player_i
 			if bool(action.requires_close_frustration):
 				_ai_last_survey_commit[actor_id] = tick_count
 			break
-	# LIFETIME boundary 2 (P17): committing an attack ENDS this pursuit attempt, so its
-	# closest-approach fact is cleared here. Boundary 3 then follows for free -- the fact is
-	# absent when pursuit resumes, so it reinitializes to the CURRENT gap instead of firing a
-	# scurry off a stale close-range minimum whose elapsed term the attack itself filled.
-	_ai_closest_approach.erase(actor_id)
 	_ai_attack_start_tick[actor_id] = tick_count
 	_ai_attack_fire_tick[actor_id] = tick_count + windup_ticks
 	var damage_type: String = _weapons.get(selected_action_id, {}).get("damage_type", "force")

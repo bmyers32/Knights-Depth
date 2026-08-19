@@ -325,7 +325,9 @@ func test_bump_during_a_committed_windup_never_disturbs_its_timeline() -> void:
 ## PRINCIPLE: flinch suppresses AGENCY. Externally imposed displacement is not agency, so
 ## already-imparted forced motion completes. Pinned here because a rule that lives only in a
 ## comment is a rule that drifts — and because the opposite ruling is expected for
-## self-propelled commitments (ROADMAP P17's scurry), which makes the boundary worth holding.
+## self-propelled commitments, which makes the boundary worth holding. (P17's scurry was the
+## first candidate consumer of that opposite answer; it was falsified and reverted 2026-08-19,
+## which changes nothing here -- this ruling describes shipped P16 behavior and stands alone.)
 func test_a_flinched_actor_still_completes_an_imparted_bump_slide() -> void:
 	sim.entities[ENEMY_ID] = Vector3(0, 0, -1.0)
 	sim.set_flinch_tuning(90, 20)

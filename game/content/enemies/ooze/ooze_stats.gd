@@ -70,15 +70,3 @@ extends Resource
 ## this family authors no action requiring it -- the field is actor-level, so it exists on
 ## every family, but it is inert without a consumer action.
 @export var close_frustration_ticks: int = 0
-
-
-## SCURRY (P17) — inert here. The six fields are ACTOR-level, so they exist on every family,
-## but 0 leaves this family byte-identical to pre-P17. Canonical explanation in FangStats.
-## P17 deliberately changes ONE family so a re-playtest can attribute any felt difference to
-## the Fang alone (the discipline P29's iteration used for the Watcher).
-@export var scurry_trigger_separation: float = 0.0
-@export var scurry_trigger_ticks: int = 0
-@export var scurry_step_distance: float = 0.0
-@export var scurry_steps: int = 0
-@export var scurry_settle_ticks: int = 0
-@export var scurry_cooldown_ticks: int = 0
