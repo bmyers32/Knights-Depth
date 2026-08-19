@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **SCURRY PROPOSED / NOT IMPLEMENTED** | Weave falsified and reverted 2026-08-19 (geometry is not identity). Successor filed: Fang scurry — retreat-triggered committed closure, six content fields, pre-registered falsification criterion. Awaiting approval |
+| P17 | Per-family engagement identities | **SCURRY FALSIFIED 2026-08-19 / CUTOFF RECON FILED** | Two experiments reverted: weave (geometry is not identity) and scurry (closing distance is not contesting movement). Trigger autopsy proved the radial signal blind to diagonal/circling kites. Successor: cutoff/intercept, recon only |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -472,121 +472,220 @@ binding per-actor phase-offset consequence if the successor is globally phased.
 
 ---
 
-## P17 SUCCESSOR — FANG SCURRY · **PROPOSED / NOT IMPLEMENTED** (filed 2026-08-19)
+## P17 SCURRY v1 — **FALSIFIED 2026-08-19, REVERTED.** Successor recon below.
 
-Status: awaiting approval. No code exists. Three amendments folded in (closest-approach
-lifetime · counterplay correction · two flinch regimes); direction, field count and Q7
-ratified.
+Spec `8dd504e` · implementation `9691931` (frozen candidate, preserved in history) · verdict
+rendered by Breon after single-Fang play.
 
-### The decision change (stated first, per BRAIN "A different path is not a different decision")
-- **Y — today:** the Envoy moves at 4.0, Fang at 3.0. The player outruns it by 1.0 u/s
-  permanently, so retreating while shooting is free and never answered. That gap is the
-  whole reason the encounter reads uniform.
-- **X — proposed:** sustained retreat may provoke a committed rapid closure the player must
-  answer — by leaving the committed line, by disrupting the Fang with available control, or
-  by exploiting the mandatory settle after the movement ends.
+### RAW PLAYTEST ANSWERS (verbatim)
+- **Q1 trigger legibility:** *"It feels like random mobility, should be moving around to get in
+  front of where I'm running towards like arc around and get in front of me as to force me to
+  change directions or walk into the attack."*
+- **Q2 pressure / pre-registered criterion:** *"Kite and fire feels the same level of freeness."*
+- **Q3 commitment/counterplay:** *"Didn't really get to test this chase was weak."*
+- **Q4 closure amount:** *"No."*
+- **Q5 settle payoff:** *"Sure didn't really get to feel it."*
+- **Q6 overall identity:** *"No."*
 
-**PRE-REGISTERED FALSIFICATION CRITERION (corrected):** *"Sustained retreat may provoke a
-committed rapid closure. The player can leave the committed line, disrupt the Fang with
-available control, or exploit the mandatory settle after the movement ends. Falsified if
-optimal player behavior is unchanged."*
+### FORMAL FALSIFICATION BASIS
+The criterion was pre-registered before implementation: *falsified if optimal player behavior
+is unchanged, regardless of appearance.* **Q2 is that criterion verbatim in play terms.**
+Q1/Q4/Q6 reinforce it — the mobility did not read as purposeful pursuit, the spacing change
+was not consequential, and Fang gained no distinct approach decision. Q3/Q5 are
+low-signal/inconclusive: the chase never generated enough pressure for those sub-beats to
+become evaluable.
 
-**ADVISORY CONCESSION ON RECORD.** An earlier draft listed "meet it with shield/parry on
-arrival" as counterplay. Scurry v1 is MOBILITY ONLY — no damaging arrival event exists, so
-nothing crosses the shield gate and no parry is reachable. The phantom counterplay entered
-the falsification criterion unexamined, and its danger was specific: a mechanic measured
-against a description mentioning parry is under quiet pressure to grow a damaging tackle in
-order to satisfy its own success criterion. Removed before it could steer the design.
+**NO TUNING.** Trigger delay, speed, step count, authored distance and settle duration cannot
+rescue a mechanic that failed its player-decision criterion.
 
-### Retreat signal — one honest fact, derived signal, no episode concept
-```
-_ai_closest_approach[actor_id] = {distance, tick}   # best gap of the CURRENT pursuit attempt
-separation = current_distance - closest.distance
-elapsed    = tick_count - closest.tick
-```
-Trigger requires BOTH `separation >= scurry_trigger_separation` AND
-`elapsed >= scurry_trigger_ticks`, evaluated only in the pursue branch, only off cooldown.
-Separation alone fires on a sidestep; elapsed alone is failed-closure (P29's territory, not
-retreat). No episode-consumption concept: a completed scurry writes a new minimum, which
-zeroes `separation` on its own. The cooldown is a RATE LIMIT, never an episode.
+### TRIGGER AUTOPSY (diagnostic only, run against frozen `9691931` BEFORE the revert)
+Purpose: ensure the successor does not inherit a blind detector. The response mechanic is
+falsified either way.
 
-Does NOT cross P29's naming fence: no shared context framework, no generalisation of
-`requires_close_frustration`. Same shape, separate implementation.
+900 ticks (30 s) per run. Authored trigger: `separation >= 2.5` AND `elapsed >= 45`.
 
-### THE LIFETIME RULE (amendment 1)
-The record describes **the current continuous ordinary pursuit attempt**. It is
-REINITIALIZED to `{current_distance, tick_count}` on the first ordinary-pursuit tick after
-acquisition or after any completed combat commitment, and CLEARED whenever such a commitment
-begins. An honest fact with an undefined lifetime is a dishonest fact.
+| path | firing | minimum refreshes | max separation | max elapsed | commits |
+|---|---|---|---|---|---|
+| radial retreat | no | 3 | 2.53 | 76 | 2 (first @77) |
+| radial retreat | yes | 5 | 2.53 | 76 | 2 (first @77) |
+| diagonal-45 retreat | no | **886** | **0.00** | **1** | **0 — NEVER FIRES** |
+| diagonal-45 retreat | yes | **886** | **0.00** | **1** | **0 — NEVER FIRES** |
+| circling / strafing | no | 96 | 0.09 | 18 | **0 — NEVER FIRES** |
+| circling / strafing | yes | 96 | 0.09 | 18 | **0 — NEVER FIRES** |
 
-| Boundary case | Ruling |
-|---|---|
-| Reaching close range | **Persists and keeps refreshing.** Arriving is pursuit succeeding, not ending — and this is the case that makes the mechanic work ("I had you, then you ran"). |
-| Committing Bite | **Cleared at windup commit.** A committed attack ends the pursuit attempt. |
-| Finishing Bite | **Reinitialized** on the first tick ordinary pursuit resumes. This is the anti-hair-trigger rule: without it, the bite's own duration has already satisfied `elapsed`, and a stale close-range minimum fires a scurry on the first tick of recovery. |
-| Being flinched | **Cleared at flinch onset; reinitialized when pursuit resumes.** Distance the player gained while the Fang had no agency is not separation the Fang's pursuit lost. |
-| Completing a scurry | **Reinitialized when ordinary pursuit resumes after settle** (or after flinch recovery, if aborted). With the cooldown, this is what makes chaining structurally impossible rather than merely rate-limited. |
-| Leash/disengage then reacquisition | **Cleared on disengage; initialized fresh at the first ordinary-pursuit tick after reacquisition.** Hooks on `_acquire_aggro`, the single acquisition seam P29 built for exactly this class of "when an enemy engages" logic. |
-| Holding in range without attacking | **Persists and refreshes.** Holding is pursuit that has arrived, not a separate cycle; the gap genuinely is that small. |
+**CLAIM CONFIRMED: the signal measured RADIAL SEPARATION; the behavior we care about is
+SUSTAINED DIRECTIONAL TRAVEL.** The cause is arithmetic, not tuning — compare the RADIAL
+component of player travel against Fang's 3.00 u/s:
 
-**PINNED BY TEST:** a stationary player at long range never becomes "retreating" through
-elapsed time alone. It holds structurally, not by tuning — while Fang approaches a stationary
-player its distance only decreases, so the minimum refreshes every tick and BOTH `separation`
-and `elapsed` stay at zero.
-
-**Known bounded impurity, declared not hidden:** the minimum refreshes in the retreat branch
-too (keeping it a world fact refreshed before every branch, per P29's lesson), so Fang's own
-backing-away contributes at most `preferred - minimum` = 0.30 units of self-inflicted
-"separation" — two orders below any sane trigger value. Recorded so it is never rediscovered
-as a bug.
-
-### Lifecycle
-| Beat | Behavior |
-|---|---|
-| Trigger | pursue branch only, off cooldown, both conditions met |
-| Commit | direction = unit vector to the player's CURRENT position, captured once; `scurry_committed` Event |
-| Displace | N steps, contact-clamped via `_find_earliest_lunge_contact`, own locomotion suppressed; blocked = displacement ends |
-| (end of displacement) | **cooldown arms here, in every path** — completion, blockage, or abort |
-| Settle | stationary, cannot start an attack; runs even if displacement was blocked early. The banked Q3 requirement and the punish window |
-| Decide | ordinary AI decision resumes; `_ai_closest_approach` reinitializes |
-
-**RATIFIED:** direction is fixed at commit from the player's current position and never
-re-evaluated in v1. Re-aiming per step would be homing, which deletes the counterplay and
-contradicts the word "commitment".
-
-### TWO FLINCH REGIMES (amendment 3) — one principle, two answers
-| Regime | Rule |
-|---|---|
-| **During active displacement** | Successful flinch **ABORTS**. Remaining authored movement FORFEITED, never frozen-and-resumed (matching the lunge clamp's established forfeiture law). Settle is **SKIPPED** — flinch recovery replaces it. Cooldown arms. Event: `scurry_aborted`. |
-| **During settle** | Movement is already complete. Ordinary hit/flinch rules apply, and FLINCHED may supersede the remaining settle ticks. This is **NOT an abort**: it emits no scurry-abort event and must never borrow that vocabulary. Cooldown already armed at end of displacement, so nothing further happens. |
-
-This is the P16 agency principle applied in the opposite direction: a bump is imposed on an
-actor and completes through flinch; a scurry is chosen by the actor and therefore dies with
-its agency. Tests distinguish the two regimes explicitly.
-
-### Content — six fields, Fang-only, all default 0 = off, no additions before play
-| Field | Provisional | Reasoning (all PROVISIONAL/UNVALIDATED, outside the M1 NUMERIC FENCE) |
+| player behavior | radial speed | result |
 |---|---|---|
-| `scurry_trigger_separation` | 2.5 | At the permanent 1.0 u/s speed deficit this is ~2.5 s of sustained retreat — a commitment by the player, not a sidestep |
-| `scurry_trigger_ticks` | 45 | 1.5 s since the last improvement. Secondary guard; separation is normally the binding condition |
-| `scurry_step_distance` | 0.30 | 9.0 u/s — exactly 3x ordinary pursuit, and 2.25x the Envoy, so it reads as a different kind of motion |
-| `scurry_steps` | 15 | 0.5 s, 4.5 units authored. Against a fleeing Envoy that is ~2.5 units of NET closure — it converts a triggered retreat back to roughly bite range, without teleporting into contact |
-| `scurry_settle_ticks` | 18 | 0.6 s, deliberately longer than the 12-tick bite windup so the opening is genuinely usable |
-| `scurry_cooldown_ticks` | 90 | 3.0 s from end of displacement, well past settle, so a second scurry is a decision point rather than a rhythm |
+| straight retreat | 4.00 | gains 1.00 u/s — minimum stops improving, trigger can arm |
+| diagonal-45 retreat | 4.00 × cos45° = **2.83** | Fang **GAINS** 0.17 u/s — minimum improves nearly every tick |
+| circling | **0.00** | Fang **GAINS** 3.00 u/s — minimum improves constantly |
 
-### Q7, pre-registered (no phase or random offsets before observation)
-*"With 2-3 Fangs pursuing the same retreating player, do scurry commitments read as
-individual predators responding to the situation, or accidental synchronized coordination?"*
-Note the risk is real and structural: the trigger is deterministic from world facts several
-Fangs partly share. GAME-RULES §3's binding per-actor phase offset does NOT apply (nothing
-here is clock-phased), so if synchrony appears it needs its own answer — observed first,
-never pre-solved.
+At 45° the minimum refreshed on **886 of 900 ticks**, resetting BOTH terms continuously. The
+Fang perceived *retreat → reset → retreat → reset*; the player experienced one continuous
+kite. Only pure radial flight — the one kite shape no player uses exclusively — could ever
+arm it. Firing changed nothing (flinch-clearing added 2 refreshes on the radial path and no
+commits anywhere), so the blindness is **geometric, not reaction-driven**.
 
-### Fences held
-Fang-specific · no generic movement or retreat-detection framework · COPY-FIRST on the
-displacement shape (extraction re-opens only on the ruled triggers) · no Fang HP/damage/flinch
-tuning · no Ooze/Watcher changes · does not touch the Watcher's banked infinite-kite ruling.
+This independently explains Q1 ("random mobility"), Q3 ("chase was weak") and the difficulty
+of evaluating the committed line: commitments appeared only during incidental pure-radial
+moments, disconnected from what the player felt they were doing.
 
+*Reproducibility: the finding above is analytic (the cos45° arithmetic) and re-derivable
+without tooling. The empirical harness ran against `9691931` and was not committed, since a
+diagnostic for a deleted mechanic is dead code.*
+
+### CORE DESIGN CLARIFICATION (Breon)
+Fang should not merely **close the current gap**. Fang should **CONTEST THE PLAYER'S CHOSEN
+MOVEMENT DIRECTION** — arc toward the space ahead of the player's travel, get in front of the
+route, and force a redirect, an evade, a defensive tool, or a walk into the attack.
+
+Not *"faster object chasing current coordinates."* Instead: **"predator trying to cut off your
+route."**
+
+### PRESERVED (independent of the mechanic)
+Pre-code spec discipline · this verdict and its raw answers · the autopsy evidence above ·
+the C.1 bump/flinch agency ruling and its regression test · GAME-RULES §3 channel-law
+amendment · the guard's approved-amendment seam and its 27 adversarial checks · the
+three-artifact baseline/evidence discipline · both BRAIN lessons.
+
+### REMOVED FROM LIVE CODE
+Six content fields (Fang + inert copies), all runtime state, both events, the observability
+export, the registrar pass-through, the test file, and the diagnostic tool. No dead tuning
+knobs and no dormant runtime seams left behind merely because they were tested.
+
+---
+
+## P17 SUCCESSOR RECON — FANG CUTOFF / INTERCEPT (recon only, NOTHING implemented)
+
+**NEW PLAYER-DECISION TARGET.** Before: *"I can maintain my current route while firing and
+Fang simply follows."* After: *"If I maintain a predictable route while firing, Fang threatens
+the space ahead strongly enough that I sometimes choose to redirect before it arrives."*
+
+### 1. TRIGGER / SIGNAL LAYER
+**Radial closest-approach is abandoned for this consumer** — the autopsy shows it is blind to
+every kite shape except pure radial flight. Retained player-motion evidence is now justified
+**by playtest**, not by speculative architecture.
+
+Minimum authoritative fact, one candidate:
+```
+{sample_position, sample_tick}   # re-sampled on a fixed window
+travel_direction  = (current_position - sample_position).normalized()   # DERIVED
+travel_distance   = (current_position - sample_position).length()       # DERIVED
+```
+No stored `is_retreating` boolean — it is derivable, and a stored one can desync.
+
+**SAMPLING WINDOW is the load-bearing unknown.** One-tick displacement must NOT be assumed
+stable: it is 0.133 units at player speed, comparable to input jitter from tapping, and says
+nothing about intent. The fact must answer *"where has the player been consistently trying to
+go"*, not *"which way did they move this tick"*. Starting candidate to test, not to adopt:
+window **15 ticks (0.5 s)** → 2.0 units of travel at full speed, with a **noise floor** below
+which there is no committed route at all. Both need deriving from real input, not chosen.
+
+**LIFETIME semantics, to be specified with the same rigor the closest-approach fact received
+(that rigor is what made its blindness diagnosable):** acquisition · stationary / below noise
+floor · direction changes (does a hard turn reset the window, or does the window's own decay
+suffice?) · attacks · flinch · death · disengage/reacquisition · sampling gaps (a sample older
+than the window is stale and must read as unknown, never as fresh).
+
+**FORK — whose fact is it?** This is a fact about the PLAYER. Storing it once is more honest
+than N per-Fang copies; but one shared fact means every Fang reads an identical travel
+direction and may commit identical cutoffs simultaneously (see §6). Per-Fang sampling
+de-correlates naturally at the cost of duplicating a world fact. Surfaced, not decided.
+
+**DUAL USE is acceptable** (ruled): the same fact answers both *"has the player committed to a
+route worth cutting off"* and *"where is the cutoff destination"* — both consume the same
+factual meaning rather than one record carrying unrelated semantics.
+
+### 2. MOBILITY DESTINATION
+```
+lead_point = player_position + travel_direction * authored_lead_distance
+```
+Committed when the mobility action commits. No velocity prediction, no intercept equations,
+no homing, no continual re-aim, no pathfinding.
+
+**LAYER RELATIONSHIP, verified against the law text rather than assumed.** GAME-RULES §3's
+rule is: *"Selection commits at windup start and is never re-evaluated during that windup. Aim
+is sampled at the fire tick, not at action commitment."* That governs **action selection and
+attack aim**. A committed mobility DESTINATION is neither, so there is **no collision** —
+provided the mobility action never touches attack state. Concretely: it must not
+`set_equipped_weapon`, must not set `_ai_attack_fire_tick`, and must leave the subsequent Bite
+as a **fresh decision** obeying fire-tick aim. No stale Bite target may be carried through the
+movement. §3's channel law positively supports this: families own BASELINE MOTION PATH, and a
+cutoff arc is family path identity. The amendment's binding per-actor phase offset does not
+apply — a cutoff is trigger-driven, not clock-phased.
+
+### 3. MOVEMENT SHAPE — communicating CUTOFF
+Note first, because it reframes the choice: the weave proved path shape alone buys nothing,
+so the **destination** is what changes the decision. But the criterion requires the player
+**redirect BEFORE it arrives** — which means the shape's job is *anticipation*: a straight
+dash is only legible after it lands, whereas an arc announces intent while travelling. That is
+the honest case for spending anything at all on shape.
+
+| | state cost | interruption | readability | risk |
+|---|---|---|---|---|
+| **A. Two-segment cutoff** (lateral leg → leg toward lead point) | leg direction, leg step counts, phase index — smallest step beyond v1 | abort at any point, forfeit remainder; phase index adds no special case | strong, unambiguous "going around you" | visible corner; may read grid-like/artificial |
+| **B. Decaying perpendicular bias** (toward lead point + side component that decays) | target, side sign, decay parameter | trivially abortable | continuous, cheap curve | **closest in spirit to the falsified weave** — another path-shape parameter, and most likely to become "wobble with purpose" |
+| **C. Deterministic committed arc** (quadratic through a side control point) | start/control/end + progress counter | abortable, but a partial arc's end state is less obvious | strongest "running around you" read | most geometry; likely premature if A communicates the same decision |
+
+**Cheapest-that-works ordering: A, then C, with B carrying an explicit warning** — it is the
+option whose failure mode this project has already paid to learn. Contact clamping via
+`_find_earliest_lunge_contact` composes with all three unchanged.
+
+### 4. ATTACK TRANSITION
+**The 18-tick stationary settle is NOT banked.** What survived both experiments is narrower:
+*special mobility must have a clean, readable transition into the next attack decision.*
+Forks: **A** full stationary settle · **B** short plant/orient beat · **C** movement completes
+directly into the ordinary decision after a small mandatory no-attack transition.
+Current lean from human evidence is **B** — *"Fang arrived to cut me off and is about to
+engage"* reads better than *"Fang finished moving and stands still for 0.6 s."* No timing
+assigned until the behavioral shape is chosen.
+
+### 5. INTERRUPTION / AGENCY
+Preserved: imposed motion completes (P16 bump, pinned at `77e23c0`); self-propelled committed
+mobility ABORTS on successful flinch — remaining movement forfeited, never freeze-and-resume,
+fresh decision after ordinary recovery — unless the new design produces evidence for a
+different rule. No generic committed-displacement semantics.
+
+**COPY-FIRST remains in force, and the rule-of-two count has RESET:** scurry's death leaves
+`_bump_slides` as the only consumer again. A cutoff would once more be consumer #2, so the
+deliberate consolidation evaluation must happen again at that point — and its previous answer
+was NO EXTRACTION. Re-open only on a surviving second consumer, a third genuine consumer, or
+demonstrable duplication drift.
+
+### 6. MULTIPLE FANGS
+No phase offsets, no RNG, nothing preemptive. The cutoff trigger may derive from player travel
+facts several Fangs observe simultaneously, so this is **contextual decision synchronization,
+not clock-phase synchronization** — §3's globally-phased offset rule does not automatically
+solve it. §1's shared-vs-per-Fang fork directly determines how likely it is.
+
+Pre-registered: *"When 2-3 Fangs observe the same sustained player route, do their cutoff
+decisions read as individual predators responding to the situation, emergent pack pressure, or
+accidental Claimed-like synchronization?"* Observe first; solve only if single-Fang play
+survives and the group case actually fails.
+
+### 7. SUCCESS / FALSIFICATION CRITERION (into the successor spec BEFORE implementation)
+**BEFORE:** *"I can maintain my current route while firing and Fang simply follows."*
+**AFTER:** *"If I maintain a predictable route while firing, Fang threatens the space ahead
+strongly enough that I sometimes choose to redirect before it arrives."*
+
+The critical observable is **not** that Fang moved faster, reached a number, or looked more
+dynamic. It is: **THE PLAYER VOLUNTARILY CHANGES ROUTE IN RESPONSE TO ANTICIPATED CUTOFF
+PRESSURE.**
+
+FALSIFIED if: maintaining the same kite route remains optimal · Fang merely reaches a lead
+point without causing anticipatory rerouting · the movement reads as random diagonal mobility ·
+or the route change happens only because Fang physically collides after the fact rather than
+because the cutoff was readable as an incoming positional threat.
+
+### FENCES
+No generic steering framework · no pathfinding framework · no generalized velocity system ·
+no Ooze changes · no Watcher changes · do not reopen the Watcher's banked infinite-kite ruling ·
+no scurry-v1 numeric tuning · no damage/HP/flinch-threshold compensation · no damaging tackle
+added to make mobility "matter" · Bite remains a separate attack decision · the human fun
+verdict remains Breon's authority.
 
 ### P18 — Idle wander + return-to-post + room territory
 **Idea:** Three related post-disengage behaviors, captured together since they all

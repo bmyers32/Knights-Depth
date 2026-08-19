@@ -694,6 +694,29 @@ construction* — content-authored, default-off, one sim expression, its own tes
 its own dated baseline. Design experiments should be built to be deleted; the cost of being
 wrong is exactly the cost of the revert.
 
+### Closing distance is not the same as contesting movement
+**Incident (P17 scurry, falsified 2026-08-19):** after the weave failed, Fang got a
+retreat-triggered mobility commitment that closed a measured 2.50 units in 0.5 s — exactly as
+designed, fully tested, pre-registered criterion in hand. Verdict was still FALSIFIED: *"kite
+and fire feels the same level of freeness."* **Mechanism:** a pursuer can remove several units
+of separation while leaving the player's optimal escape DIRECTION completely unchanged. The
+player re-evaluates a route, not a radius. Shrinking the current gap changes a number the
+player was never optimising; if the intended pressure is positional, the mechanic must threaten
+where the player is GOING, not where they currently are. **Failure if ignored:** the mechanic
+looks dramatic, measures correctly, passes every test, and leaves the strategic situation
+untouched — and the failure then invites tuning (faster! further! sooner!) when no value of any
+parameter addresses it. **Second-order lesson from the same session:** the autopsy found the
+trigger was ALSO blind — a radial-separation signal never armed under diagonal or circling
+kites, because at 45° the player's radial speed (2.83) is below the pursuer's (3.00), so the
+pursuer keeps "gaining" while the player kites freely. Run a detector against the movement
+shapes players actually use, not the clean case that inspired it. **Applies elsewhere:** every
+remaining P17 family identity, any "make X more threatening" finding, and any future signal
+derived from a scalar distance when the behavior of interest is directional. **Sibling
+lesson:** "A different path is not a different decision" — together they bound the space from
+both sides. Weave: changing path shape without changing the decision is insufficient. Scurry:
+changing distance quickly is equally insufficient while the chosen route stays strategically
+free.
+
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
 (no incident produced them) and NOT law yet. Governance ladder — the only path to
