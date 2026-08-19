@@ -119,4 +119,6 @@ static func register_enemy_ai(sim: SimWorld, actor_id: int, enemy_key: StringNam
 			"windup_ticks": action.windup_ticks,
 			"requires_close_frustration": action.requires_close_frustration,
 		})
-	sim.register_ai(actor_id, repertoire, position, stats.preferred_attack_distance, stats.minimum_attack_distance, stats.detection_radius, stats.leash_radius, stats.engagement_delay_ticks, stats.close_frustration_ticks)
+	# P17 scurry rides the same actor-level unpack as spacing/leash: it answers "where and
+	# how do I move", never "what can I do from here" (the repertoire's job).
+	sim.register_ai(actor_id, repertoire, position, stats.preferred_attack_distance, stats.minimum_attack_distance, stats.detection_radius, stats.leash_radius, stats.engagement_delay_ticks, stats.close_frustration_ticks, stats.scurry_trigger_separation, stats.scurry_trigger_ticks, stats.scurry_step_distance, stats.scurry_steps, stats.scurry_settle_ticks, stats.scurry_cooldown_ticks)

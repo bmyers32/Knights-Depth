@@ -83,6 +83,12 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## stopped attacking." Pure observability, default off.
 @export var debug_show_action_selection: bool = false
 
+## P17 scurry snapshot: phase (idle/displacing/settling), the DERIVED trigger terms
+## (separation and elapsed) against what content requires, and cooldown remaining. Exists so
+## "why has it not committed yet" is answerable on sight rather than by recomputing
+## subtractions by hand. Pure observability, default off.
+@export var debug_show_scurry: bool = false
+
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 var _debug_equipped_index: int = 0
@@ -260,6 +266,12 @@ func _physics_process(delta: float) -> void:
 			var selection: Dictionary = sim.debug_describe_action_selection(actor_id, envoy.actor_id)
 			if not selection.is_empty():
 				print("action selection: ", selection)
+
+	if debug_show_scurry:
+		for actor_id: int in _enemies.keys():
+			var scurry: Dictionary = sim.debug_describe_scurry(actor_id, envoy.actor_id)
+			if bool(scurry.get("authored", false)):
+				print("scurry: ", scurry)
 
 
 ## Dev-only debug input, deliberately NOT an InputMap action — edge-detected raw
