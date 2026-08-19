@@ -98,3 +98,16 @@ extends Resource
 ## is answered within a few seconds. **Candidate fallback: 60 (2.0 s)** if the replay finds
 ## 90 too passive. The replay decides; do not pre-emptively split the difference.
 @export var close_frustration_ticks: int = 90
+
+
+## CUTOFF (P17) — inert here. The seven fields are ACTOR-level, so they exist on every family,
+## but 0 leaves this family byte-identical to pre-P17. Canonical explanation in FangStats.
+## P17 deliberately changes ONE family so a re-playtest can attribute any felt difference to
+## the Fang alone (the discipline P29's iteration used for the Watcher).
+@export var cutoff_min_route_distance: float = 0.0
+@export var cutoff_lead_distance: float = 0.0
+@export var cutoff_lateral_distance: float = 0.0
+@export var cutoff_step_distance: float = 0.0
+@export var cutoff_max_steps: int = 0
+@export var cutoff_plant_ticks: int = 0
+@export var cutoff_cooldown_ticks: int = 0

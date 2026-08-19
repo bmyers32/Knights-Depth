@@ -83,6 +83,12 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## stopped attacking." Pure observability, default off.
 @export var debug_show_action_selection: bool = false
 
+## P17 cutoff snapshot: phase, and the DERIVED route magnitude against what Fang requires.
+## The magnitude is the point -- the spec records a rollover boundary where slow sustained
+## travel can flicker at the trust floor, so if play reports "it sometimes just doesn't react"
+## the cause is visible here rather than re-diagnosed. Pure observability, default off.
+@export var debug_show_cutoff: bool = false
+
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 var _debug_equipped_index: int = 0
@@ -161,6 +167,8 @@ func _ready() -> void:
 
 	var flinch: FlinchTuning = ContentDB.get_resource(&"combat", &"flinch_tuning")
 	sim.set_flinch_tuning(flinch.pressure_window_ticks, flinch.flinch_recovery_ticks)
+	var route: RouteTuning = ContentDB.get_resource(&"combat", &"route_tuning")
+	sim.set_route_window(route.route_window_ticks)
 
 	var burn: BurnStats = ContentDB.get_resource(&"status", &"burn")
 	sim.register_status(burn.status_id, burn.damage_per_tick, burn.tick_interval_ticks, burn.duration_ticks)
@@ -260,6 +268,12 @@ func _physics_process(delta: float) -> void:
 			var selection: Dictionary = sim.debug_describe_action_selection(actor_id, envoy.actor_id)
 			if not selection.is_empty():
 				print("action selection: ", selection)
+
+	if debug_show_cutoff:
+		for actor_id: int in _enemies.keys():
+			var cutoff: Dictionary = sim.debug_describe_cutoff(actor_id, envoy.actor_id)
+			if bool(cutoff.get("authored", false)):
+				print("cutoff: ", cutoff)
 
 
 ## Dev-only debug input, deliberately NOT an InputMap action — edge-detected raw

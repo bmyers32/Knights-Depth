@@ -717,6 +717,30 @@ both sides. Weave: changing path shape without changing the decision is insuffic
 changing distance quickly is equally insufficient while the chosen route stays strategically
 free.
 
+### A deleted parameter is absorbed only when verified
+**Lesson:** "A deleted parameter is only truly absorbed when every behavior it governed has
+been verified against the replacement mechanism. Structural simplification is not proven by
+fewer knobs; it is proven when the replacement reproduces the deleted knob's job at the exact
+boundary where that job mattered."
+**Incident (P17 cutoff design, 2026-08-19):** a bounded recent-locomotion representation
+replaced two world-level parameters at once. **θ** (turn threshold) was VERIFIED absorbed --
+a turn cancels inside the window, traced to the mechanism. **G** (stop grace) was ASSERTED
+absorbed -- "a stop stops contributing, so it drains" -- and never traced. The draft then
+rolled its time buckets only from the locomotion write path, so an actor that STOPPED issued
+no writes, never rolled, and kept stale route evidence indefinitely: the design claimed
+ageing within 2N while the mechanism delivered ageing never. **The defect lived at exactly
+the boundary G used to own.** **Mechanism:** deleting a rule feels like the reward for
+finding the right representation, and the reward arrives before the audit does. Each dead
+rule's job description is an audit item against the survivor, and the unaudited one is where
+the hole will be -- not by coincidence, but because that job was the only thing previously
+covering it. **Failure if ignored:** the simplification ships with a silent regression in the
+one case the deleted parameter existed for, and it presents as a mysterious behavioural gap
+rather than as a missing rule, because nothing in the code names the absent concept.
+**Applies elsewhere:** every future representation change that collapses parameters, every
+"this state machine can be derived instead of stored" refactor, and the M2 gen work where
+seed//layout invariants will tempt the same collapse. **Cross-reference:** the sibling entry
+on right-representation-deletes-rules -- the deletion is the reward, the audit is the price.
+
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
 (no incident produced them) and NOT law yet. Governance ladder — the only path to

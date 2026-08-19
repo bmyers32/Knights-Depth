@@ -621,7 +621,7 @@ description becomes an audit item against the survivor.* θ's absorption was ver
 cancels inside the window); **G's was asserted but not verified — and G's job, "the actor who
 stops writing", was exactly where the maintenance defect lived.** Deletion cascades are
 trustworthy only after every absorbed job is traced to its structural replacement.
-*(BRAIN candidate; not yet promoted.)*
+*(Promoted to BRAIN: "A deleted parameter is absorbed only when verified".)*
 
 **Excluded by construction:** bump, knockback and attack-authored lunge write `entities[]`
 directly and never pass through the locomotion write path, so they can never enter the fact.

@@ -119,4 +119,4 @@ static func register_enemy_ai(sim: SimWorld, actor_id: int, enemy_key: StringNam
 			"windup_ticks": action.windup_ticks,
 			"requires_close_frustration": action.requires_close_frustration,
 		})
-	sim.register_ai(actor_id, repertoire, position, stats.preferred_attack_distance, stats.minimum_attack_distance, stats.detection_radius, stats.leash_radius, stats.engagement_delay_ticks, stats.close_frustration_ticks)
+	sim.register_ai(actor_id, repertoire, position, stats.preferred_attack_distance, stats.minimum_attack_distance, stats.detection_radius, stats.leash_radius, stats.engagement_delay_ticks, stats.close_frustration_ticks, stats.cutoff_min_route_distance, stats.cutoff_lead_distance, stats.cutoff_lateral_distance, stats.cutoff_step_distance, stats.cutoff_max_steps, stats.cutoff_plant_ticks, stats.cutoff_cooldown_ticks)
