@@ -8,6 +8,7 @@ Wire-up lives in .claude/settings.json. Verify the current hook input schema aga
 the official docs (code.claude.com/docs -> hooks) before first use -- field names have
 evolved across versions.
 """
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -159,5 +160,237 @@ def main() -> int:
     return 0
 
 
+# =====================================================================================
+# APPROVED-AMENDMENT SEAM (added 2026-08-18, P17)
+#
+# The block above is absolute: nothing may Edit/Write GAME-RULES.md, ever. That is
+# correct and stays. But it left domain law with NO application path at all -- an
+# amendment the user had explicitly approved could not be applied by any means, which
+# does not make the law safer, it just moves the pressure to working around the guard.
+#
+# This seam is the sanctioned alternative, and it is DELIBERATELY AWKWARD:
+#   * it is not reachable from the hook path at all (different entry point, explicit
+#     mode flag, plus a second flag whose name you cannot type by accident);
+#   * it applies ONLY a pre-declared exact payload from a manifest -- never free text;
+#   * it FAILS CLOSED on the pre-edit hash AND on the exact old text, so it cannot run
+#     against a file that has drifted from what was reviewed;
+#   * it verifies AFTER writing that the approved text landed exactly and that nothing
+#     else in the file moved.
+#
+# Awkwardness is the feature. Applying domain law should feel like operating machinery,
+# not like saving a file. Adversarial coverage lives in scripts/test_guard_amendment.py
+# -- an untested governance mechanism guarding the most dangerous file in the repo is
+# the TelegraphIndicator.set_active lesson waiting to recur (BRAIN).
+# =====================================================================================
+
+AMEND_MODE_FLAG = "--amend"
+AMEND_CONFIRM_FLAG = "--i-have-explicit-user-approval"
+
+
+def _amend_fail(message: str) -> int:
+    print("AMENDMENT REFUSED: %s" % message, file=sys.stderr)
+    return 2
+
+
+def _payload_lines(edits: list) -> tuple[set, set]:
+    """Every line the manifest is permitted to remove, and to add."""
+    removable: set = set()
+    addable: set = set()
+    for edit in edits:
+        removable.update(str(edit.get("old", "")).splitlines())
+        addable.update(str(edit.get("new", "")).splitlines())
+        addable.update(str(edit.get("text", "")).splitlines())
+        # An insert_after keeps its anchor, so the anchor's lines legitimately appear on
+        # both sides of the diff.
+        anchor_lines = str(edit.get("anchor", "")).splitlines()
+        removable.update(anchor_lines)
+        addable.update(anchor_lines)
+    return removable, addable
+
+
+def _unrelated_lines_changed(before: str, after: str, edits: list) -> list:
+    """Lines that moved but are NOT attributable to an approved payload.
+
+    Diff-based rather than hash-based on purpose: a hash mismatch says "something is
+    wrong", this says WHICH line, which is the difference between a usable refusal and
+    a mysterious one.
+    """
+    import difflib
+
+    removable, addable = _payload_lines(edits)
+    before_lines = before.splitlines()
+    after_lines = after.splitlines()
+    offenders: list = []
+    matcher = difflib.SequenceMatcher(None, before_lines, after_lines, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        for line in before_lines[i1:i2]:
+            if line not in removable:
+                offenders.append("removed: %r" % line)
+        for line in after_lines[j1:j2]:
+            if line not in addable:
+                offenders.append("added: %r" % line)
+    return offenders
+
+
+def apply_amendment(manifest_path: str, argv: list, writer=None) -> int:
+    """Apply one approved amendment described by a manifest. Returns 0 on success.
+
+    `writer` exists ONLY so the adversarial tests can inject a saboteur write and prove
+    the post-write verification actually catches it. Production always uses the default.
+    """
+    if AMEND_CONFIRM_FLAG not in argv:
+        return _amend_fail(
+            "amendment mode also requires %s -- domain law is not amended by a flag you "
+            "could pass by habit" % AMEND_CONFIRM_FLAG
+        )
+
+    try:
+        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return _amend_fail("manifest unreadable (%s)" % error)
+
+    target = str(manifest.get("target", ""))
+    if not any(target.endswith(name) for name in PROTECTED_FILES):
+        return _amend_fail(
+            "target %r is not a protected law file -- this seam exists ONLY for %s, "
+            "everything else uses ordinary edits" % (target, ", ".join(PROTECTED_FILES))
+        )
+    if not str(manifest.get("approval", "")).strip():
+        return _amend_fail("manifest carries no 'approval' citation naming the in-conversation approval")
+
+    edits = manifest.get("edits") or []
+    if not isinstance(edits, list) or not edits:
+        return _amend_fail("manifest declares no edits")
+
+    target_path = Path(target)
+    try:
+        before_bytes = target_path.read_bytes()
+    except OSError as error:
+        return _amend_fail("cannot read %s (%s)" % (target, error))
+
+    # FAIL CLOSED #1: the file must be byte-identical to what was reviewed.
+    actual_hash = hashlib.sha256(before_bytes).hexdigest()
+    expected_hash = str(manifest.get("pre_sha256", ""))
+    if actual_hash != expected_hash:
+        return _amend_fail(
+            "pre-edit state mismatch: %s is sha256 %s, manifest expects %s -- the file "
+            "has drifted since the text was approved, so the approval no longer covers it"
+            % (target, actual_hash, expected_hash)
+        )
+
+    try:
+        before_text = before_bytes.decode("utf-8")
+    except UnicodeDecodeError as error:
+        return _amend_fail("%s is not valid UTF-8 (%s)" % (target, error))
+
+    # FAIL CLOSED #2: every approved payload must anchor exactly once. Zero occurrences
+    # means the approved text does not describe this file; more than one means the edit
+    # is ambiguous about which site it governs.
+    after_text = before_text
+    for index, edit in enumerate(edits):
+        kind = str(edit.get("kind", ""))
+        if kind == "replace":
+            old = str(edit.get("old", ""))
+            new = str(edit.get("new", ""))
+            if not old:
+                return _amend_fail("edit %d: 'replace' with empty old text" % index)
+            count = after_text.count(old)
+            if count != 1:
+                return _amend_fail(
+                    "edit %d: approved old text matched %d times, expected exactly 1" % (index, count)
+                )
+            after_text = after_text.replace(old, new)
+        elif kind == "insert_after":
+            anchor = str(edit.get("anchor", ""))
+            text = str(edit.get("text", ""))
+            if not anchor or not text:
+                return _amend_fail("edit %d: 'insert_after' needs both anchor and text" % index)
+            count = after_text.count(anchor)
+            if count != 1:
+                return _amend_fail(
+                    "edit %d: anchor matched %d times, expected exactly 1" % (index, count)
+                )
+            after_text = after_text.replace(anchor, anchor + text)
+        else:
+            return _amend_fail("edit %d: unknown kind %r" % (index, kind))
+
+    if after_text == before_text:
+        return _amend_fail("the manifest produces no change -- refusing a no-op amendment")
+
+    # FAIL CLOSED #3: nothing outside the approved payloads may move, checked BEFORE the
+    # write so a bad manifest never touches the file at all.
+    offenders = _unrelated_lines_changed(before_text, after_text, edits)
+    if offenders:
+        return _amend_fail(
+            "the manifest would change content outside its approved payload:\n  " + "\n  ".join(offenders[:10])
+        )
+
+    expected_bytes = after_text.encode("utf-8")
+    write = writer if writer is not None else (lambda path, data: Path(path).write_bytes(data))
+    try:
+        write(target, expected_bytes)
+    except OSError as error:
+        return _amend_fail("write failed (%s)" % error)
+
+    # POST-WRITE VERIFICATION, read back from disk. Everything above reasoned about
+    # intent; this is the only step that knows what actually landed.
+    #
+    # ANY failure here ROLLS BACK to the pre-edit bytes. A refusal that leaves domain law
+    # in a half-amended state is worse than either outcome it was choosing between: the
+    # file would be neither what was approved nor what was reviewed, and the next run's
+    # pre-edit hash check would refuse to touch it -- a self-inflicted deadlock on the one
+    # file that must always be trustworthy.
+    def _rollback(reason: str) -> int:
+        try:
+            target_path.write_bytes(before_bytes)
+            restored = hashlib.sha256(target_path.read_bytes()).hexdigest() == actual_hash
+        except OSError as error:
+            return _amend_fail(
+                "%s\n  ROLLBACK ALSO FAILED (%s) -- %s is in an UNKNOWN state, restore it "
+                "from git before doing anything else" % (reason, error, target)
+            )
+        if not restored:
+            return _amend_fail("%s\n  ROLLBACK VERIFICATION FAILED -- restore %s from git" % (reason, target))
+        return _amend_fail("%s\n  rolled back: %s restored to sha256 %s" % (reason, target, actual_hash))
+
+    written_bytes = target_path.read_bytes()
+    try:
+        written_text = written_bytes.decode("utf-8")
+    except UnicodeDecodeError as error:
+        return _rollback("POST-WRITE: %s is no longer valid UTF-8 (%s)" % (target, error))
+
+    landed_offenders = _unrelated_lines_changed(before_text, written_text, edits)
+    if landed_offenders:
+        return _rollback(
+            "POST-WRITE: unrelated content changed on disk:\n  " + "\n  ".join(landed_offenders[:10])
+        )
+
+    for index, edit in enumerate(edits):
+        approved = str(edit.get("new", "")) or str(edit.get("text", ""))
+        if approved and written_text.count(approved) != 1:
+            return _rollback(
+                "POST-WRITE: edit %d's approved text is not present exactly once on disk" % index
+            )
+
+    written_hash = hashlib.sha256(written_bytes).hexdigest()
+    if written_hash != hashlib.sha256(expected_bytes).hexdigest():
+        return _rollback(
+            "POST-WRITE: %s hashed %s, expected %s -- the bytes on disk are not the bytes "
+            "that were approved" % (target, written_hash, hashlib.sha256(expected_bytes).hexdigest())
+        )
+
+    print("AMENDMENT APPLIED: %s" % target)
+    print("  approval:  %s" % manifest["approval"])
+    print("  pre  sha256: %s" % actual_hash)
+    print("  post sha256: %s" % written_hash)
+    for name, char in (("SECT", "§"), ("EMDASH", "—"), ("ARROW", "→")):
+        print("  %-7s before=%d after=%d" % (name, before_text.count(char), written_text.count(char)))
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == AMEND_MODE_FLAG:
+        sys.exit(apply_amendment(sys.argv[2], sys.argv[3:]))
     sys.exit(main())

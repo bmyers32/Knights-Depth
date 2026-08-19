@@ -4,3 +4,6 @@
 
 # Export output — disposable build artifacts, never tracked (repo tracks no release binaries)
 /build/
+
+# Python bytecode from scripts/ (guard.py + its adversarial tests)
+__pycache__/

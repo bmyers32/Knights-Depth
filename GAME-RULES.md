@@ -75,8 +75,19 @@ SK-like/MMO attempts. Treat them as if they cost us a codebase already.)
   damage type; hit feedback color encodes resisted/neutral/weak. One config table maps
   type → palette; presentation reads it, never hardcodes colors.
 - **Channel law:** damage types own telegraph/hit-effect color. Entity STATES
-  (Drifted / Claimed) own SILHOUETTE and MOTION — Drifted breaks rhythm (asymmetry,
-  staggered timing); Claimed shares it (synchronized pacing, mirrored formations).
+  (Drifted / Claimed) own SILHOUETTE and MOTION RHYTHM/COORDINATION — the TEMPORAL
+  channel: Drifted breaks rhythm (asymmetry, staggered timing); Claimed shares it
+  (synchronized pacing, mirrored formations). FAMILIES own BASELINE MOTION PATH — the
+  SPATIAL channel: the shape a family traces through space while approaching, holding,
+  or committing. The two channels are ORTHOGONAL BUT COMPOSABLE: state does not replace
+  family path identity, and family path identity must not accidentally impersonate
+  state coordination. A Drifted Fang is BOTH channels composing — "never merge" is
+  explicitly rejected as false to legitimate composition.
+  BINDING CONSEQUENCE for content: any family-owned path shape whose phase derives from
+  a global clock MUST carry a deterministic per-actor phase offset, normalized against
+  the shape's own period so actor identity shifts PHASE only — never period, waveform or
+  amplitude. Without it a group of Common actors renders synchronized and reads as
+  Claimed — state coordination impersonated by an accident of implementation.
   State identity never competes with type color for the same channel; exact palettes
   stay provisional until the Umbral/damage-type art pass (LEXICON.md).
 - Status v1: exactly ONE effect ships in M1 (**Burn**: DoT ticks, spreads on contact —
@@ -168,3 +179,4 @@ LEXICON.md. §6.1–.2 are hard gates; §6.6 is explicitly a tiebreaker, never a
 | (seed+6) | §3, LEXICON, WORLD-CANON, MECHANICS-REF, SETUP, CORE-FANTASY, ROADMAP P9/P12 | QA fixes: "corruption engine"→Drift engine (LEXICON's own violation!); Umbral=dark gloss corrected; channel law forces→STATES; knight→Envoy in warmup text; anti-multiplier rule for family×state (one authored state per M1 family); Act 3 chronology; Umbral softened to general coherence disruption; CORE-FANTASY marked provisional-authority; P9 god-variable guard; P12/P7 decoupled per rule of two | External QA diff review; validates that vocabulary needs mechanical enforcement (guard.py), not authorial attention |
 | (seed+7) | §3, CLAUDE.md M1 | M1 roster LOCKED: Fang/Ooze/Watcher (one weakness per specialized type — combat-slice validation) as Common/Drifted/Claimed respectively; Hollow moved to Archive (M2) debut with true-name reveal | Developer decision after QA review; combat validation beats compressed cosmology in an arena slice; reversal requires playtest evidence |
 | 2026-08-14 | §3 | P29 enemy repertoire amendment. Enemy AI authority widened narrowly from movement + attack timing to deterministic selection of an authored action by distance eligibility. Action shape remains content-owned. Added non-overlapping range-band semantics, windup-time action commitment, and fire-time aim sampling. | First consumer: Watcher `watcher_survey` |
+| 2026-08-18 | §3 | P17 channel-law amendment. Motion resolved into two channels: FAMILIES own BASELINE MOTION PATH (spatial), entity STATES own MOTION RHYTHM/COORDINATION (temporal). The channels are ORTHOGONAL BUT COMPOSABLE — "never merge" was considered and rejected as false to legitimate composition (a Drifted Fang is both channels composing). Added the binding content consequence that globally-phased family motion must carry a deterministic per-actor phase offset, normalized against its own period so actor identity shifts phase only. | First consumer: Fang authored approach weave (ROADMAP P17) |
