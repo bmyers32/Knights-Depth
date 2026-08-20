@@ -235,7 +235,21 @@ func _register_enemies() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if not _envoy_alive and Input.is_action_just_pressed("restart"):
+	# RESTART (R) is available AT ANY TIME, not only from the run-end screen. Iterating on a
+	# mechanic means running the same encounter over and over, and closing/relaunching the whole
+	# app between attempts is the single biggest tax on that loop.
+	#
+	# A full scene reload rather than a bespoke "respawn the enemies" path, deliberately: dead
+	# enemies have had their nodes queue_free()d, so a partial reset would have to re-instantiate
+	# them and then re-derive which sim state is encounter-scoped versus run-scoped. The reload
+	# already resets every actor to its authored spawn with a fresh SimWorld, and it is the same
+	# code path the run-end restart has always used -- no second notion of "reset" to keep in
+	# sync with the first.
+	#
+	# Scope note: this widens WHEN an existing player-facing action is reachable. It is not
+	# instrumentation and not behind a debug_* export, because an export defaulting to off would
+	# be unavailable in exactly the gate-state build a playtest runs.
+	if Input.is_action_just_pressed("restart"):
 		get_tree().reload_current_scene()
 		return
 	# Once dead, the Envoy sends no further Commands (movement/attack/block/switch
