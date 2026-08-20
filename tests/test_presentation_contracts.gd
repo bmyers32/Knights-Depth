@@ -112,6 +112,70 @@ func test_arena_drives_the_enemy_windup_cues_without_crashing() -> void:
 	assert_false(arena.get_node("Watcher").get_node("TelegraphIndicator").visible, "an interrupted windup must stop advertising its window")
 
 
+## P17 cutoff reporting, added after its events were found MISSING from _report_events --
+## the third time a mechanic shipped unobservable through this block (scurry was the second).
+## The absence itself was misread as "the mechanic never fired", so this pins the traversal.
+##
+## It asserts the arena does not merely tolerate the kinds but RECOGNISES them: the catch-all
+## added alongside warns on any kind with no case, so an unhandled cutoff event would now be
+## noisy rather than silent. Driving all three through the real block proves the path exists.
+func test_arena_reports_every_cutoff_event_kind_without_crashing() -> void:
+	var arena: Node3D = _instantiate_arena()
+	var fang_id: int = arena.get_node("Fang").actor_id
+	for kind in ["cutoff_committed", "cutoff_ended", "cutoff_aborted"]:
+		var payload: Dictionary = {"actor_id": fang_id}
+		if kind == "cutoff_committed":
+			payload["side"] = 1
+			payload["lead_point"] = Vector3(1, 0, 1)
+		elif kind == "cutoff_ended":
+			payload["reason"] = "completed"
+		arena._report_events([Event.new(0, kind, payload)] as Array[Event])
+	pass_test("all three cutoff kinds traverse _report_events")
+
+
+func _is_event_kind_token(candidate: String) -> bool:
+	for index in candidate.length():
+		var character: String = candidate[index]
+		if character != "_" and (character < "a" or character > "z"):
+			return false
+	return true
+
+
+## THE AUDIT, mechanised: every kind SimWorld can emit is either printed or explicitly passed.
+## This is the gap class itself, not another instance of it -- it fails when a new mechanic
+## adds an event kind and forgets the reporting decision, which is exactly how the scurry and
+## cutoff kinds went missing.
+func test_every_emitted_event_kind_has_a_reporting_decision() -> void:
+	var source: String = FileAccess.get_file_as_string("res://game/sim/sim_world.gd")
+	var emitted: Dictionary = {}
+	# Plain string scanning rather than a RegEx: the pattern would need escaped dots and
+	# parens, and GDScript rejects a bare backslash-dot inside a string literal at PARSE time.
+	# Splitting is uglier and cannot fail to compile.
+	for fragment in source.split("Event.new("):
+		var comma: int = fragment.find(",")
+		if comma == -1:
+			continue
+		var after: String = fragment.substr(comma)
+		var opening: int = after.find('"')
+		if opening == -1:
+			continue
+		var closing: int = after.find('"', opening + 1)
+		if closing == -1:
+			continue
+		# "Event.new(" also appears in prose comments, where the next quoted run is ordinary
+		# English. An event kind is a bare lower_snake identifier, so anything else is not one.
+		var candidate: String = after.substr(opening + 1, closing - opening - 1)
+		if not candidate.is_empty() and _is_event_kind_token(candidate):
+			emitted[candidate] = true
+	assert_gt(emitted.size(), 20, "sanity: the scan really found the sim's event kinds")
+
+	var arena_source: String = FileAccess.get_file_as_string("res://game/arena/arena.gd")
+	var block: String = arena_source.substr(arena_source.find("match event.kind:"))
+	for kind in emitted.keys():
+		assert_true(block.contains('"%s":' % kind),
+			"SimWorld emits '%s' but arena._report_events has no case for it -- print it, or add an explicit pass saying why not" % kind)
+
+
 func test_arena_drives_the_projectile_tracer_lifecycle_without_crashing() -> void:
 	var arena: Node3D = _instantiate_arena()
 	arena._report_events([Event.new(0, "projectile_fired", {

@@ -519,6 +519,24 @@ written back in. Claim 3 above is the whole of what is known about the response.
 **BANKED FINDING:** *Retreat is not equivalent to increasing radial distance. Cutoff behavior
 cares about sustained player travel direction.*
 
+**WITHDRAWN CLAIM (2026-08-20).** After a scurry-build play session the agent reported that
+the arena log contained "zero scurry events" and offered it as live-play corroboration of the
+autopsy. **That reasoning was invalid and is withdrawn.** `arena.gd::_report_events` had no
+case for any scurry event kind, so the log could not have contained one regardless of whether
+the mechanic fired. The same hole was then found for the cutoff kinds, which is what prompted
+the audit.
+
+This withdrawal touches NOTHING else. The scurry verdict was Breon's human judgement, not
+derived from logs, and the autopsy stands on the 886/900 refresh measurement and the cos45deg
+arithmetic -- both independent of arena logging.
+
+**BRAIN CANDIDATE, riding with the P17 closeout (not promoted, gates nothing):**
+*"Absence from a channel is evidence only if the channel can observe the event."* Before
+treating a silent log, an empty result set or an unfired assertion as information, verify the
+observer could have recorded the thing whose absence is being read. Related to the existing
+"a measurement must prove its mechanism fired before its numbers mean anything" -- this is its
+negative-space twin, about absence rather than presence.
+
 900 ticks (30 s) per run. Authored trigger: `separation >= 2.5` AND `elapsed >= 45`.
 
 | path | firing | minimum refreshes | max separation | max elapsed | commits |

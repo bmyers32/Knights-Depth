@@ -445,3 +445,25 @@ func _report_events(events: Array[Event]) -> void:
 				print("status expired: ", event.payload)
 			"weapon_switched":
 				print("weapon switched: ", event.payload)
+			# P17 cutoff, reported like any other action beat. Payload only -- no derived
+			# route magnitude and no per-tick spam; the richer diagnostic view stays behind
+			# debug_show_cutoff, reserved for a diagnosis run if a playtest is ambiguous.
+			"cutoff_committed":
+				print("cutoff committed: ", event.payload)
+			"cutoff_ended":
+				print("cutoff ended: ", event.payload)
+			"cutoff_aborted":
+				print("cutoff aborted: ", event.payload)
+			# DELIBERATELY NOT REPORTED: emitted for every actor every tick, so printing it
+			# would bury every other line. Recorded here so the next audit does not
+			# re-litigate it.
+			"moved":
+				pass
+			_:
+				# THE GAP CLASS, closed mechanically. Twice now a mechanic's events were
+				# absent from this block and their absence was misread as the mechanic not
+				# firing -- once for the scurry, once for the cutoff. An unhandled kind is
+				# now loud at the moment it first appears, so a new mechanic cannot ship
+				# silently unobservable. Every kind above is either printed or explicitly
+				# passed; there is no third category.
+				push_warning("arena: event kind '%s' has no reporting case -- add one, or add an explicit pass documenting why it is not reported" % event.kind)
