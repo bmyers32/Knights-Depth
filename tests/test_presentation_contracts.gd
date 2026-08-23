@@ -115,6 +115,22 @@ func test_arena_drives_the_enemy_windup_cues_without_crashing() -> void:
 	assert_false(arena.get_node("Watcher").get_node("TelegraphIndicator").visible, "an interrupted windup must stop advertising its window")
 
 
+## THE SHIPPED-CONTENT LINK. test_burrow.gd proves the MECHANIC with synthetic values; it
+## cannot catch a .tres that never authored one. This drives the real arena's real SimWorld,
+## registered through the production ContentRegistrar path, so "the trigger silently refuses in
+## the actual build" fails here instead of during a playtest session.
+##
+## Boot-clean is not interact-clean: instantiating the arena proves nothing about whether the
+## dev trigger can fire, which is exactly the class of gap that has cost this project sessions.
+func test_arena_fang_can_actually_burrow_from_shipped_content() -> void:
+	var arena: Node3D = _instantiate_arena()
+	var fang_id: int = arena.get_node("Fang").actor_id
+	assert_true(arena.sim.debug_trigger_burrow(fang_id, arena.envoy.actor_id),
+		"the SHIPPED Fang content must produce a triggerable burrow -- if this refuses, pressing B in the real build does nothing")
+	assert_true(arena.sim._combat_absent.has(fang_id) or arena.sim._burrow.has(fang_id),
+		"and the lifecycle must actually be running afterwards")
+
+
 func _is_event_kind_token(candidate: String) -> bool:
 	for index in candidate.length():
 		var character: String = candidate[index]
