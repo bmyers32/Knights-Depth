@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **CUTOFF PRE-CODE SPEC / NOT IMPLEMENTED** | Weave and scurry both falsified and reverted. Approved successor spec: two-bucket recent-locomotion fact + two-segment clearance cutoff, θ/G deleted by the representation. No code |
+| P17 | Per-family engagement identities | **BURROW RECON / NO CODE** | Weave, scurry and cutoff all falsified and reverted. Positive datum: the LUNGE. Pivot to burrow/ambush reposition — underground participation audit filed, action-before-selector rule binding |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -596,207 +596,251 @@ knobs and no dormant runtime seams left behind merely because they were tested.
 
 ---
 
-## P17 SUCCESSOR — FANG CUTOFF · **PRE-CODE SPECIFICATION**
-**APPROVED · NOT IMPLEMENTED · no code exists.** Committed before implementation so the design
-is a fixed target the code is measured against, not a description written afterwards to match
-whatever got built (the discipline that made the scurry verdict legible).
+## P17 CUTOFF — **FALSIFIED BY PLAY 2026-08-22, REVERTED.** Burrow pivot below.
 
-**PLAYER-DECISION TARGET.** Before: *"I can maintain my current route while firing and Fang
-simply follows."* After: *"If I maintain a predictable route while firing, Fang threatens the
-space ahead strongly enough that I sometimes redirect before it arrives."*
+Spec `d070b63` · implementation `43c597e` · frozen play candidate `a2c00aa`.
 
-### 1. THE TWO-BUCKET RECENT-LOCOMOTION FACT
-Named deliberately: it is a **two-bucket recent-locomotion fact**, NOT a motion/velocity system.
-One sim-owned fact keyed by the OBSERVED actor — never one copy per Fang.
+**VERDICT (Breon, verbatim):** *"It just looked like running a football route — couple yards
+up, diagonal cut to a point. Didn't look or feel good."* He did not voluntarily redirect
+because of the incoming cutoff. The pre-registered player-decision criterion failed.
+
+### EVIDENCE SCOPE — narrow, and the narrowness matters
+Log evidence from the human session: **3 `cutoff_committed`, 3 `cutoff_ended`, 0
+`cutoff_aborted`, all three ending `budget_spent`.** Therefore established:
+- the detector fired during real representative play — the mechanic actually participated;
+- geometric side selection was active (both signs observed, not defaulting to the tie);
+- Breon meaningfully experienced the authored lateral-leg → diagonal-run grammar;
+- **none of the three executions reached its committed lead point.**
+
+**THE SHIPPED BOUNDED CUTOFF BEHAVIOR WAS PLAYTESTED AND FALSIFIED. Lead-point arrival
+itself remains untested.** Do NOT record "the full intended lead-point arrival was tested and
+rejected" — it was not. Do NOT downgrade the experiment to "untested" either: the capped
+movement was the actual candidate played, and the two-segment locomotion grammar was visible
+enough to render a human verdict on.
+
+**NO RETUNE.** `cutoff_max_steps` must not be raised to force arrival. The complaint is
+upstream of completion distance — the two-segment locomotion GRAMMAR read as an artificial
+football route. A larger budget extends the same rejected grammar. The three-for-three
+`budget_spent` result is important evidence about the experiment's CONSTRUCTION; it does not
+reopen the verdict. If cutoff geometry is ever historically revisited, the budget limitation
+must be considered then — it is not a reason for another cutoff iteration now.
+
+**STATUS: recoverable historical evidence, NOT a dormant fallback.** Unlike the scurry, the
+cutoff is not an active alternate design candidate.
+
+**SCURRY's scope stays separate and must not be merged with the above:** experiment falsified ·
+radial detector *specifically* falsified · rapid-closure response never independently tested
+under a working detector · `9691931` may remain a dormant response fallback if future evidence
+specifically justifies revisiting rapid closure.
+
+### POSITIVE DATUM — the one thing P17 has proven likeable
+**Breon, verbatim: *"I kind of like the lunge."*** Interpreted NARROWLY: the LUNGE has
+positive human evidence, so *discrete committed authored displacement* is a promising
+direction. This is NOT a universal rule that all committed displacement is good — two
+committed-displacement mechanics have already been falsified. What the lunge shares with the
+burrow proposal is the shape: **commit → strong authored movement/state change → readable
+resolution.** That makes the pivot evidence-informed rather than an arbitrary fourth pursuit
+experiment.
+
+### BRAIN CANDIDATES riding with the P17 closeout (recorded, not promoted, gating nothing)
+1. **"An authored movement budget must permit the representative trajectory the experiment
+   claims to test."** A bounded movement experiment can be mechanically correct yet terminate
+   systematically before completing its authored objective. If that is calculable from
+   representative trigger geometry *before* play, verify the budget rather than discover
+   three-for-three truncation during the human run. **Scope:** this does NOT claim truncation
+   caused the falsification — Breon rejected the grammar itself. It concerns experimental
+   VALIDITY: prove a bounded action can complete the representative trajectory it claims to
+   expose, so the human knows whether they are judging the complete action or a systematically
+   truncated form.
+2. **"Validate an action before validating its selector."** Scurry showed action quality and
+   selector quality can entangle: its detector failed to recognise representative play, so the
+   response was never cleanly exercised.
+3. *(earlier)* **"Absence from a channel is evidence only if the channel can observe the
+   event."**
+
+---
+
+# P17 PIVOT — BURROW / AMBUSH REPOSITION (RECON ONLY, NOTHING IMPLEMENTED)
+
+Fang performs a LARGE BACKWARD JUMP, disappears into the ground, relocates, POPS UP AROUND the
+player — ideally behind — pauses briefly as it emerges, then attacks. **Pursuit/cutoff geometry
+work is over.** The desired identity is a MODE CHANGE: ordinary engagement → conspicuous
+disengage → temporarily absent from the combat picture → reappear → forced target
+reacquisition → resume combat.
+
+The player's problem changes from *"How do I maintain my kite route?"* to **"Where is the Fang
+going to reappear, and how do I respond when it does?"**
+
+## PROCESS RULE — ACTION BEFORE SELECTOR (binding)
+**Do NOT design normal AI burrow selection first.** The first implementation must have a
+controlled/dev-triggered execution path: (1) prove the authored action fires on demand,
+(2) get a human verdict on the ACTION, (3) only after an action-quality PASS design when normal
+AI chooses it.
+
+## RECON 1 — UNDERGROUND PARTICIPATION AUDIT (the primary structural question)
+
+**HEADLINE FINDING: there is exactly ONE participation predicate, and FOUR independent systems
+route through it.**
 
 ```
-_route[actor_id] = { previous_vector, current_vector, current_bucket }
-
-normalize(actor):                          # called on WRITE and on READ
-    b = floor(tick_count / N)
-    d = b - current_bucket
-    if   d == 0: unchanged
-    elif d == 1: previous_vector = current_vector ; current_vector = ZERO
-    else:        previous_vector = ZERO           ; current_vector = ZERO
-    current_bucket = b
-
-write (accepted locomotion delta):  normalize ; current_vector += delta
-read:                               normalize ; recent_route = previous + current
+_is_valid_target(attacker, target):
+    target != attacker  AND  _health[target] > 0  AND  allegiance differs
 ```
+Consumers, all filtering `_families.keys()` through it:
+1. `_resolve_melee_swing` — melee cone sweep
+2. `_find_earliest_swept_hit` — projectile sweep
+3. `_find_earliest_lunge_contact` — authored-displacement contact clamp (melee lunge AND bump)
+4. `_apply_shield_bump` — bump target selection
 
-`recent_route` therefore always covers between **N and 2N ticks** of ordinary locomotion.
+So **TARGETABLE and COLLIDABLE are literally the same predicate today**, and `ALIVE == PRESENT
+COMBAT PARTICIPANT` is true *by construction in one function*. That is the good news and the
+whole risk: one chokepoint to extend, and no way to separate the dimensions without splitting
+it deliberately.
 
-**WHY NORMALIZATION MUST RUN ON READ AS WELL AS WRITE — the corrected defect.** An earlier
-draft rolled buckets only from `_apply_move`. A stopped actor issues no locomotion writes, so
-its buckets would never roll and stale route evidence would survive indefinitely — while the
-design claimed it aged out within 2N. Bucketing on `floor(tick / N)` and normalizing at both
-ends makes ageing a function of AUTHORITATIVE TIME rather than of write activity.
-Lazy normalization during a read has repo precedent: `_pressure_sum` prunes expired
-contributions as it reads, for the same reason (no per-tick scan anywhere).
+Note also: **ordinary locomotion has NO collision at all** (P20 open). "Collidable" in this sim
+means only "obstructs authored displacement", and even that is allegiance-filtered — allies
+never clamp anything.
 
-**REVIEW LESSON, RECORDED.** *When a representation change deletes rules, each dead rule's job
-description becomes an audit item against the survivor.* θ's absorption was verified (a turn
-cancels inside the window); **G's was asserted but not verified — and G's job, "the actor who
-stops writing", was exactly where the maintenance defect lived.** Deletion cascades are
-trustworthy only after every absorbed job is traced to its structural replacement.
-*(Promoted to BRAIN: "A deleted parameter is absorbed only when verified".)*
+### Systems that BYPASS the predicate and gate on `_health > 0` directly
+| Seam | Gate | Underground consequence if untouched |
+|---|---|---|
+| `_advance_status_ticks` | `_status_instances` filtered by health | **A burning Fang keeps burning underground.** Needs an explicit ruling — visibility does not answer it |
+| `_advance_contact_spread` eligible sources | health + `applied_tick` | An underground Fang remains a Burn SOURCE |
+| `_advance_contact_spread` pair scan | `alive_ids` + `_actors_overlap` (body radii) | **An underground Fang at the player's XZ would spread Burn through the floor.** Almost certainly wrong |
+| `_decide_ai_commands` | iterates `_ai_state`, skips dead | An underground Fang still decides and acts unless suppressed |
+| `_apply_attack` | attacker-dead check only | An underground Fang could still resolve an attack |
+| `_find_living_player_id` | allegiance + health | Unaffected (Fang is not the player) |
 
-**Excluded by construction:** bump, knockback and attack-authored lunge write `entities[]`
-directly and never pass through the locomotion write path, so they can never enter the fact.
-`_facings` is unusable as an input — `_apply_attack` writes it on any accepted attack.
+### Systems with NO health gate at all
+| Seam | Behaviour | Ruling needed |
+|---|---|---|
+| `_record_pressure` / `_pressure_sum` | gated on `_flinch_thresholds.has()`, not health; contributions expire on their own ticks | **Does pressure banked before burrow survive the trip?** Cleared only by `_clear_reaction_state`, which runs on DEATH |
+| knockback, flinch | live inside `_resolve_hit_on_target` | Reachable only if a hit lands, so they inherit whatever the target scan decides — no separate ruling needed |
+| `entities` | pure position store | Position stays readable by anything that asks; being underground does not hide it |
 
-**Ownership consequence, the correction over v1:** Fang's own attack/flinch/leash lifecycle
-must NEVER touch the player's route fact. v1's was observer-internal and cleared on the Fang's
-own events — coherent for "my pursuit attempt", incoherent for "where the player is going".
+### A FIFTH DIMENSION the sim does not control
+`TargetBody` (StaticBody3D, `collision_layer = 2`, the "aimable_targets" layer) is raycast by
+`envoy._raycast_aimable_target` for mouse aim. **It is entirely presentation-owned and
+independent of every sim gate above** — an underground Fang would remain mouse-targetable
+unless its collider is disabled by the driver. Sim has no authority here.
 
-**θ and G are REMOVED.** Finite history handles turns and stops structurally: a turn partially
-cancels inside the window and reads short; a stop stops contributing and empties within 2N.
-The three-state apparatus collapses to two — a valid recent route, or not — and `broken_tick`,
-`last_move_tick` and any recency threshold disappear with it. **N inherits the sentence-test
-seat** (*"changing N changes what the sim says recent travel IS"*) and is the SINGLE
-world-level parameter.
+### THE SEMANTIC MATRIX — do not assume these switch together
+| # | Dimension | Owned by | Today's test | Burrow prior |
+|---|---|---|---|---|
+| 1 | **ALIVE** | sim | `_health > 0` | unchanged — the Fang is alive underground |
+| 2 | **TARGETABLE** | sim, `_is_valid_target` | == alive ∧ hostile | must become FALSE |
+| 3 | **COLLIDABLE / spatially present** | sim, same predicate | == targetable | must become FALSE |
+| 4 | **VISIBLE** | presentation, node-level | node `visible` | must become FALSE |
+| 5 | **AIM-ACQUIRABLE** | presentation, physics layer 2 | `TargetBody` collider | must become FALSE — and nothing in sim does this |
 
-Bucket boundaries are globally tick-aligned, **deliberately not per-actor** — per-actor phase
-would smuggle in the de-correlation that the tie-break ruling already refused.
+**Worked example the user named:** if Fang is Burning before burrow, does Burn continue
+ticking underground? Dimensions 2–5 are all silent on it; the answer lives in
+`_advance_status_ticks`, which asks only whether the actor is ALIVE. So it is a genuine ruling,
+not a consequence.
 
-### 2. HORIZON vs TRUST THRESHOLD — different jobs, never conflate
-- `route_window_ticks` (N) governs **how much recent history shapes the derived direction**.
-  At N=15 that is a 0.5–1.0 s horizon under continuous travel.
-- `cutoff_min_route_distance` governs **how much coherent travel the consumer requires before
-  trusting that direction**. At 1.2 units and Envoy speed 4.0 that is reached in ~0.3 s.
+**Second worked example:** a projectile already in flight simply stops finding a
+non-participating Fang — `_find_earliest_swept_hit` re-filters candidates every tick, so the
+shot continues and expires normally. **This requires no projectile deletion and no source-action
+cancellation**, and the existing code already does the right thing once the predicate excludes it.
 
-These are recorded at BOTH definition sites. Future tuning must not treat one as a proxy for
-the other.
+### Open rulings this audit surfaces (each needs a decision, none are consequences)
+Burn ticking underground · Burn spread underground · banked pressure surviving the trip · an
+attack COMMITTED before burrow (`_ai_attack_fire_tick` — `_cancel_enemy_windup` exists) · death
+during the back-jump · death/status resolution while underground · burrow records in death
+cleanup (`_clear_reaction_state` / `_clear_clamps_targeting`) · AI decision suppression while
+underground.
 
-**KNOWN BOUNDARY, flagged for observation not pre-solved:** magnitude halves at each rollover
-(2N-worth → N-worth). At full speed that is 4.0 → 2.0 units, comfortably above 1.2. Sustained
-travel below ~60% of full speed sits near the threshold and can flicker eligibility across a
-rollover. If play reports "sometimes it just doesn't react", this is the first suspect.
+**No generic phasing framework** unless the audit's rulings demonstrate one is justified. The
+one-predicate finding suggests a narrow participation flag consulted at that single chokepoint
+plus the handful of bypass sites, not a phase system.
 
-### 3. ELIGIBILITY
-Derived only, no stored flag: Fang in ordinary pursuit · `recent_route.length() >=
-cutoff_min_route_distance` · cooldown and action availability.
-`travel_direction = recent_route.normalized()`.
+## RECON 2 — BACKWARD JUMP
+Smallest authoritative representation. `_bump_slides`' shape already expresses authored
+multi-tick displacement with contact clamping and locomotion suppression; the jump is that
+shape with a different origin of authority. Costs to settle: commitment direction (away from
+the player at commit) · authored distance/duration · locomotion suppression · collision during
+the jump · **flinch behaviour**.
 
-Circling/tangential travel MUST remain visible — a tangential route has a sustained recent
-direction at constant radius, exactly what v1's radial detector was structurally blind to.
+**Agency prior, and it must NOT be inherited from bump:** bump is externally imposed and
+deliberately completes through flinch (pinned at `77e23c0`). A backward jump is
+self-propelled, so the prior is **abort on successful flinch, remaining distance forfeited**.
+Also needed: the exact transition tick from jump to underground, and targetability/collidability
+DURING the jump (the audit's dimensions 2–5 may switch at jump start or at burrow entry —
+different reads, and a flinch-abortable jump argues for keeping the Fang fully present until it
+actually goes under).
 
-### 4. MOBILITY DESTINATION AND THE §3 LAYER SPLIT
-`lead_point = player_position + travel_direction * cutoff_lead_distance`, committed at mobility
-commitment. **MOBILITY state, not attack aim.**
+## RECON 3 — EMERGENCE DESTINATION
+| Fork | Cost |
+|---|---|
+| A. Behind authoritative player facing | Requires player facing as truth; `_facings` is contaminated by `_apply_attack` and unusable |
+| B. Behind recent player travel | Would resurrect the recent-route machinery just deleted |
+| **C. Far side relative to Fang's BURROW-ENTRY position** *(lean)* | Needs only two positions already stored; no prediction, no steering, no route fact |
 
-Verified against the law text: §3 rules that *"Selection commits at windup start and is never
-re-evaluated during that windup. Aim is sampled at the fire tick, not at action commitment."*
-That governs action selection and ATTACK aim, so a committed mobility DESTINATION does not
-collide with it. After cutoff ends: fresh ordinary AI decision · Bite independent · Bite obeys
-existing selection and fire-time aim law · **no Bite target carried through cutoff.** The
-mobility action must not `set_equipped_weapon` and must not touch `_ai_attack_fire_tick`.
+```
+relation      = player_position_at_commit - burrow_entry_position
+far_side_dir  = normalize(relation)
+emerge_point  = player_position_at_commit + far_side_dir * authored_emergence_radius
+```
+**Player position and destination COMMIT AT BURROW ENTRY.** No underground retargeting, no
+blind-spot homing. Player movement after the tell may make the emergence less ideal — that is
+intended counterplay.
 
-`cutoff_lead_distance` is an authored constant, NOT a solved intercept — it overshoots when
-Fang is close and undershoots when far. That is the accepted cost of the no-intercept-equations
-fence, stated rather than discovered later.
+**DEGENERATE CASE:** when `length(player_position_at_commit - burrow_entry_position) < epsilon`
+the far-side vector is undefined and must not be chosen by float noise. Deterministic fallbacks
+to cost: canonical world direction · opposite the last valid Fang ordinary-locomotion direction ·
+**opposite the authored backward-jump direction** (cheapest — the jump direction is already
+committed state at that moment, and "came up on the far side from where I leapt" is coherent).
+No RNG, and **no multi-Fang de-correlation through the fallback**.
 
-### 5. TWO-SEGMENT GEOMETRY
-**Segment 1 — CLEARANCE (banked, mechanical).** Directly behind a fleeing player, a straight
-path toward the lead point intersects the player's contact corridor and can terminate on their
-back. The lateral leg must establish a usable outside line before segment 2 runs. Readability
-is a consequence, not the purpose — clearance sets the distance (contact is 0.4 + 0.9 = 1.3, so
-2.0 clears with margin).
+## RECON 4 — EMERGENCE SAFETY
+Burrow/emergence is MOBILITY, not an attack. Binding: no damage merely for emerging · no
+materialising overlapping the Envoy's combat body · contact-safe authored radius · an
+invalid/occupied preferred point resolves deterministically · no silent teleport onto another
+actor · no navigation/pathfinding invented here.
 
-**Segment 2** — straight movement toward the committed lead point.
+**Capability gap found:** `_find_earliest_lunge_contact` clamps MOVEMENT, but emergence is not
+movement — there is no "is this position occupied" query anywhere. `_actors_overlap(a, b)` and
+`_contact_distance(a, b)` exist and can compose into one, so this is assembling existing parts,
+not a new system. If open-arena placement is all v1 can honestly support, scope it there and say
+so; do not future-proof rooms that do not exist.
 
-**SIDE.** Outside the tie, geometry decides: `side = sign(cross(travel_direction,
-fang_position - player_position).y)` — the side Fang is already on, which is the shorter route
-and never crosses the player's line. Lateral direction is `travel_direction` rotated 90° by
-`side`. **Degenerate case explicitly detected:** `abs(cross(...)) < ε`, ε a stated NAMED
-constant, never float noise → **canonical `side = +1`.** No actor parity.
-*Doctrine: determinism requires a tie-break; it does not require de-correlation.* Parity is
-recorded as a candidate de-correlation solution, adoptable only on Q7 observational evidence.
+## RECON 5 — UNDERGROUND REPRESENTATION
+No simulated underground path unless gameplay needs one. V1 candidate state: committed emerge
+destination · authoritative emerge deadline · participation state. No underground steering, no
+homing, no continuous player tracking.
 
-Side and lead point commit ONCE and are never re-evaluated. No homing. **No smoothing of the
-corner before play** — if the behavior works and the corner reads mechanical, smoothing becomes
-an earned presentation refinement.
+## RECON 6 — EMERGENCE / REACQUISITION BEAT
+Breon: *"a little delay as it pops out then it attacks."* **Bank the PURPOSE, not a duration.**
+The beat exists so the player can perceive *"There it is"* — its job is target REACQUISITION,
+and it should permit enough opportunity to locate, turn, reposition/dodge, shield, or apply
+control. **This is categorically different from the scurry and cutoff settle beats**, which had
+no demonstrated player-facing purpose; this one has an explicit informational function. No
+instant emergence damage.
 
-### 6. BLOCKAGE — distinct from flinch abort
-- **Segment 1 blocked → the whole cutoff ENDS.** The clearance objective failed; continuing
-  would run segment 2 into the player's body and clamp on their back.
-- **Segment 2 blocked → displacement ends, the PLANT IS STILL OWED**, cooldown arms.
-- Termination vocabulary stays distinct from FLINCH ABORT vocabulary if events are authored.
+## RECON 7 — POST-EMERGENCE ATTACK
+**No guaranteed Bite inside the burrow action.** Lifecycle: emergence beat completes → fresh
+ordinary AI decision → existing Bite/lunge logic handles what is appropriate now. No attack
+target carried underground; existing selection and fire-time aim law remain authoritative.
+**Burrow earns position; it does not guarantee damage.**
 
-### 7. FACING AND THE PLANT — option B
-Cutoff displacement writes facing consistently with its movement direction. The plant
-introduces **no new stationary-facing capability and no third `_facings` writer.**
+## PRE-REGISTERED BURROW ACTION TEST (selection/frequency OUT OF SCOPE)
+Passes only if Breon finds: the large backward jump clearly announces a special manoeuvre ·
+disappearance reads as intentional burrowing, not arbitrary despawn · emergence around/far-side
+creates meaningful target reacquisition · movement after commitment can degrade or beat the
+chosen emergence position · emergence gives enough time to locate and respond · whatever
+ordinary attack follows feels threatening but fair · the whole behaviour reads as a distinctive
+predator rather than AI cheating.
 
-Intentional consequence: if the player redirects and beats the cutoff, Fang may plant facing
-the abandoned committed destination — which communicates that the mobility was committed.
-Option A (a narrow authoritative facing-write while stationary) remains a FALLBACK ONLY, built
-if play proves the plant needs an explicit face-player action.
+**FALSIFIED if** it reads as random teleportation · unavoidable behind-you damage ·
+disappearing only to waste time · cosmetic movement around the same old engagement problem · or
+a move that does not change what the player pays attention to.
 
-Banked requirement, unchanged: **special mobility must transition readably into the next
-ordinary attack decision.** Bite is never guaranteed after cutoff.
-
-### 8. AGENCY / INTERRUPTION / EXTRACTION
-P16 imposed bump COMPLETES through flinch (pinned at `77e23c0`). Fang self-propelled cutoff
-ABORTS on successful flinch: remainder forfeited, never freeze-and-resume, fresh decision after
-ordinary recovery.
-
-Cutoff is consumer #2 for authored displacement. Rule-of-two deliberately evaluated:
-**NO EXTRACTION.** Revisit only after a second consumer survives and establishes shared laws,
-or duplication causes demonstrable drift.
-
-### 9. PROVISIONAL NUMERIC PACKAGE (all PROVISIONAL/UNVALIDATED, outside the M1 numeric fence)
-
-| Field | Level | Value | Reasoning |
-|---|---|---|---|
-| `route_window_ticks` (N) | **world** | 15 | 0.5–1.0 s recent-history horizon; chord lags true tangent 14°–29° at radius 4. Governs what recent travel IS |
-| `cutoff_min_route_distance` | Fang | 1.2 | ~0.5 s of net travel at speed 4.0 is 2.0 units; 1.2 sits at 60% of the minimum-horizon maximum so eligibility does not flicker at rollover. Governs how much coherent travel Fang TRUSTS |
-| `cutoff_lead_distance` | Fang | 2.5 | ≈ player travel while Fang covers a typical 4-unit engagement at 9.0 u/s |
-| `cutoff_lateral_distance` | Fang | 2.0 | Clearance: exceeds the 1.3 contact distance with margin |
-| `cutoff_step_distance` | Fang | 0.30 | 9.0 u/s, 3× ordinary pursuit — carried from scurry, which was never the falsified part |
-| `cutoff_max_steps` | Fang | 30 | Bounds total commitment at 1.0 s; segment 2's length is geometry-dependent |
-| `cutoff_plant_ticks` | Fang | 12 | 0.4 s — matches the bite windup, a tell length the player already reads |
-| `cutoff_cooldown_ticks` | Fang | 120 | 4.0 s from displacement end |
-
-Note the earlier 2.0 rationale is **corrected**: it corresponds to ~0.5 s of net travel at
-player speed 4.0 and is large relative to close-combat spatial scale. It must NOT be equated
-with Fang's 1.65 engagement radius — a distance the player travels and a radius Fang holds are
-different quantities that merely share units.
-
-### 10. STANDING TESTS
-**Recent-route fact:** straight travel stays valid · diagonal travel stays valid · **sustained
-circling stays valid long-term and tracks recent tangential travel rather than historical
-displacement** (the test that killed the unbounded accumulator) · gradual multi-step turns age
-into the new route with no single tick exceeding any threshold · jitter never establishes a
-strong route · **bump, knockback and melee-lunge displacement never enter the fact** ·
-validity does not flicker at bucket rollover (full-speed travel) · **establish a valid route,
-then stop with zero Move Commands for >2N, and a later READ returns no valid route** (the
-corrected lifecycle) · stop for >2N then resume in a new direction shows no stale-direction
-contamination · identical runs agree.
-
-**Geometry and lifecycle:** side chosen by geometry outside the tie, canonical `+1` at the ε
-tie, two identical sims agree · side and lead point committed once, unchanged under a
-teleporting player · segment 1 blocked ends the whole cutoff · segment 2 blocked still owes the
-plant · flinch during displacement aborts with the remainder forfeited and no freeze/resume ·
-flinch during plant is NOT an abort · Fang's bite/flinch/leash never touch the route fact ·
-determinism across identical runs.
-
-### 11. SUCCESS / FALSIFICATION CRITERION
-**BEFORE:** *"I can maintain my current route while firing and Fang simply follows."*
-**AFTER:** *"If I maintain a predictable route while firing, Fang threatens the space ahead
-strongly enough that I sometimes redirect before it arrives."*
-
-Critical observable: **the player VOLUNTARILY CHANGES ROUTE in response to anticipated cutoff
-pressure.** Unchanged routing = FALSIFIED. Also falsified if the movement merely looks more
-dynamic, if Fang reaches the lead point without influencing route choice, if the redirect
-happens only after collision/contact, or if it reads as random diagonal movement rather than
-anticipatable cutoff.
-
-### FENCES
-No pathfinding framework · no steering framework · no generalized velocity/motion system (this
-is a two-bucket recent-locomotion fact, and the name is load-bearing) · no Ooze/Watcher changes
-· no damaging tackle · no v1 scurry salvage or tuning · no multi-Fang coordination before
-observation · Bite remains a separate attack decision · the human fun verdict remains Breon's
-authority.
+## FENCES
+No generic teleport framework · no generic phasing framework without audit evidence · no
+steering/pathfinding framework · no route-prediction for burrow v1 · no damage on emergence ·
+no guaranteed Bite inside burrow · no continuous underground homing · no Ooze changes · no
+Watcher changes · no multi-Fang coordination · no normal-AI selection or repertoire tuning
+before a burrow-action PASS · the human fun verdict remains Breon's authority.
 
 ### P18 — Idle wander + return-to-post + room territory
 **Idea:** Three related post-disengage behaviors, captured together since they all
