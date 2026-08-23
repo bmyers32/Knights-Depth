@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **BURROW RECON / NO CODE** | Weave, scurry and cutoff all falsified and reverted. Positive datum: the LUNGE. Pivot to burrow/ambush reposition — underground participation audit filed, action-before-selector rule binding |
+| P17 | Per-family engagement identities | **BURROW PRE-CODE SPEC (FROZEN)** | Weave, scurry and cutoff all falsified and reverted. Positive datum: the LUNGE. Burrow/ambush spec frozen: one participation predicate, fixed-candidate emergence with fail-safe timeout, Stage-1 action-only test |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -660,187 +660,179 @@ experiment.
 
 ---
 
-# P17 PIVOT — BURROW / AMBUSH REPOSITION (RECON ONLY, NOTHING IMPLEMENTED)
+# P17 SUCCESSOR — FANG BURROW v1 · **PRE-CODE SPECIFICATION (FROZEN)**
+**APPROVED · NOT IMPLEMENTED at time of writing.** Committed before code so the design is a
+fixed target the implementation is measured against.
 
 Fang performs a LARGE BACKWARD JUMP, disappears into the ground, relocates, POPS UP AROUND the
-player — ideally behind — pauses briefly as it emerges, then attacks. **Pursuit/cutoff geometry
-work is over.** The desired identity is a MODE CHANGE: ordinary engagement → conspicuous
-disengage → temporarily absent from the combat picture → reappear → forced target
-reacquisition → resume combat.
+player — ideally behind — pauses briefly as it emerges, then attacks. The identity is a MODE
+CHANGE: ordinary engagement → conspicuous disengage → temporarily absent from the combat
+picture → reappear → forced target reacquisition → resume combat. The player's problem moves
+from *"How do I maintain my kite route?"* to **"Where is the Fang going to reappear, and how do
+I respond when it does?"**
 
-The player's problem changes from *"How do I maintain my kite route?"* to **"Where is the Fang
-going to reappear, and how do I respond when it does?"**
+Evidence-informed rather than arbitrary: it shares the shape of P17's one positive datum
+(*"I kind of like the lunge"*) — **commit → strong authored movement/state change → readable
+resolution.**
 
-## PROCESS RULE — ACTION BEFORE SELECTOR (binding)
-**Do NOT design normal AI burrow selection first.** The first implementation must have a
-controlled/dev-triggered execution path: (1) prove the authored action fires on demand,
-(2) get a human verdict on the ACTION, (3) only after an action-quality PASS design when normal
-AI chooses it.
+## STAGE 1 CRITERION (frozen before implementation)
+**Burrow passes only if it changes what Breon pays attention to:** the
+backward-jump/disappearance/emergence sequence must make him meaningfully REACQUIRE and RESPOND
+to Fang rather than continue solving the same frontal engagement. **Verdict is Breon's alone.**
 
-## RECON 1 — UNDERGROUND PARTICIPATION AUDIT (the primary structural question)
+FALSIFIED if it reads as random teleportation · unavoidable behind-you damage · disappearing
+only to waste time · cosmetic movement around the same old engagement problem · or a move that
+does not change what the player pays attention to.
 
-**HEADLINE FINDING: there is exactly ONE participation predicate, and FOUR independent systems
-route through it.**
+## STAGING (binding)
+- **Stage 1** — controlled, dev-triggered burrow ONLY: jump → disappear → underground → emerge
+  → reacquisition beat. Tests mobility and reacquisition. Explicitly NOT gate state, since the
+  trigger export must be on. Action-quality verdict.
+- **Stage 2** — only after Stage-1 survival: deliberately orchestrate a normal post-emergence
+  attack to judge "emerge then attack" fairness.
+- **Production burrow stores no Bite/attack target, in either stage.**
 
+PROCESS RULE: *validate an action before validating its selector.* No normal-AI burrow
+selection is designed until Stage 1 passes.
+
+## 1. COMBAT-PARTICIPATION FACT — one predicate (ruled)
 ```
-_is_valid_target(attacker, target):
-    target != attacker  AND  _health[target] > 0  AND  allegiance differs
+_combat_absent[actor_id] = true    # while not participating; absence from the dict = present
 ```
-Consumers, all filtering `_families.keys()` through it:
-1. `_resolve_melee_swing` — melee cone sweep
-2. `_find_earliest_swept_hit` — projectile sweep
-3. `_find_earliest_lunge_contact` — authored-displacement contact clamp (melee lunge AND bump)
-4. `_apply_shield_bump` — bump target selection
+**One line into `_is_valid_target`** covers all four consumers at once — melee sweep, projectile
+sweep, authored-displacement contact clamp, shield-bump targeting — because they all filter
+`_families.keys()` through that single predicate.
 
-So **TARGETABLE and COLLIDABLE are literally the same predicate today**, and `ALIVE == PRESENT
-COMBAT PARTICIPANT` is true *by construction in one function*. That is the good news and the
-whole risk: one chokepoint to extend, and no way to separate the dimensions without splitting
-it deliberately.
+TARGETABLE and COLLIDABLE remain **conceptually distinct dimensions, physically fused for v1**.
+Burrow needs both OFF together, so splitting identical APIs now would be speculative semantic
+surface. **Split when the first real consumer requires different answers.**
 
-Note also: **ordinary locomotion has NO collision at all** (P20 open). "Collidable" in this sim
-means only "obstructs authored displacement", and even that is allegiance-filtered — allies
-never clamp anything.
-
-### Systems that BYPASS the predicate and gate on `_health > 0` directly
-| Seam | Gate | Underground consequence if untouched |
+| Bypass seam | Ruling | Cost |
 |---|---|---|
-| `_advance_status_ticks` | `_status_instances` filtered by health | **A burning Fang keeps burning underground.** Needs an explicit ruling — visibility does not answer it |
-| `_advance_contact_spread` eligible sources | health + `applied_tick` | An underground Fang remains a Burn SOURCE |
-| `_advance_contact_spread` pair scan | `alive_ids` + `_actors_overlap` (body radii) | **An underground Fang at the player's XZ would spread Burn through the floor.** Almost certainly wrong |
-| `_decide_ai_commands` | iterates `_ai_state`, skips dead | An underground Fang still decides and acts unless suppressed |
-| `_apply_attack` | attacker-dead check only | An underground Fang could still resolve an attack |
-| `_find_living_player_id` | allegiance + health | Unaffected (Fang is not the player) |
+| `_advance_status_ticks` | **Burn CONTINUES underground** | zero |
+| `_advance_contact_spread` | **spread does NOT occur** | one filter term |
+| `_cleanup_stale_contact_pairs` | submerge explicitly terminates episodes | one loop at submerge |
+| `_decide_single_ai_command` | ordinary AI suspends | one early return |
+| pressure (`_record_pressure`/`_pressure_sum`) | **ages normally** across the trip | zero |
+| `_apply_attack` | **fail-closed guard**: an absent actor resolves no attack | one guard (belt to the suspended-AI brace) |
 
-### Systems with NO health gate at all
-| Seam | Behaviour | Ruling needed |
+Presentation mirrors authoritative participation: `TargetBody` collider + visibility are driven
+from the sim's events, never independently. That collider is **dimension 5 — the one no sim gate
+can reach** — so the mirror is a cross-layer contract, pinned by test.
+
+## 2. LIFECYCLE
+`jump → underground → (emergence attempts) → reacquisition beat → erase, fresh ordinary decision`
+
+Advances in its **own authoritative tick phase** beside `_advance_bump_slides`. Ordinary AI is
+suspended underground, but **the burrow lifecycle keeps advancing authoritatively.** Death can
+terminate it at any point. Windup committed before burrow is cancelled at submerge via the
+existing `_cancel_enemy_windup`.
+
+**JUMP INTERRUPTION:** ANY successful authoritative FLINCH aborts the self-propelled backward
+jump, whether it arrived by EXPLOIT or PRESSURE — hooked on the successful-flinch test
+(`flinch_reason != ""`), NOT on the deadline-write test used by the two prior mechanics. Those
+differ when a flinch lands on an already-flinched actor. Remaining jump movement is FORFEITED,
+and **Fang never transitions underground from an aborted jump.** Deliberately does not inherit
+P16 bump's continue-through-flinch: bump is imposed motion, this is chosen motion.
+
+## 3. DEATH UNDERGROUND
+Underground the Fang cannot be hit at all, so **health reaching zero underground is reachable by
+exactly one route: Burn DoT**, which continues by ruling. Not a general case.
+
+Behaviour: death resolves immediately · burrow terminates permanently · **no emergence** ·
+normal `died` event · normal death cleanup clears burrow and combat-absence state · no new event
+kind · **no special corpse/emergence presentation invented.**
+
+**Recon'd presentation consequence, recorded not solved:** `arena.gd`'s `died` handler
+`queue_free()`s a node that is already hidden, so a Burn kill on a burrowed Fang is **visually
+silent** — no corpse, no emergence, it simply never returns.
+
+## 4. EMERGENCE — fixed candidate set, retry window, fail-safe death
+```
+relation     = player_position_at_commit - burrow_entry_position
+far_side_dir = normalize(relation)
+emerge_point = player_position_at_commit + far_side_dir * burrow_emergence_radius
+```
+Player position and destination **COMMIT AT BURROW ENTRY.** No underground retargeting, no
+blind-spot homing. Player movement after the tell may make emergence less ideal — intended
+counterplay.
+
+**DEGENERATE CASE** (`length(relation) < ε`, ε a named constant): fall back to **opposite the
+authored backward-jump direction** — already committed state at that moment, and "came up the
+far side from where I leapt" is coherent. No RNG, and no multi-Fang de-correlation through the
+fallback.
+
+**CANDIDATES:** the far-side direction rotated by a FIXED list — **0°, ±60°, ±120°, 180°** —
+tested with the existing contact-distance geometry. No search, no pathfinding. Open-arena scope
+only; rooms do not exist yet.
+
+**RETRY WINDOW:** from the underground deadline, re-check all six candidates **every
+authoritative tick** until `burrow_emergence_retry_ticks` expires. **Fang must never knowingly
+emerge overlapping a collidable actor.**
+
+**TIMEOUT FAIL-SAFE** (a supposedly unreachable open-arena condition, NOT a tuning mechanic):
+if the window expires with no valid candidate — no emergence · **Fang dies authoritatively
+underground** · normal death cleanup clears burrow + combat-absence · normal `died` event · a
+LOUD WARNING naming `burrow_emergence_timeout` as a v1 scope/invariant failure · no special
+corpse presentation. The alternative — leaving a living Fang combat-absent for the rest of the
+encounter — risks an encounter soft-lock, which is strictly worse than a diagnosable death.
+
+## 5. POST-EMERGENCE
+Reacquisition beat completes → **fresh ordinary AI decision** → existing Bite/lunge logic
+handles what is appropriate now. No attack target carried underground; existing selection and
+fire-time aim law remain authoritative. **Burrow earns position; it does not guarantee damage.**
+No damage merely for emerging.
+
+The beat's PURPOSE is banked, not its duration: the player must be able to perceive *"There it
+is"* and then locate, turn, reposition/dodge, shield, or apply control. **Categorically unlike
+the scurry and cutoff settle beats**, which had no demonstrated player-facing purpose; this one
+has an explicit informational function.
+
+## 6. EVENTS — two kinds, both audited
+| Kind | Purpose | Audit decision |
 |---|---|---|
-| `_record_pressure` / `_pressure_sum` | gated on `_flinch_thresholds.has()`, not health; contributions expire on their own ticks | **Does pressure banked before burrow survive the trip?** Cleared only by `_clear_reaction_state`, which runs on DEATH |
-| knockback, flinch | live inside `_resolve_hit_on_target` | Reachable only if a hit lands, so they inherit whatever the target scan decides — no separate ruling needed |
-| `entities` | pure position store | Position stays readable by anything that asks; being underground does not hide it |
+| `burrow_submerged` | presentation hides + disables TargetBody | printed |
+| `burrow_emerged` | presentation shows + re-enables at the new position | printed |
 
-### A FIFTH DIMENSION the sim does not control
-`TargetBody` (StaticBody3D, `collision_layer = 2`, the "aimable_targets" layer) is raycast by
-`envoy._raycast_aimable_target` for mouse aim. **It is entirely presentation-owned and
-independent of every sim gate above** — an underground Fang would remain mouse-targetable
-unless its collider is disabled by the driver. Sim has no authority here.
+`burrow_jump_started` is **dropped** — no presentation consumer yet. Abort and death emit no new
+kinds. **Every new emitted kind must receive a printed-or-explicitly-passed decision in the
+retained event-report completeness audit; no unclassified emitted kinds.**
 
-### THE SEMANTIC MATRIX — do not assume these switch together
-| # | Dimension | Owned by | Today's test | Burrow prior |
-|---|---|---|---|---|
-| 1 | **ALIVE** | sim | `_health > 0` | unchanged — the Fang is alive underground |
-| 2 | **TARGETABLE** | sim, `_is_valid_target` | == alive ∧ hostile | must become FALSE |
-| 3 | **COLLIDABLE / spatially present** | sim, same predicate | == targetable | must become FALSE |
-| 4 | **VISIBLE** | presentation, node-level | node `visible` | must become FALSE |
-| 5 | **AIM-ACQUIRABLE** | presentation, physics layer 2 | `TargetBody` collider | must become FALSE — and nothing in sim does this |
+## 7. PROVISIONAL NUMERIC PACKAGE (all PROVISIONAL/UNVALIDATED, outside the M1 numeric fence)
+| Field | Value | Reasoning |
+|---|---|---|
+| `burrow_jump_distance` | 4.0 | more than a second of ordinary movement, delivered fast — a conspicuous disengage |
+| `burrow_jump_step_distance` | 0.35 | 10.5 u/s over ~12 steps (0.4 s) |
+| `burrow_underground_ticks` | 40 | 1.33 s — long enough to lose track, short enough to avoid "disappearing to waste time" |
+| `burrow_emergence_radius` | 2.0 | just outside bite range (1.65), so engaging still costs a step |
+| `burrow_emergence_retry_ticks` | 60 | 2.0 s fail-safe window; a transient blockage clears well inside it |
+| `burrow_reacquisition_ticks` | 24 | 0.8 s — deliberately longer than the 12-tick bite windup, so response is possible rather than merely visible |
+| `burrow_cooldown_ticks` | 240 | production only; Stage 1 is dev-triggered |
 
-**Worked example the user named:** if Fang is Burning before burrow, does Burn continue
-ticking underground? Dimensions 2–5 are all silent on it; the answer lives in
-`_advance_status_ticks`, which asks only whether the actor is ALIVE. So it is a genuine ruling,
-not a consequence.
+## 8. TESTS
+**Participation:** absent Fang unhittable by melee · unhittable by projectile · in-flight
+projectile continues and expires normally · not bump-targetable · does not clamp authored
+displacement · **Burn continues ticking underground** · **contact spread does not occur** ·
+submerge erases contact pairs and post-emergence spread works · stored pressure ages normally ·
+`_apply_attack` fail-closed for an absent actor.
 
-**Second worked example:** a projectile already in flight simply stops finding a
-non-participating Fang — `_find_earliest_swept_hit` re-filters candidates every tick, so the
-shot continues and expires normally. **This requires no projectile deletion and no source-action
-cancellation**, and the existing code already does the right thing once the predicate excludes it.
+**Lifecycle:** jump aborts on EXPLOIT flinch · aborts on PRESSURE flinch · an aborted jump never
+submerges · remaining jump forfeited · AI suspended underground while the burrow lifecycle keeps
+advancing · **Burn death underground fires `died`, erases burrow, and no emergence follows** ·
+death cleanup clears participation and burrow state.
 
-### Open rulings this audit surfaces (each needs a decision, none are consequences)
-Burn ticking underground · Burn spread underground · banked pressure surviving the trip · an
-attack COMMITTED before burrow (`_ai_attack_fire_tick` — `_cancel_enemy_windup` exists) · death
-during the back-jump · death/status resolution while underground · burrow records in death
-cleanup (`_clear_reaction_state` / `_clear_clamps_targeting`) · AI decision suppression while
-underground.
-
-**No generic phasing framework** unless the audit's rulings demonstrate one is justified. The
-one-predicate finding suggests a narrow participation flag consulted at that single chokepoint
-plus the handful of bypass sites, not a phase system.
-
-## RECON 2 — BACKWARD JUMP
-Smallest authoritative representation. `_bump_slides`' shape already expresses authored
-multi-tick displacement with contact clamping and locomotion suppression; the jump is that
-shape with a different origin of authority. Costs to settle: commitment direction (away from
-the player at commit) · authored distance/duration · locomotion suppression · collision during
-the jump · **flinch behaviour**.
-
-**Agency prior, and it must NOT be inherited from bump:** bump is externally imposed and
-deliberately completes through flinch (pinned at `77e23c0`). A backward jump is
-self-propelled, so the prior is **abort on successful flinch, remaining distance forfeited**.
-Also needed: the exact transition tick from jump to underground, and targetability/collidability
-DURING the jump (the audit's dimensions 2–5 may switch at jump start or at burrow entry —
-different reads, and a flinch-abortable jump argues for keeping the Fang fully present until it
-actually goes under).
-
-## RECON 3 — EMERGENCE DESTINATION
-| Fork | Cost |
-|---|---|
-| A. Behind authoritative player facing | Requires player facing as truth; `_facings` is contaminated by `_apply_attack` and unusable |
-| B. Behind recent player travel | Would resurrect the recent-route machinery just deleted |
-| **C. Far side relative to Fang's BURROW-ENTRY position** *(lean)* | Needs only two positions already stored; no prediction, no steering, no route fact |
-
-```
-relation      = player_position_at_commit - burrow_entry_position
-far_side_dir  = normalize(relation)
-emerge_point  = player_position_at_commit + far_side_dir * authored_emergence_radius
-```
-**Player position and destination COMMIT AT BURROW ENTRY.** No underground retargeting, no
-blind-spot homing. Player movement after the tell may make the emergence less ideal — that is
-intended counterplay.
-
-**DEGENERATE CASE:** when `length(player_position_at_commit - burrow_entry_position) < epsilon`
-the far-side vector is undefined and must not be chosen by float noise. Deterministic fallbacks
-to cost: canonical world direction · opposite the last valid Fang ordinary-locomotion direction ·
-**opposite the authored backward-jump direction** (cheapest — the jump direction is already
-committed state at that moment, and "came up on the far side from where I leapt" is coherent).
-No RNG, and **no multi-Fang de-correlation through the fallback**.
-
-## RECON 4 — EMERGENCE SAFETY
-Burrow/emergence is MOBILITY, not an attack. Binding: no damage merely for emerging · no
-materialising overlapping the Envoy's combat body · contact-safe authored radius · an
-invalid/occupied preferred point resolves deterministically · no silent teleport onto another
-actor · no navigation/pathfinding invented here.
-
-**Capability gap found:** `_find_earliest_lunge_contact` clamps MOVEMENT, but emergence is not
-movement — there is no "is this position occupied" query anywhere. `_actors_overlap(a, b)` and
-`_contact_distance(a, b)` exist and can compose into one, so this is assembling existing parts,
-not a new system. If open-arena placement is all v1 can honestly support, scope it there and say
-so; do not future-proof rooms that do not exist.
-
-## RECON 5 — UNDERGROUND REPRESENTATION
-No simulated underground path unless gameplay needs one. V1 candidate state: committed emerge
-destination · authoritative emerge deadline · participation state. No underground steering, no
-homing, no continuous player tracking.
-
-## RECON 6 — EMERGENCE / REACQUISITION BEAT
-Breon: *"a little delay as it pops out then it attacks."* **Bank the PURPOSE, not a duration.**
-The beat exists so the player can perceive *"There it is"* — its job is target REACQUISITION,
-and it should permit enough opportunity to locate, turn, reposition/dodge, shield, or apply
-control. **This is categorically different from the scurry and cutoff settle beats**, which had
-no demonstrated player-facing purpose; this one has an explicit informational function. No
-instant emergence damage.
-
-## RECON 7 — POST-EMERGENCE ATTACK
-**No guaranteed Bite inside the burrow action.** Lifecycle: emergence beat completes → fresh
-ordinary AI decision → existing Bite/lunge logic handles what is appropriate now. No attack
-target carried underground; existing selection and fire-time aim law remain authoritative.
-**Burrow earns position; it does not guarantee damage.**
-
-## PRE-REGISTERED BURROW ACTION TEST (selection/frequency OUT OF SCOPE)
-Passes only if Breon finds: the large backward jump clearly announces a special manoeuvre ·
-disappearance reads as intentional burrowing, not arbitrary despawn · emergence around/far-side
-creates meaningful target reacquisition · movement after commitment can degrade or beat the
-chosen emergence position · emergence gives enough time to locate and respond · whatever
-ordinary attack follows feels threatening but fair · the whole behaviour reads as a distinctive
-predator rather than AI cheating.
-
-**FALSIFIED if** it reads as random teleportation · unavoidable behind-you damage ·
-disappearing only to waste time · cosmetic movement around the same old engagement problem · or
-a move that does not change what the player pays attention to.
+**Emergence:** far-side geometry · degenerate fallback uses the jump direction · occupied primary
+rotates through the fixed candidate set · **all candidates blocked before deadline → remains
+underground, no overlap** · **a candidate becoming free → deterministic emergence** · **deadline
+expires → no materialization, normal authoritative death, burrow cleared, warning emitted, no
+later emergence** · never overlaps a combat body · determinism across identical runs.
 
 ## FENCES
-No generic teleport framework · no generic phasing framework without audit evidence · no
-steering/pathfinding framework · no route-prediction for burrow v1 · no damage on emergence ·
-no guaranteed Bite inside burrow · no continuous underground homing · no Ooze changes · no
-Watcher changes · no multi-Fang coordination · no normal-AI selection or repertoire tuning
-before a burrow-action PASS · the human fun verdict remains Breon's authority.
+No generic teleport framework · no generic phasing framework · no steering/pathfinding · no
+route prediction · no damage on emergence · no guaranteed Bite inside burrow · no continuous
+underground homing · no Ooze changes · no Watcher changes · no multi-Fang coordination · no
+normal-AI selection or repertoire tuning before a Stage-1 PASS · the human fun verdict remains
+Breon's authority.
 
 ### P18 — Idle wander + return-to-post + room territory
 **Idea:** Three related post-disengage behaviors, captured together since they all
