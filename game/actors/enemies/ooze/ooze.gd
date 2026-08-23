@@ -41,3 +41,17 @@ func clear_telegraph() -> void:
 ## step (§5 M1) once there's real lighting/camera framing to judge it against.
 func get_aim_anchor_position() -> Vector3:
 	return _aim_anchor.global_position
+
+
+## P17 burrow: presentation MIRRORS the sim's authoritative combat participation -- it never
+## decides it. Driven only by burrow_submerged / burrow_emerged Events.
+##
+## Two channels, because they are genuinely separate dimensions and the audit found the second
+## one has NO sim gate at all: `visible` is what the player sees, and TargetBody's collision
+## layer is what the Envoy's mouse-aim raycast can acquire. An absent Fang that stayed
+## aim-acquirable would let the player lock onto a target the sim says is not there.
+##
+## Deferred because participation flips from _report_events, which runs inside the physics step.
+func set_combat_present(present: bool) -> void:
+	visible = present
+	$TargetBody.set_deferred("collision_layer", 2 if present else 0)

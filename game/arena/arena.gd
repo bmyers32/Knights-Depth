@@ -83,10 +83,20 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## stopped attacking." Pure observability, default off.
 @export var debug_show_action_selection: bool = false
 
+## P17 BURROW STAGE 1 -- the controlled execution path. Validate an action before validating its
+## selector: the scurry entangled the two, its detector never recognised representative play, and
+## the response was never cleanly judged. So burrow fires ON DEMAND (raw KEY_B, edge-detected,
+## deliberately NOT an InputMap action -- dev tooling must not become a player system) and earns
+## an AI selector only after a human verdict on the action itself.
+##
+## A Stage-1 session therefore runs with this TRUE and is explicitly NOT the formal gate state.
+@export var debug_burrow_trigger: bool = false
+
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 var _debug_equipped_index: int = 0
 var _debug_tab_held_prev: bool = false
+var _debug_burrow_held_prev: bool = false
 ## action_id -> {"color": Color, "duration_seconds": float}, resolved once at setup from
 ## each action's NaturalWeaponStats so _report_events never touches ContentDB. Keyed by
 ## ACTION since P29 (an actor may have several), and read via the attack_telegraph
@@ -254,6 +264,7 @@ func _physics_process(delta: float) -> void:
 	var commands: Array[Command] = []
 	if _envoy_alive:
 		_process_debug_weapon_cycle()  # stops along with every other Envoy input on death
+		_process_debug_burrow_trigger()
 		commands = envoy.build_commands(sim.tick_count)
 	var events: Array[Event] = sim.tick(commands, delta)
 	envoy.sync_from_sim(sim.entities[envoy.actor_id])
@@ -276,6 +287,22 @@ func _physics_process(delta: float) -> void:
 			var selection: Dictionary = sim.debug_describe_action_selection(actor_id, envoy.actor_id)
 			if not selection.is_empty():
 				print("action selection: ", selection)
+
+
+## STAGE 1 controlled burrow. Edge-detected raw KEY_B, no-op unless debug_burrow_trigger is
+## true (default false). Reports a refused trigger rather than silently doing nothing, so a
+## playtest can tell "it did not fire" from "I did not press it".
+func _process_debug_burrow_trigger() -> void:
+	if not debug_burrow_trigger:
+		return
+	var held: bool = Input.is_physical_key_pressed(KEY_B)
+	if held and not _debug_burrow_held_prev:
+		for actor_id: int in _enemies.keys():
+			if sim.debug_trigger_burrow(actor_id, envoy.actor_id):
+				print("burrow triggered: ", {"actor_id": actor_id})
+			else:
+				print("burrow refused: ", {"actor_id": actor_id})
+	_debug_burrow_held_prev = held
 
 
 ## Dev-only debug input, deliberately NOT an InputMap action — edge-detected raw
@@ -447,6 +474,24 @@ func _report_events(events: Array[Event]) -> void:
 				print("status expired: ", event.payload)
 			"weapon_switched":
 				print("weapon switched: ", event.payload)
+			# P17 burrow. Presentation mirrors the sim's authoritative participation fact; it never
+			# decides it. Both kinds are printed rather than passed -- disappearing and reappearing
+			# are exactly the beats a playtest needs to correlate against what it saw.
+			"burrow_submerged":
+				print("burrow submerged: ", event.payload)
+				var submerged_id: int = event.payload.get("actor_id")
+				if _enemies.has(submerged_id):
+					_enemies[submerged_id].set_combat_present(false)
+					_enemies[submerged_id].clear_telegraph()
+				_windup_cues.erase(submerged_id)
+			"burrow_emerged":
+				print("burrow emerged: ", event.payload)
+				var emerged_id: int = event.payload.get("actor_id")
+				if _enemies.has(emerged_id):
+					# Snap the node to the emergence position BEFORE showing it, so the first
+					# visible frame is already at the new spot rather than a frame at the old one.
+					_enemies[emerged_id].sync_from_sim(event.payload.get("position"))
+					_enemies[emerged_id].set_combat_present(true)
 			# DELIBERATELY NOT REPORTED: emitted for every actor every tick, so printing it
 			# would bury every other line. Recorded here so the next audit does not
 			# re-litigate it.

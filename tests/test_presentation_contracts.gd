@@ -54,7 +54,10 @@ func test_enemy_actors_expose_the_methods_the_arena_driver_calls() -> void:
 		"res://game/actors/enemies/watcher/watcher.gd",
 	]:
 		var exposed: Array = _method_names(load(actor_path))
-		for required in ["sync_from_sim", "show_telegraph", "show_vulnerable_window", "clear_telegraph"]:
+		# set_combat_present is the P17 burrow cross-layer contract: the TargetBody collider is the
+		# one targetability channel no sim gate can reach, so presentation must mirror the sim's
+		# participation fact. Exactly the set_active() failure class, pinned in advance.
+		for required in ["sync_from_sim", "show_telegraph", "show_vulnerable_window", "clear_telegraph", "set_combat_present"]:
 			assert_true(exposed.has(required), "%s must expose %s() -- arena.gd calls it from _report_events" % [actor_path, required])
 
 

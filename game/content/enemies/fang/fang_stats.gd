@@ -106,3 +106,64 @@ extends Resource
 ## this family authors no action requiring it -- the field is actor-level, so it exists on
 ## every family, but it is inert without a consumer action.
 @export var close_frustration_ticks: int = 0
+
+
+## ---------------------------------------------------------------------------------
+## BURROW (P17, frozen spec `199f9d3`) — Fang's ambush reposition. MODE CHANGE, not pursuit.
+##
+## Large backward jump -> disappear underground -> relocate -> emerge on the far side of the
+## player -> a reacquisition beat -> fresh ordinary decision. It deals no damage and stores no
+## attack target: burrow earns POSITION, it never guarantees a Bite.
+##
+## Evidence-informed rather than arbitrary. Three pursuit-geometry experiments were falsified
+## (weave, scurry, cutoff); the one positive human datum P17 produced was "I kind of like the
+## lunge", so this follows the shape that datum shares -- COMMIT -> strong authored movement or
+## state change -> READABLE RESOLUTION -- instead of iterating on chase geometry again.
+##
+## STAGE 1 CRITERION (frozen before implementation): passes only if it changes what the player
+## PAYS ATTENTION TO -- the disappearance/emergence must force meaningful target reacquisition
+## and response, not preserve the same frontal engagement problem.
+##
+## ALL SEVEN VALUES PROVISIONAL/UNVALIDATED, outside the M1 NUMERIC FENCE. 0 = off.
+## ---------------------------------------------------------------------------------
+
+## The conspicuous disengage. 4.0 units is more than a second of ordinary movement delivered in
+## a fraction of one, so the jump reads as a decision rather than as backing away.
+@export var burrow_jump_distance: float = 0.0
+
+## Displacement per tick during the jump. 0.35 = 10.5 u/s, covering the 4.0 in ~12 ticks.
+## ANY successful FLINCH (EXPLOIT or PRESSURE alike) aborts the jump, forfeits the remainder,
+## and Fang never submerges from an aborted jump -- it is self-propelled, so it dies with its
+## agency. This deliberately does NOT inherit the bump's continue-through-flinch rule, which
+## applies to motion IMPOSED on an actor.
+@export var burrow_jump_step_distance: float = 0.0
+
+## Ticks spent absent before the first emergence attempt. 40 = 1.33 s: long enough to genuinely
+## lose track of the Fang, short enough that the pre-registered failure mode "disappearing only
+## to waste time" is not invited.
+@export var burrow_underground_ticks: int = 0
+
+## How far beyond the player the emergence point sits, on the far side from where Fang went
+## under. 2.0 is just outside bite reach (1.65), so arriving still costs a step -- emergence
+## grants position, never a free hit.
+@export var burrow_emergence_radius: float = 0.0
+
+## FAIL-SAFE WINDOW, not a tuning knob. From the underground deadline, all six fixed candidate
+## points are re-checked EVERY authoritative tick for this long. Fang must never knowingly
+## emerge overlapping a collidable actor, so if every candidate stays blocked the whole window,
+## Fang dies underground with a loud warning rather than emerging illegally or staying absent
+## forever -- an encounter soft-lock is strictly worse than a diagnosable death. 60 = 2.0 s,
+## far longer than any transient blockage in an open arena.
+@export var burrow_emergence_retry_ticks: int = 0
+
+## The reacquisition beat: stationary and no attack may start, so the player can perceive
+## "there it is" and then locate, turn, dodge, shield or apply control. 24 = 0.8 s, deliberately
+## longer than the 12-tick bite windup so response is POSSIBLE rather than merely visible.
+##
+## Categorically unlike the scurry and cutoff settle beats, which had no demonstrated
+## player-facing purpose and playtested as dead pauses. This one has an informational job.
+@export var burrow_reacquisition_ticks: int = 0
+
+## Production pacing only -- Stage 1 is dev-triggered and ignores it in practice. 240 = 8.0 s,
+## because a mode change should be an event, not a rhythm.
+@export var burrow_cooldown_ticks: int = 0

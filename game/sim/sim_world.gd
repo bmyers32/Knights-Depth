@@ -154,6 +154,32 @@ var _ai_last_survey_commit: Dictionary = {}   # actor_id -> tick (literal commit
 ## per-tick proximity test reuses band_contains() against the AUTHORED band rather than
 ## re-deriving "close range" from some other number -- one definition, one predicate.
 var _ai_close_band: Dictionary = {}           # actor_id -> band Dictionary
+## Below this separation the far-side direction is undefined and must not be chosen by float
+## noise; the burrow falls back to the opposite of its own authored jump direction.
+const BURROW_FAR_SIDE_EPSILON: float = 0.001
+## The FIXED candidate set for emergence: the far-side direction rotated by these offsets, tried
+## in this order. A fixed list, not a search -- no pathfinding, no navigation, and identical
+## across identical runs by construction.
+const BURROW_CANDIDATE_DEGREES: Array = [0.0, 60.0, -60.0, 120.0, -120.0, 180.0]
+
+## COMBAT PARTICIPATION (P17 burrow). ONE narrow fact, and absence from this dict means
+## PRESENT -- the ordinary case costs nothing to represent.
+##
+## RULED for v1: TARGETABLE and COLLIDABLE stay conceptually distinct dimensions but are
+## PHYSICALLY FUSED here, because burrow needs both OFF together and splitting identical APIs
+## before a consumer needs different answers would be speculative semantic surface. Split when
+## the first real consumer requires them to disagree.
+##
+## Its whole reach is one line in _is_valid_target, which is the single predicate every hit
+## scan, contact clamp and bump target selection already routes through.
+var _combat_absent: Dictionary = {}
+## BURROW lifecycle, advanced authoritatively in its own tick phase while ordinary AI is
+## suspended. One record with a phase field: the lifecycle is strictly linear
+## (jump -> underground -> reacquisition), so parallel dicts would only invite an inconsistent
+## middle.
+var _ai_burrow: Dictionary = {}                # actor_id -> resolved config
+var _burrow: Dictionary = {}                   # actor_id -> live lifecycle record
+var _next_burrow_tick: Dictionary = {}         # actor_id -> int, production pacing
 var _ai_attack_start_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 var _ai_attack_fire_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 ## FLINCH reaction layer (batch, GAME-RULES §3). FLINCHED is an actor/AI REACTION
@@ -457,7 +483,7 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 ## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
 ## than preferred -> approach, closer than minimum -> back away, inside the band ->
 ## stop. Since P29 they govern MOVEMENT ONLY; attack eligibility is the action band.
-func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0) -> void:
+func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0, burrow_jump_distance: float = 0.0, burrow_jump_step_distance: float = 0.0, burrow_underground_ticks: int = 0, burrow_emergence_radius: float = 0.0, burrow_emergence_retry_ticks: int = 0, burrow_reacquisition_ticks: int = 0, burrow_cooldown_ticks: int = 0) -> void:
 	# The TERMINAL band is the one with the largest max_range — the only band that
 	# includes its own maximum (see _select_action). Derived, never authored, so content
 	# cannot accidentally declare two terminals or none.
@@ -505,6 +531,7 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 	for action in resolved:
 		if bool(action.requires_close_frustration) and not _ai_close_band.has(actor_id):
 			push_warning("register_ai [actor %d]: '%s' requires close frustration but the repertoire has no ungated close action -- it could never become selectable" % [actor_id, action.id])
+	_register_burrow(actor_id, burrow_jump_distance, burrow_jump_step_distance, burrow_underground_ticks, burrow_emergence_radius, burrow_emergence_retry_ticks, burrow_reacquisition_ticks, burrow_cooldown_ticks)
 	# Equip the LOWEST-BAND action so _equipped_weapon is never empty for an AI actor.
 	# Chosen from authored band values, not from array position — element 0 is not
 	# privileged. Commitment overwrites this at every windup start, so the initial pick
@@ -633,6 +660,10 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# sliding actor's own move Command (issued below) is suppressed this same tick, and
 	# so the AI re-evaluates fresh geometry the tick after the slide completes.
 	_advance_bump_slides()
+	# BURROW advances here for the same reason as the bump slide -- before AI decisions, so a
+	# displacing actor's own move Command is suppressed this same tick. Ordinary AI is
+	# SUSPENDED underground, but this lifecycle is authoritative and keeps advancing.
+	events.append_array(_advance_burrow())
 	# AI (Phase D step 8 Phase 4) decides enemy Commands here, right before dispatch,
 	# so its output (move/attack) feeds through the exact same handlers below a
 	# player's own Commands would — no separate resolution path. It also appends any
@@ -653,6 +684,10 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 			# locomotion for its duration, the same rule the lunge follows. This
 			# suppresses MOVEMENT ONLY -- the actor's attack timeline is untouched.
 			if _bump_slides.has(command.actor_id):
+				continue
+			# A burrowing actor does not steer: authored displacement replaces locomotion, and an
+			# underground actor has no locomotion to express at all.
+			if _burrow.has(command.actor_id):
 				continue
 			events.append(_apply_move(command, dt))
 		elif command.kind == "attack":
@@ -711,6 +746,12 @@ func _is_valid_target(attacker_id: int, target_id: int) -> bool:
 		return false
 	if _health.get(target_id, 0.0) <= 0.0:
 		return false
+	# P17 burrow: a combat-ABSENT actor is alive but not participating. This one line reaches
+	# every hit scan, the authored-displacement contact clamp and bump target selection at once,
+	# because all four already funnel through this predicate -- which is exactly why the burrow
+	# audit found ALIVE == PRESENT PARTICIPANT true by construction in a single function.
+	if _combat_absent.has(target_id):
+		return false
 	return _allegiance.get(target_id, &"enemy") != _allegiance.get(attacker_id, &"enemy")
 
 
@@ -727,6 +768,13 @@ func _apply_attack(command: Command) -> Array[Event]:
 	var actor_id: int = command.actor_id
 	if _health.get(actor_id, 1.0) <= 0.0:
 		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "attacker_dead"})]
+
+	# FAIL-CLOSED (P17 burrow): an absent actor resolves no attack. Ordinary AI is already
+	# suspended underground and any committed windup is cancelled at submerge, so this is a belt
+	# to that brace -- but "unreachable by construction" is exactly the claim that stops being
+	# true when a second consumer arrives, and the guard costs one line.
+	if _combat_absent.has(actor_id):
+		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "combat_absent"})]
 
 	var weapon_id: String = _equipped_weapon.get(actor_id, "")
 	var is_phased_melee: bool = _melee_combo_profiles.has(weapon_id)
@@ -1483,6 +1531,11 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	if cancels_windup:
 		events.append(Event.new(tick_count, "windup_interrupted", {"actor_id": target_id, "attacker_id": attacker_id}))
 	if flinch_reason != "":
+		# ANY successful authoritative flinch aborts a self-propelled backward jump, EXPLOIT or
+		# PRESSURE alike. Hooked on the ROUTE being selected rather than on the deadline write
+		# used by earlier mechanics: those differ when a flinch lands on an already-flinched
+		# actor, and the ruling is any successful flinch.
+		_abort_burrow_jump(target_id)
 		# Re-flinch: a qualifying flinch on an ALREADY-flinched enemy fully registers
 		# damage/pressure/knockback/interruption but does NOT extend the deadline.
 		# EVIDENCE BOUNDARY (2026-08-13 re-gate) -- deliberately split, do not collapse:
@@ -1526,6 +1579,7 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 
 	if remaining_health <= 0.0:
 		events.append(Event.new(tick_count, "died", {"actor_id": target_id}))
+		_end_burrow(target_id)
 		events.append_array(_clear_attack_input_state(target_id))
 		_clear_clamps_targeting(target_id)
 		_clear_reaction_state(target_id)
@@ -2056,6 +2110,13 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 	#   3. Only if neither of the above applies does movement preference run:
 	#      closer than minimum -> retreat, farther than preferred -> approach,
 	#      inside the band (here only because the weapon is on cooldown) -> hold.
+	# BURROW suspends ordinary AI for its whole lifecycle -- jump, underground and the
+	# reacquisition beat alike. The actor yields NO Command, which is what makes "cannot attack
+	# during the beat" structural rather than a second gate someone can forget. The lifecycle
+	# itself keeps advancing in its own authoritative phase.
+	if _burrow.has(actor_id):
+		return []
+
 	if _ai_attack_fire_tick.has(actor_id):
 		return _decide_attack_commands(actor_id, "", player_id, events)
 
@@ -2079,6 +2140,230 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		return [Command.new(tick_count, actor_id, "move", {"direction": to_player.normalized()})]
 
 	return []  # in band, weapon on cooldown: hold position and wait
+
+
+## BURROW registration. ABSENCE IS OFF: a record exists only when content authors a usable
+## burrow, so every other family and every hand-registered test enemy is untouched.
+func _register_burrow(actor_id: int, jump_distance: float, jump_step_distance: float, underground_ticks: int, emergence_radius: float, emergence_retry_ticks: int, reacquisition_ticks: int, cooldown_ticks: int) -> void:
+	_ai_burrow.erase(actor_id)
+	if is_zero_approx(jump_distance) and is_zero_approx(jump_step_distance) and underground_ticks <= 0:
+		return  # not authored at all
+	if jump_distance <= 0.0 or jump_step_distance <= 0.0 or underground_ticks <= 0:
+		push_warning("register_ai [actor %d]: burrow partially authored (jump %.2f, step %.2f, underground %d) -- treated as OFF" % [actor_id, jump_distance, jump_step_distance, underground_ticks])
+		return
+	if emergence_retry_ticks <= 0:
+		push_warning("register_ai [actor %d]: burrow authored with no emergence retry window -- a single blocked tick would kill the actor by fail-safe" % actor_id)
+	_ai_burrow[actor_id] = {
+		"jump_distance": jump_distance,
+		"jump_step_distance": jump_step_distance,
+		"underground_ticks": underground_ticks,
+		"emergence_radius": emergence_radius,
+		"emergence_retry_ticks": emergence_retry_ticks,
+		"reacquisition_ticks": reacquisition_ticks,
+		"cooldown_ticks": cooldown_ticks,
+	}
+
+
+## STAGE 1 CONTROLLED TRIGGER (spec: validate an action before validating its selector). The
+## scurry entangled action quality with selector quality -- its detector never recognised
+## representative play, so the response was never cleanly judged. Burrow therefore fires ON
+## DEMAND first and earns a selector only after a human verdict on the action itself.
+##
+## Returns false when the actor cannot start one, so a driver can report a no-op rather than
+## silently doing nothing.
+func debug_trigger_burrow(actor_id: int, player_id: int) -> bool:
+	if not _ai_burrow.has(actor_id) or _burrow.has(actor_id):
+		return false
+	if _health.get(actor_id, 0.0) <= 0.0 or _combat_absent.has(actor_id):
+		return false
+	_begin_burrow_jump(actor_id, player_id)
+	return true
+
+
+## JUMP: a large backward disengage, away from the player at commitment. Self-propelled, so it
+## is abortable (see _abort_burrow_jump) -- unlike the P16 bump, which is imposed on its target
+## and completes through a flinch.
+func _begin_burrow_jump(actor_id: int, player_id: int) -> void:
+	var config: Dictionary = _ai_burrow[actor_id]
+	var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var away: Vector3 = _normalize_horizontal(position - entities.get(player_id, Vector3.ZERO), _facings.get(actor_id, Vector3(0.0, 0.0, -1.0)))
+	_burrow[actor_id] = {
+		"phase": "jump",
+		"direction": away,
+		# Counted in STEPS, never against an end tick: the record is created during one tick's
+		# decisions and first advances on the NEXT, which makes tick arithmetic off-by-one bait.
+		"steps_remaining": maxi(1, ceili(float(config.jump_distance) / float(config.jump_step_distance))),
+		"step_distance": float(config.jump_step_distance),
+		"entry_position": position,
+		"player_at_commit": entities.get(player_id, Vector3.ZERO),
+		"deadline_tick": 0,
+		"retry_deadline_tick": 0,
+	}
+
+
+## ANY successful authoritative FLINCH aborts the jump -- EXPLOIT or PRESSURE alike. Remaining
+## movement is FORFEITED, and Fang NEVER transitions underground from an aborted jump: the
+## submerge is a consequence of completing the disengage, not of having attempted it.
+##
+## Reachable only during the above-ground jump. Once underground the actor is unhittable, so
+## there is no flinch to arrive.
+func _abort_burrow_jump(actor_id: int) -> void:
+	if not _burrow.has(actor_id) or String(_burrow[actor_id].phase) != "jump":
+		return
+	_end_burrow(actor_id)
+
+
+## Clears every trace of a burrow. Called on completion, on abort, and from BOTH death sites.
+##
+## Called from both death sites deliberately: the hit-death path runs _clear_reaction_state but
+## the STATUS-death path does not (a pre-existing asymmetry, left alone here rather than
+## "fixed" as a side effect). Hanging burrow cleanup off that function alone would leak
+## combat-absence on a Burn death -- leaving a living-then-dead Fang absent forever, which is
+## precisely the soft-lock the emergence fail-safe exists to prevent.
+func _end_burrow(actor_id: int) -> void:
+	var config: Dictionary = _ai_burrow.get(actor_id, {})
+	if _burrow.has(actor_id):
+		_next_burrow_tick[actor_id] = tick_count + int(config.get("cooldown_ticks", 0))
+	_burrow.erase(actor_id)
+	_combat_absent.erase(actor_id)
+
+
+## SUBMERGE. Everything that must stop being true about a present body happens here, once.
+func _submerge(actor_id: int) -> Array[Event]:
+	var burrow: Dictionary = _burrow[actor_id]
+	var config: Dictionary = _ai_burrow[actor_id]
+	_combat_absent[actor_id] = true
+	# A windup committed before the burrow must not fire from underground.
+	_cancel_enemy_windup(actor_id)
+	# CONTACT EPISODES terminate at submerge (ruled), explicitly rather than by relying on the
+	# stale-pair sweep noticing the overlap ended. Emergence therefore begins a FRESH episode,
+	# so stale pair state can never suppress a valid post-emergence spread.
+	for pair_key in _contact_transmitted_pairs.keys():
+		if pair_key.x == actor_id or pair_key.y == actor_id:
+			_contact_transmitted_pairs.erase(pair_key)
+	burrow.phase = "underground"
+	burrow.deadline_tick = tick_count + int(config.underground_ticks)
+	burrow.retry_deadline_tick = burrow.deadline_tick + int(config.emergence_retry_ticks)
+	return [Event.new(tick_count, "burrow_submerged", {"actor_id": actor_id})]
+
+
+## The FIXED candidate set, in fixed order. Returns the first point that overlaps nothing, or an
+## empty Dictionary when every candidate is blocked this tick.
+##
+## Fork C geometry: the far side of the player, relative to where Fang went under. Committed at
+## burrow entry -- no underground retargeting and no blind-spot homing, so player movement after
+## the tell can legitimately degrade the emergence. That is the counterplay.
+func _find_burrow_emergence_point(actor_id: int) -> Dictionary:
+	var burrow: Dictionary = _burrow[actor_id]
+	var config: Dictionary = _ai_burrow[actor_id]
+	var player_at_commit: Vector3 = burrow.player_at_commit
+	var relation: Vector3 = player_at_commit - burrow.entry_position
+	relation.y = 0.0
+	var far_side: Vector3 = Vector3.ZERO
+	if relation.length() < BURROW_FAR_SIDE_EPSILON:
+		# DEGENERATE: Fang went under essentially on top of the player, so "far side" has no
+		# meaning. Fall back to the opposite of the authored jump direction -- already committed
+		# state at this moment, deterministic, and "came up the far side from where I leapt" is
+		# coherent. No RNG, and no per-actor variation that would smuggle in de-correlation.
+		far_side = -burrow.direction
+	else:
+		far_side = relation.normalized()
+	for degrees in BURROW_CANDIDATE_DEGREES:
+		var candidate: Vector3 = player_at_commit + far_side.rotated(Vector3.UP, deg_to_rad(degrees)) * float(config.emergence_radius)
+		candidate.y = 0.0
+		if not _burrow_point_is_occupied(actor_id, candidate):
+			return {"position": candidate, "degrees": degrees}
+	return {}
+
+
+## Occupancy for a point rather than for a movement. _find_earliest_lunge_contact clamps MOTION;
+## emergence is not motion, so this composes the same authoritative geometry (_contact_distance)
+## into the missing question. Every living actor counts, allies included: materialising inside
+## an ally is as illegal as materialising inside the Envoy.
+func _burrow_point_is_occupied(actor_id: int, point: Vector3) -> bool:
+	for other_id in _families.keys():
+		if other_id == actor_id or _health.get(other_id, 0.0) <= 0.0 or _combat_absent.has(other_id):
+			continue
+		var offset: Vector3 = entities.get(other_id, Vector3.ZERO) - point
+		offset.y = 0.0
+		if offset.length() < _contact_distance(actor_id, other_id):
+			return true
+	return false
+
+
+## THE AUTHORITATIVE BURROW PHASE. Advances even though ordinary AI is suspended -- suspension
+## withholds an actor's own Commands, it does not pause a committed lifecycle.
+func _advance_burrow() -> Array[Event]:
+	var events: Array[Event] = []
+	var actor_ids: Array = _burrow.keys()
+	actor_ids.sort()
+	for actor_id in actor_ids:
+		if _health.get(actor_id, 0.0) <= 0.0:
+			continue  # death cleanup owns this actor now
+		var burrow: Dictionary = _burrow[actor_id]
+		match String(burrow.phase):
+			"jump":
+				var start: Vector3 = entities.get(actor_id, Vector3.ZERO)
+				var end: Vector3 = start + burrow.direction * float(burrow.step_distance)
+				var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
+				entities[actor_id] = contact.entry_position if not contact.is_empty() else end
+				_facings[actor_id] = burrow.direction
+				burrow.steps_remaining = int(burrow.steps_remaining) - 1
+				if not contact.is_empty() or int(burrow.steps_remaining) <= 0:
+					events.append_array(_submerge(actor_id))
+			"underground":
+				if tick_count < int(burrow.deadline_tick):
+					continue
+				var spot: Dictionary = _find_burrow_emergence_point(actor_id)
+				if spot.is_empty():
+					if tick_count < int(burrow.retry_deadline_tick):
+						continue  # stay under; never emerge overlapping a collidable actor
+					events.append_array(_resolve_burrow_emergence_timeout(actor_id))
+					continue
+				entities[actor_id] = spot.position
+				_facings[actor_id] = _normalize_horizontal(burrow.player_at_commit - spot.position, burrow.direction)
+				_combat_absent.erase(actor_id)
+				burrow.phase = "reacquisition"
+				burrow.deadline_tick = tick_count + int(_ai_burrow[actor_id].reacquisition_ticks)
+				events.append(Event.new(tick_count, "burrow_emerged", {"actor_id": actor_id, "position": spot.position}))
+			"reacquisition":
+				if tick_count >= int(burrow.deadline_tick):
+					_end_burrow(actor_id)
+	return events
+
+
+## FAIL-SAFE, for a condition that should be unreachable in an open arena. It is NOT a tuning
+## mechanic: the alternative to a diagnosable death is a living Fang left combat-absent for the
+## rest of the encounter, which is an encounter soft-lock and strictly worse.
+##
+## Mirrors the hit-death cleanup, including _clear_reaction_state, so this path is never the
+## odd one out.
+func _resolve_burrow_emergence_timeout(actor_id: int) -> Array[Event]:
+	push_warning("burrow_emergence_timeout [actor %d]: every emergence candidate stayed blocked for the full retry window -- this is a v1 SCOPE/INVARIANT FAILURE (open-arena placement only), not a tuning outcome. The actor dies underground rather than emerging illegally or remaining absent." % actor_id)
+	_health[actor_id] = 0.0
+	_end_burrow(actor_id)
+	var events: Array[Event] = [Event.new(tick_count, "died", {"actor_id": actor_id})]
+	events.append_array(_clear_attack_input_state(actor_id))
+	_clear_clamps_targeting(actor_id)
+	_clear_reaction_state(actor_id)
+	_status_instances.erase(actor_id)
+	return events
+
+
+## Read-only burrow snapshot (AGENTS.md Invariable #2: every mechanic must be observable).
+func debug_describe_burrow(actor_id: int) -> Dictionary:
+	if not _ai_burrow.has(actor_id):
+		return {"actor_id": actor_id, "authored": false}
+	if not _burrow.has(actor_id):
+		return {"actor_id": actor_id, "authored": true, "phase": "idle", "combat_absent": _combat_absent.has(actor_id)}
+	var burrow: Dictionary = _burrow[actor_id]
+	return {
+		"actor_id": actor_id,
+		"authored": true,
+		"phase": String(burrow.phase),
+		"combat_absent": _combat_absent.has(actor_id),
+		"ticks_to_deadline": maxi(0, int(burrow.deadline_tick) - tick_count),
+	}
 
 
 ## P29 ACTION SELECTOR — the AI's one new power, and deliberately its only one: "which of
@@ -2408,7 +2693,11 @@ func _advance_contact_spread() -> Array[Event]:
 		if instance.applied_tick < tick_count and _health.get(actor_id, 0.0) > 0.0:
 			eligible_sources[actor_id] = {"status_id": instance.id, "remaining_duration": instance.ticks_remaining}
 
-	var alive_ids: Array = _families.keys().filter(func(id): return _health.get(id, 0.0) > 0.0)
+	# RULED (P17 burrow): Burn CONTINUES ticking underground -- _advance_status_ticks is
+	# deliberately untouched -- but contact SPREAD does not occur, because a body that is not
+	# spatially present cannot be in contact with anything. Visibility does not answer either
+	# question; both are explicit rulings.
+	var alive_ids: Array = _families.keys().filter(func(id): return _health.get(id, 0.0) > 0.0 and not _combat_absent.has(id))
 	alive_ids.sort()  # determinism -- dictionary iteration order must never leak into event order
 
 	var collected: Array = []  # {recipient, source, status_id, pair_key}
@@ -2485,6 +2774,12 @@ func _advance_status_ticks() -> Array[Event]:
 			events.append(Event.new(tick_count, "status_resolved", {"actor_id": actor_id, "status_id": entry.status_id, "damage": entry.outcome.damage}))
 			if remaining_health <= 0.0:
 				events.append(Event.new(tick_count, "died", {"actor_id": actor_id}))
+				# Burn is the ONLY route to death underground (an absent actor cannot be hit), so
+				# this site must clear burrow state too. It does NOT call _clear_reaction_state --
+				# a pre-existing asymmetry with the hit-death path, deliberately left alone rather
+				# than changed as a side effect -- which is exactly why burrow cleanup lives in its
+				# own helper called from both sites instead of riding on that function.
+				_end_burrow(actor_id)
 				_status_instances.erase(actor_id)
 				events.append_array(_clear_attack_input_state(actor_id))
 				_clear_clamps_targeting(actor_id)

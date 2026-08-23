@@ -4,3 +4,10 @@
 
 [resource]
 script = ExtResource("1_stats")
+burrow_jump_distance = 4.0
+burrow_jump_step_distance = 0.35
+burrow_underground_ticks = 40
+burrow_emergence_radius = 2.0
+burrow_emergence_retry_ticks = 60
+burrow_reacquisition_ticks = 24
+burrow_cooldown_ticks = 240

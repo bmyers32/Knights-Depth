@@ -98,3 +98,15 @@ extends Resource
 ## is answered within a few seconds. **Candidate fallback: 60 (2.0 s)** if the replay finds
 ## 90 too passive. The replay decides; do not pre-emptively split the difference.
 @export var close_frustration_ticks: int = 90
+
+
+## BURROW (P17) — inert here. The seven fields are ACTOR-level, so they exist on every family,
+## but 0 leaves this family byte-identical to pre-burrow. Canonical explanation in FangStats.
+## P17 changes ONE family so a verdict can be attributed to the Fang alone.
+@export var burrow_jump_distance: float = 0.0
+@export var burrow_jump_step_distance: float = 0.0
+@export var burrow_underground_ticks: int = 0
+@export var burrow_emergence_radius: float = 0.0
+@export var burrow_emergence_retry_ticks: int = 0
+@export var burrow_reacquisition_ticks: int = 0
+@export var burrow_cooldown_ticks: int = 0
