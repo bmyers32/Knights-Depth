@@ -4,10 +4,3 @@
 
 [resource]
 script = ExtResource("1_stats")
-cutoff_min_route_distance = 1.2
-cutoff_lead_distance = 2.5
-cutoff_lateral_distance = 2.0
-cutoff_step_distance = 0.3
-cutoff_max_steps = 30
-cutoff_plant_ticks = 12
-cutoff_cooldown_ticks = 120

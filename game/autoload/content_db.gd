@@ -32,7 +32,6 @@ const _REGISTRY: Dictionary = {
 	"combat": {
 		"damage_matrix": preload("res://game/content/combat/damage_matrix.tres"),
 		"flinch_tuning": preload("res://game/content/combat/flinch_tuning.tres"),
-		"route_tuning": preload("res://game/content/combat/route_tuning.tres"),
 	},
 	"shield": {
 		"default": preload("res://game/content/shield/shield_stats.tres"),

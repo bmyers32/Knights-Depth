@@ -154,39 +154,6 @@ var _ai_last_survey_commit: Dictionary = {}   # actor_id -> tick (literal commit
 ## per-tick proximity test reuses band_contains() against the AUTHORED band rather than
 ## re-deriving "close range" from some other number -- one definition, one predicate.
 var _ai_close_band: Dictionary = {}           # actor_id -> band Dictionary
-## The named epsilon of the cutoff's side choice. A tie is DETECTED, never left to float
-## noise: below this the Fang sits on the player's travel line and geometry cannot prefer a
-## side, so the canonical side applies and two identical sims agree by construction.
-const CUTOFF_SIDE_EPSILON: float = 0.001
-## Canonical side at a true geometric tie. Determinism requires a tie-break; it does NOT
-## require de-correlation -- actor-parity fan-out would silently pre-solve the deferred
-## multi-Fang question by embedding pack behaviour before any observation justified it.
-const CUTOFF_CANONICAL_SIDE: int = 1
-
-## THE TWO-BUCKET RECENT-LOCOMOTION FACT (P17 spec `d070b63`) — the sim's FIRST
-## OBSERVED-ACTOR fact. Every other AI record is observer-internal, keyed by the observer and
-## describing its own experience; this one describes the OBSERVED actor and any observer may
-## read it. One truth, so observers cannot hold contradictory copies.
-##
-## It is a RECENT-LOCOMOTION fact, not a motion/velocity system, and the name is load-bearing:
-## only accepted ordinary locomotion enters it. Bump, knockback and attack-authored lunge write
-## `entities[]` directly and never pass through _apply_move, so they are excluded BY
-## CONSTRUCTION rather than by a filter someone must remember.
-var _route_window_ticks: int = 0               # 0 = fact disabled entirely (no world config set)
-var _route: Dictionary = {}                    # actor_id -> {previous_vector, current_vector, current_bucket}
-## CUTOFF (P17) — Fang's route-contesting mobility commitment. Separate dicts, separate
-## lifetimes: config present only for a family that authors one, `_cutoff_active` only during
-## displacement, the plant deadline in absolute tick space, the cooldown armed at END of
-## displacement in every path.
-##
-## COPY-FIRST (ruled, re-evaluated at consumer #2): this deliberately mirrors `_bump_slides`'
-## shape rather than sharing an abstraction with it. They agree on mechanical ingredients and
-## diverge on the law that matters most -- an imposed bump COMPLETES through flinch, a chosen
-## cutoff ABORTS. NO EXTRACTION.
-var _ai_cutoff: Dictionary = {}                # actor_id -> resolved config
-var _cutoff_active: Dictionary = {}            # actor_id -> {phase, direction, lead_point, steps_*}
-var _cutoff_plant_until_tick: Dictionary = {}  # actor_id -> int, absolute deadline
-var _next_cutoff_tick: Dictionary = {}         # actor_id -> int, armed at end of displacement
 var _ai_attack_start_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 var _ai_attack_fire_tick: Dictionary = {}  # actor_id -> int, present only while winding up
 ## FLINCH reaction layer (batch, GAME-RULES §3). FLINCHED is an actor/AI REACTION
@@ -413,16 +380,6 @@ func set_weapon_loadout(actor_id: int, weapon_ids: Array[StringName]) -> void:
 ## Installs the shared flinch clocks (FlinchTuning resource) — same driver-unpacks-a
 ## resource boundary as set_damage_matrix. Shared deliberately: per-enemy variation is
 ## expressed by flinch_threshold (register_flinch_profile), never by private clocks.
-## The ONE world-level parameter of the route fact (RouteTuning). Absent/zero disables the
-## fact completely, which is what keeps every pre-P17 fixture byte-identical.
-func set_route_window(route_window_ticks: int) -> void:
-	if route_window_ticks < 0:
-		push_warning("set_route_window: negative window %d treated as OFF" % route_window_ticks)
-		route_window_ticks = 0
-	_route_window_ticks = route_window_ticks
-	_route.clear()
-
-
 func set_flinch_tuning(pressure_window_ticks: int, flinch_recovery_ticks: int) -> void:
 	_pressure_window_ticks = pressure_window_ticks
 	_flinch_recovery_ticks = flinch_recovery_ticks
@@ -500,7 +457,7 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 ## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
 ## than preferred -> approach, closer than minimum -> back away, inside the band ->
 ## stop. Since P29 they govern MOVEMENT ONLY; attack eligibility is the action band.
-func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0, cutoff_min_route_distance: float = 0.0, cutoff_lead_distance: float = 0.0, cutoff_lateral_distance: float = 0.0, cutoff_step_distance: float = 0.0, cutoff_max_steps: int = 0, cutoff_plant_ticks: int = 0, cutoff_cooldown_ticks: int = 0) -> void:
+func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0) -> void:
 	# The TERMINAL band is the one with the largest max_range — the only band that
 	# includes its own maximum (see _select_action). Derived, never authored, so content
 	# cannot accidentally declare two terminals or none.
@@ -548,7 +505,6 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 	for action in resolved:
 		if bool(action.requires_close_frustration) and not _ai_close_band.has(actor_id):
 			push_warning("register_ai [actor %d]: '%s' requires close frustration but the repertoire has no ungated close action -- it could never become selectable" % [actor_id, action.id])
-	_register_cutoff(actor_id, cutoff_min_route_distance, cutoff_lead_distance, cutoff_lateral_distance, cutoff_step_distance, cutoff_max_steps, cutoff_plant_ticks, cutoff_cooldown_ticks)
 	# Equip the LOWEST-BAND action so _equipped_weapon is never empty for an AI actor.
 	# Chosen from authored band values, not from array position — element 0 is not
 	# privileged. Commitment overwrites this at every windup start, so the initial pick
@@ -556,34 +512,6 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 	# that one action, identical to pre-P29.
 	if lowest_band_id != "":
 		set_equipped_weapon(actor_id, lowest_band_id)
-
-
-## CUTOFF registration. ABSENCE IS OFF: a record exists only when content authors a usable
-## commitment, so every other family and every hand-registered test enemy takes the untouched
-## pursuit path with no zero-valued mechanic evaluated on its behalf.
-##
-## The three load-bearing values must all be positive together -- a zero step distance, zero
-## budget or zero trust threshold each describe an action that cannot happen, and any of them
-## alone would still arm a cooldown and a plant for no movement. Warned, never silently
-## accepted, matching every other content lint here.
-func _register_cutoff(actor_id: int, min_route_distance: float, lead_distance: float, lateral_distance: float, step_distance: float, max_steps: int, plant_ticks: int, cooldown_ticks: int) -> void:
-	_ai_cutoff.erase(actor_id)
-	if is_zero_approx(step_distance) and max_steps <= 0 and is_zero_approx(min_route_distance):
-		return  # not authored at all -- the ordinary case for every family but Fang
-	if step_distance <= 0.0 or max_steps <= 0 or min_route_distance <= 0.0:
-		push_warning("register_ai [actor %d]: cutoff partially authored (step %.3f, max_steps %d, min_route %.3f) -- an action that cannot move is treated as OFF" % [actor_id, step_distance, max_steps, min_route_distance])
-		return
-	if lateral_distance <= 0.0:
-		push_warning("register_ai [actor %d]: cutoff authored with no lateral distance -- segment 1 exists for CLEARANCE, and without it segment 2 runs into the player's contact corridor" % actor_id)
-	_ai_cutoff[actor_id] = {
-		"min_route_distance": min_route_distance,
-		"lead_distance": lead_distance,
-		"lateral_distance": lateral_distance,
-		"step_distance": step_distance,
-		"max_steps": max_steps,
-		"plant_ticks": plant_ticks,
-		"cooldown_ticks": cooldown_ticks,
-	}
 
 
 ## Registration-time enforcement of GAME-RULES §3's "authored bands may not overlap"
@@ -705,10 +633,6 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# sliding actor's own move Command (issued below) is suppressed this same tick, and
 	# so the AI re-evaluates fresh geometry the tick after the slide completes.
 	_advance_bump_slides()
-	# CUTOFF displacement advances in the same window and for the same reasons as the bump
-	# slide: before AI decisions, so a displacing actor's own move Command is suppressed this
-	# same tick, and so the AI re-evaluates fresh geometry the tick after it ends.
-	events.append_array(_advance_cutoff_displacement())
 	# AI (Phase D step 8 Phase 4) decides enemy Commands here, right before dispatch,
 	# so its output (move/attack) feeds through the exact same handlers below a
 	# player's own Commands would — no separate resolution path. It also appends any
@@ -729,12 +653,6 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 			# locomotion for its duration, the same rule the lunge follows. This
 			# suppresses MOVEMENT ONLY -- the actor's attack timeline is untouched.
 			if _bump_slides.has(command.actor_id):
-				continue
-			# A cutting-off actor does not steer either -- authored displacement replaces
-			# locomotion for its duration. Enforced here as well as at the decision site so the
-			# law holds for any future non-AI consumer, exactly as bump's does. It also keeps
-			# cutoff displacement out of the recent-locomotion fact, since _apply_move never runs.
-			if _cutoff_active.has(command.actor_id):
 				continue
 			events.append(_apply_move(command, dt))
 		elif command.kind == "attack":
@@ -774,66 +692,9 @@ func _apply_move(command: Command, dt: float) -> Event:
 	if direction.length_squared() > 0.0:
 		direction = direction.normalized()
 		_facings[command.actor_id] = direction
-	var locomotion: Vector3 = direction * speed * dt
-	position += locomotion
+	position += direction * speed * dt
 	entities[command.actor_id] = position
-	# THE ONLY WRITE into the recent-locomotion fact, and the reason forced displacement can
-	# never contaminate it: bump slides, knockback and the melee lunge all write entities[]
-	# directly and never reach this function.
-	_record_locomotion(command.actor_id, locomotion)
 	return Event.new(tick_count, "moved", {"actor_id": command.actor_id, "position": position})
-
-
-## Bucket normalization — run on WRITE **and** on READ, keyed by floor(tick / N).
-##
-## RUNNING IT ON READ IS THE LOAD-BEARING PART. An earlier draft rolled buckets only from the
-## write path; a stopped actor issues no locomotion writes, so its buckets would never roll and
-## stale route evidence would survive indefinitely -- while the design claimed it aged out
-## within 2N. Bucketing on AUTHORITATIVE TIME and normalizing at both ends makes ageing a
-## function of time rather than of write activity.
-##
-## Lazy normalization during a read has repo precedent: _pressure_sum prunes expired
-## contributions as it reads, for the same reason -- there is no per-tick scan anywhere.
-##
-## Bucket boundaries are GLOBALLY tick-aligned, deliberately not per-actor: a per-actor phase
-## would smuggle in the de-correlation the cutoff's tie-break ruling already refused.
-func _normalize_route_buckets(actor_id: int) -> Dictionary:
-	var bucket: int = tick_count / _route_window_ticks  # integer division; tick_count is never negative
-	var route: Dictionary = _route.get(actor_id, {})
-	if route.is_empty():
-		route = {"previous_vector": Vector3.ZERO, "current_vector": Vector3.ZERO, "current_bucket": bucket}
-		_route[actor_id] = route
-		return route
-	var advanced: int = bucket - int(route.current_bucket)
-	if advanced == 1:
-		route.previous_vector = route.current_vector
-		route.current_vector = Vector3.ZERO
-	elif advanced >= 2:
-		# Two or more buckets without a write: every tick of the horizon has aged out.
-		route.previous_vector = Vector3.ZERO
-		route.current_vector = Vector3.ZERO
-	route.current_bucket = bucket
-	return route
-
-
-func _record_locomotion(actor_id: int, locomotion: Vector3) -> void:
-	if _route_window_ticks <= 0 or locomotion.length_squared() <= 0.0:
-		return
-	_normalize_route_buckets(actor_id).current_vector += locomotion
-
-
-## PUBLIC READ of an actor's recent ordinary-locomotion route: the vector sum of the completed
-## bucket plus the one in progress, so it always covers between N and 2N ticks. Returns ZERO
-## when the fact is disabled or the actor has never moved.
-##
-## Consumers derive EVERYTHING from this -- direction, magnitude, whether a route exists at
-## all. Nothing is stored: there is no `is_retreating` and no route state machine, because both
-## would be derivable facts that can desync from the vector they summarize.
-func recent_route(actor_id: int) -> Vector3:
-	if _route_window_ticks <= 0 or not _route.has(actor_id):
-		return Vector3.ZERO
-	var route: Dictionary = _normalize_route_buckets(actor_id)
-	return route.previous_vector + route.current_vector
 
 
 ## Ally-filtering (locked defect fix, pre-gate pass): same-allegiance actors are
@@ -1002,11 +863,6 @@ func _clear_reaction_state(actor_id: int) -> void:
 	_parry_exposed_until_tick.erase(actor_id)
 	_parry_exposed_damage_multiplier.erase(actor_id)
 	_bump_slides.erase(actor_id)
-	# The recent-locomotion fact dies with the body: it describes a living actor's
-	# ongoing travel, never a ledger that outlives it or transfers to a respawn.
-	_route.erase(actor_id)
-	_cutoff_active.erase(actor_id)
-	_cutoff_plant_until_tick.erase(actor_id)
 
 
 func _clear_clamps_targeting(dead_actor_id: int) -> void:
@@ -1641,11 +1497,6 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		var already_flinched: bool = tick_count < int(_flinched_until_tick.get(target_id, -1))
 		if not already_flinched:
 			_flinched_until_tick[target_id] = tick_count + _flinch_recovery_ticks
-			# P17: a cutoff is SELF-PROPELLED, so a successful flinch aborts it. Gated on a
-			# genuine flinch WRITE, not merely on a pressure-capable hit, so chip damage during
-			# an already-running recovery cannot re-abort something already gone. A plant in
-			# progress is deliberately untouched -- the movement is complete by then.
-			events.append_array(_abort_cutoff(target_id))
 		events.append(Event.new(tick_count, "flinched", {
 			"actor_id": target_id,
 			"attacker_id": attacker_id,
@@ -2186,7 +2037,6 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		_ai_state[actor_id] = "idle"
 		_ai_attack_start_tick.erase(actor_id)
 		_ai_attack_fire_tick.erase(actor_id)
-		_cutoff_plant_until_tick.erase(actor_id)
 		return []
 
 	# Attack priority over movement (locked defect fix): preferred/minimum distance
@@ -2206,20 +2056,6 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 	#   3. Only if neither of the above applies does movement preference run:
 	#      closer than minimum -> retreat, farther than preferred -> approach,
 	#      inside the band (here only because the weapon is on cooldown) -> hold.
-	# CUTOFF, both phases, before any ordinary decision. Displacement is advanced by its own
-	# tick phase and the plant is a stationary commitment -- in both cases this actor yields NO
-	# Command, which makes "cannot start an attack during the plant" structural rather than a
-	# second gate someone can forget.
-	#
-	# The plant deadline lives in ABSOLUTE tick space, exactly like the attack cooldown, so a
-	# flinch landing during the plant runs alongside it and the effective delay is
-	# max(recovery, plant) rather than their sum. A flinch during the plant is therefore NOT an
-	# abort, emits nothing, and never borrows abort vocabulary -- the movement is already done.
-	if _cutoff_active.has(actor_id):
-		return []
-	if tick_count < int(_cutoff_plant_until_tick.get(actor_id, -1)):
-		return []
-
 	if _ai_attack_fire_tick.has(actor_id):
 		return _decide_attack_commands(actor_id, "", player_id, events)
 
@@ -2240,200 +2076,9 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		return [Command.new(tick_count, actor_id, "move", {"direction": -to_player.normalized()})]
 
 	if distance_to_player > tuning.preferred_attack_distance:
-		# P17: the ONLY site a cutoff may commit. Pursuit is the only state in which "the player
-		# has committed to a route worth getting in front of" is a meaningful claim.
-		if _should_cutoff(actor_id, player_id):
-			events.append(_commit_cutoff(actor_id, player_id))
-			return []
 		return [Command.new(tick_count, actor_id, "move", {"direction": to_player.normalized()})]
 
 	return []  # in band, weapon on cooldown: hold position and wait
-
-
-## CUTOFF ELIGIBILITY. Everything derived, nothing stored: there is no `is_retreating` and no
-## route state machine. The consumer asks the sim-owned fact for the player's recent ordinary
-## locomotion and decides whether there is enough of it to trust.
-##
-## Note what this sees that scurry v1 could not. v1 measured RADIAL separation, so a diagonal
-## kite (radial speed 2.83 against Fang's 3.00) and a circling kite (radial speed 0.00) both
-## read as the Fang successfully closing -- it never armed. A recent-locomotion vector is
-## direction-agnostic: tangential travel at constant radius is a route like any other.
-func _should_cutoff(actor_id: int, player_id: int) -> bool:
-	var config: Dictionary = _ai_cutoff.get(actor_id, {})
-	if config.is_empty():
-		return false
-	if tick_count < int(_next_cutoff_tick.get(actor_id, 0)):
-		return false
-	return recent_route(player_id).length() >= float(config.min_route_distance)
-
-
-## COMMITMENT. Direction, side and destination are captured ONCE and never re-evaluated.
-## Re-aiming would be homing: it would delete the counterplay the mechanic exists to create and
-## contradict the word commitment. The player's answer is to leave the committed line.
-func _commit_cutoff(actor_id: int, player_id: int) -> Event:
-	var config: Dictionary = _ai_cutoff[actor_id]
-	var player_position: Vector3 = entities.get(player_id, Vector3.ZERO)
-	var travel_direction: Vector3 = _normalize_horizontal(recent_route(player_id), Vector3(0.0, 0.0, -1.0))
-
-	# SIDE: the one Fang is already on. `perpendicular` is a canonical left/right axis of the
-	# player's travel; the signed projection of Fang's offset onto it says which side that is.
-	# Equivalent to the spec's sign(cross(travel, offset).y), written as a dot so the tie test
-	# and the chosen axis are the same expression rather than two that must agree.
-	var perpendicular: Vector3 = travel_direction.rotated(Vector3.UP, PI * 0.5)
-	var offset: Vector3 = entities.get(actor_id, Vector3.ZERO) - player_position
-	offset.y = 0.0
-	var lateral_offset: float = offset.dot(perpendicular)
-	var side: int = CUTOFF_CANONICAL_SIDE if absf(lateral_offset) < CUTOFF_SIDE_EPSILON else signi(lateral_offset)
-
-	var lead_point: Vector3 = player_position + travel_direction * float(config.lead_distance)
-	lead_point.y = 0.0
-	_cutoff_active[actor_id] = {
-		# SEGMENT 1 exists for CLEARANCE, not decoration: from directly behind a fleeing player a
-		# straight run at the lead point crosses the contact corridor and terminates on their
-		# back. This leg buys a usable outside line first.
-		"phase": "clearance",
-		"direction": perpendicular * side,
-		"lead_point": lead_point,
-		"step_distance": float(config.step_distance),
-		# Counted in STEPS, never against an end tick -- this record is created during one tick's
-		# decisions and first advances on the NEXT, which makes tick arithmetic off-by-one bait.
-		"steps_remaining": ceili(float(config.lateral_distance) / float(config.step_distance)),
-		"steps_taken": 0,
-	}
-	return Event.new(tick_count, "cutoff_committed", {
-		"actor_id": actor_id, "side": side, "lead_point": lead_point,
-	})
-
-
-## Displacement, deliberately shaped like _advance_bump_slides (COPY-FIRST): per-tick step,
-## contact clamp through the one shared sweep. What differs is everything downstream of a
-## block, because the two segments have different jobs.
-##
-## FACING (option B, ruled): displacement writes facing along its OWN motion. No stationary
-## facing writer exists, so a Fang beaten to the punch plants facing the abandoned committed
-## destination -- which communicates that the mobility was committed.
-func _advance_cutoff_displacement() -> Array[Event]:
-	var events: Array[Event] = []
-	var actor_ids: Array = _cutoff_active.keys()
-	actor_ids.sort()
-	for actor_id in actor_ids:
-		var cutoff: Dictionary = _cutoff_active[actor_id]
-		var start: Vector3 = entities.get(actor_id, Vector3.ZERO)
-		var end: Vector3 = start + cutoff.direction * float(cutoff.step_distance)
-		var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
-		if not contact.is_empty():
-			entities[actor_id] = contact.entry_position
-			_facings[actor_id] = cutoff.direction
-			if String(cutoff.phase) == "clearance":
-				# The CLEARANCE OBJECTIVE FAILED. Continuing would run segment 2 into the body
-				# this leg existed to get around, ending the "cutoff" on the player's back. The
-				# action's precondition is unmet, so no plant is owed.
-				events.append(_end_cutoff_displacement(actor_id, "clearance_blocked", false))
-			else:
-				# Segment 2 simply ran into something. The movement is over, but the plant is the
-				# commitment's PRICE, not a reward for arriving.
-				events.append(_end_cutoff_displacement(actor_id, "blocked", true))
-			continue
-
-		entities[actor_id] = end
-		_facings[actor_id] = cutoff.direction
-		cutoff.steps_taken = int(cutoff.steps_taken) + 1
-		cutoff.steps_remaining = int(cutoff.steps_remaining) - 1
-
-		if int(cutoff.steps_taken) >= int(_ai_cutoff[actor_id].max_steps):
-			events.append(_end_cutoff_displacement(actor_id, "budget_spent", true))
-			continue
-		if int(cutoff.steps_remaining) > 0:
-			continue
-		if String(cutoff.phase) == "clearance":
-			events.append_array(_begin_cutoff_lead_leg(actor_id, cutoff))
-		else:
-			events.append(_end_cutoff_displacement(actor_id, "completed", true))
-	return events
-
-
-## Segment 1 -> segment 2. The lead point was committed at commitment time and is NOT
-## recomputed here; only the heading toward it is resolved, once, from where the clearance leg
-## actually finished.
-func _begin_cutoff_lead_leg(actor_id: int, cutoff: Dictionary) -> Array[Event]:
-	var config: Dictionary = _ai_cutoff[actor_id]
-	var to_lead: Vector3 = cutoff.lead_point - entities.get(actor_id, Vector3.ZERO)
-	to_lead.y = 0.0
-	var remaining_budget: int = int(config.max_steps) - int(cutoff.steps_taken)
-	var needed: int = ceili(to_lead.length() / float(cutoff.step_distance))
-	if to_lead.length() < 0.0001 or remaining_budget <= 0 or needed <= 0:
-		# Already standing on the committed destination, or the budget is spent. Nothing left to
-		# travel, but the plant is still owed -- the commitment happened.
-		return [_end_cutoff_displacement(actor_id, "completed", true)]
-	cutoff.phase = "lead"
-	cutoff.direction = to_lead.normalized()
-	cutoff.steps_remaining = mini(needed, remaining_budget)
-	return []
-
-
-## THE ONE EXIT from displacement, used by every path. Cooldown arms HERE, not at plant end --
-## that single choice is what lets a flinch abort and an ordinary completion share one rule, and
-## it stops an abort being farmed into an immediate retry.
-##
-## `reason` deliberately distinguishes blockage from abort: "clearance_blocked", "blocked",
-## "completed" and "budget_spent" are TERMINATIONS. A flinch produces a separate event kind
-## entirely (see _abort_cutoff), because the two are different claims about why the action
-## stopped and must never share vocabulary.
-func _end_cutoff_displacement(actor_id: int, reason: String, owes_plant: bool) -> Event:
-	var config: Dictionary = _ai_cutoff.get(actor_id, {})
-	_cutoff_active.erase(actor_id)
-	_next_cutoff_tick[actor_id] = tick_count + int(config.get("cooldown_ticks", 0))
-	if owes_plant:
-		_cutoff_plant_until_tick[actor_id] = tick_count + int(config.get("plant_ticks", 0))
-	return Event.new(tick_count, "cutoff_ended", {"actor_id": actor_id, "reason": reason})
-
-
-## ABORT -- reachable ONLY during active displacement (agency principle, ruled 2026-08-19):
-## flinch suppresses AGENCY, and a cutoff is agency, so a flinch kills it. Remaining authored
-## movement is FORFEITED, never frozen and resumed, matching the melee lunge clamp's forfeiture
-## law. No plant: flinch recovery replaces it rather than stacking two punish windows.
-##
-## The mirror of the bump ruling at _advance_bump_slides: motion IMPOSED on an actor completes
-## through a flinch, motion the actor CHOSE does not. Same principle, opposite answer, and the
-## difference is whose agency the motion expresses.
-##
-## A plant in progress is NOT aborted here and must never be: by then the movement is complete,
-## ordinary reaction rules apply, and none of this vocabulary belongs to it.
-func _abort_cutoff(actor_id: int) -> Array[Event]:
-	if not _cutoff_active.has(actor_id):
-		return []
-	var config: Dictionary = _ai_cutoff.get(actor_id, {})
-	_cutoff_active.erase(actor_id)
-	_next_cutoff_tick[actor_id] = tick_count + int(config.get("cooldown_ticks", 0))
-	return [Event.new(tick_count, "cutoff_aborted", {"actor_id": actor_id})]
-
-
-## Read-only cutoff snapshot (AGENTS.md Invariable #2: every mechanic must be observable).
-##
-## Reports the DERIVED route magnitude, not just the phase, deliberately: the spec records a
-## known boundary where sustained travel below ~60% of full speed sits near the trust floor and
-## can flicker across a bucket rollover. If play produces the pre-registered symptom -- "it
-## sometimes just doesn't react" -- the flicker is visible in this log rather than re-diagnosed
-## from scratch. Observability, not mitigation.
-func debug_describe_cutoff(actor_id: int, player_id: int) -> Dictionary:
-	if not _ai_cutoff.has(actor_id):
-		return {"actor_id": actor_id, "authored": false}
-	var config: Dictionary = _ai_cutoff[actor_id]
-	var route: Vector3 = recent_route(player_id)
-	var phase: String = "idle"
-	if _cutoff_active.has(actor_id):
-		phase = String(_cutoff_active[actor_id].phase)
-	elif tick_count < int(_cutoff_plant_until_tick.get(actor_id, -1)):
-		phase = "plant"
-	return {
-		"actor_id": actor_id,
-		"authored": true,
-		"phase": phase,
-		"route_magnitude": route.length(),
-		"route_needs": float(config.min_route_distance),
-		"route_eligible": route.length() >= float(config.min_route_distance),
-		"cooldown_remaining": maxi(0, int(_next_cutoff_tick.get(actor_id, 0)) - tick_count),
-	}
 
 
 ## P29 ACTION SELECTOR — the AI's one new power, and deliberately its only one: "which of

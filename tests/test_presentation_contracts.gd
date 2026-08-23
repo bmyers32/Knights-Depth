@@ -112,27 +112,6 @@ func test_arena_drives_the_enemy_windup_cues_without_crashing() -> void:
 	assert_false(arena.get_node("Watcher").get_node("TelegraphIndicator").visible, "an interrupted windup must stop advertising its window")
 
 
-## P17 cutoff reporting, added after its events were found MISSING from _report_events --
-## the third time a mechanic shipped unobservable through this block (scurry was the second).
-## The absence itself was misread as "the mechanic never fired", so this pins the traversal.
-##
-## It asserts the arena does not merely tolerate the kinds but RECOGNISES them: the catch-all
-## added alongside warns on any kind with no case, so an unhandled cutoff event would now be
-## noisy rather than silent. Driving all three through the real block proves the path exists.
-func test_arena_reports_every_cutoff_event_kind_without_crashing() -> void:
-	var arena: Node3D = _instantiate_arena()
-	var fang_id: int = arena.get_node("Fang").actor_id
-	for kind in ["cutoff_committed", "cutoff_ended", "cutoff_aborted"]:
-		var payload: Dictionary = {"actor_id": fang_id}
-		if kind == "cutoff_committed":
-			payload["side"] = 1
-			payload["lead_point"] = Vector3(1, 0, 1)
-		elif kind == "cutoff_ended":
-			payload["reason"] = "completed"
-		arena._report_events([Event.new(0, kind, payload)] as Array[Event])
-	pass_test("all three cutoff kinds traverse _report_events")
-
-
 func _is_event_kind_token(candidate: String) -> bool:
 	for index in candidate.length():
 		var character: String = candidate[index]

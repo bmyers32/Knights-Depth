@@ -83,12 +83,6 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## stopped attacking." Pure observability, default off.
 @export var debug_show_action_selection: bool = false
 
-## P17 cutoff snapshot: phase, and the DERIVED route magnitude against what Fang requires.
-## The magnitude is the point -- the spec records a rollover boundary where slow sustained
-## travel can flicker at the trust floor, so if play reports "it sometimes just doesn't react"
-## the cause is visible here rather than re-diagnosed. Pure observability, default off.
-@export var debug_show_cutoff: bool = false
-
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 var _debug_equipped_index: int = 0
@@ -167,8 +161,6 @@ func _ready() -> void:
 
 	var flinch: FlinchTuning = ContentDB.get_resource(&"combat", &"flinch_tuning")
 	sim.set_flinch_tuning(flinch.pressure_window_ticks, flinch.flinch_recovery_ticks)
-	var route: RouteTuning = ContentDB.get_resource(&"combat", &"route_tuning")
-	sim.set_route_window(route.route_window_ticks)
 
 	var burn: BurnStats = ContentDB.get_resource(&"status", &"burn")
 	sim.register_status(burn.status_id, burn.damage_per_tick, burn.tick_interval_ticks, burn.duration_ticks)
@@ -237,18 +229,20 @@ func _register_enemies() -> void:
 func _physics_process(delta: float) -> void:
 	# RESTART (R) is available AT ANY TIME, not only from the run-end screen. Iterating on a
 	# mechanic means running the same encounter over and over, and closing/relaunching the whole
-	# app between attempts is the single biggest tax on that loop.
+	# app between attempts is the single biggest tax on that loop. Durable playtest UX, retained
+	# independently of any mechanic that prompted it.
 	#
 	# A full scene reload rather than a bespoke "respawn the enemies" path, deliberately: dead
 	# enemies have had their nodes queue_free()d, so a partial reset would have to re-instantiate
-	# them and then re-derive which sim state is encounter-scoped versus run-scoped. The reload
-	# already resets every actor to its authored spawn with a fresh SimWorld, and it is the same
-	# code path the run-end restart has always used -- no second notion of "reset" to keep in
-	# sync with the first.
+	# them and then re-derive which sim state is encounter-scoped versus run-scoped -- a SECOND
+	# notion of "reset" to keep in sync with the first. The reload already restores every actor
+	# to its authored spawn with a fresh SimWorld, through the same code path run-end restart has
+	# always used.
 	#
 	# Scope note: this widens WHEN an existing player-facing action is reachable. It is not
 	# instrumentation and not behind a debug_* export, because an export defaulting to off would
-	# be unavailable in exactly the gate-state build a playtest runs.
+	# be unavailable in exactly the gate-state build a playtest runs. Combat behaviour is
+	# untouched.
 	if Input.is_action_just_pressed("restart"):
 		get_tree().reload_current_scene()
 		return
@@ -282,12 +276,6 @@ func _physics_process(delta: float) -> void:
 			var selection: Dictionary = sim.debug_describe_action_selection(actor_id, envoy.actor_id)
 			if not selection.is_empty():
 				print("action selection: ", selection)
-
-	if debug_show_cutoff:
-		for actor_id: int in _enemies.keys():
-			var cutoff: Dictionary = sim.debug_describe_cutoff(actor_id, envoy.actor_id)
-			if bool(cutoff.get("authored", false)):
-				print("cutoff: ", cutoff)
 
 
 ## Dev-only debug input, deliberately NOT an InputMap action — edge-detected raw
@@ -459,25 +447,15 @@ func _report_events(events: Array[Event]) -> void:
 				print("status expired: ", event.payload)
 			"weapon_switched":
 				print("weapon switched: ", event.payload)
-			# P17 cutoff, reported like any other action beat. Payload only -- no derived
-			# route magnitude and no per-tick spam; the richer diagnostic view stays behind
-			# debug_show_cutoff, reserved for a diagnosis run if a playtest is ambiguous.
-			"cutoff_committed":
-				print("cutoff committed: ", event.payload)
-			"cutoff_ended":
-				print("cutoff ended: ", event.payload)
-			"cutoff_aborted":
-				print("cutoff aborted: ", event.payload)
 			# DELIBERATELY NOT REPORTED: emitted for every actor every tick, so printing it
 			# would bury every other line. Recorded here so the next audit does not
 			# re-litigate it.
 			"moved":
 				pass
 			_:
-				# THE GAP CLASS, closed mechanically. Twice now a mechanic's events were
-				# absent from this block and their absence was misread as the mechanic not
-				# firing -- once for the scurry, once for the cutoff. An unhandled kind is
-				# now loud at the moment it first appears, so a new mechanic cannot ship
-				# silently unobservable. Every kind above is either printed or explicitly
-				# passed; there is no third category.
+				# THE GAP CLASS, closed mechanically. Twice a mechanic's events were absent from
+				# this block and their absence was misread as the mechanic not firing -- once for
+				# the scurry, once for the cutoff. An unhandled kind is now loud the moment it
+				# first appears, so a new mechanic cannot ship silently unobservable. Every kind
+				# above is either printed or explicitly passed; there is no third category.
 				push_warning("arena: event kind '%s' has no reporting case -- add one, or add an explicit pass documenting why it is not reported" % event.kind)
