@@ -409,6 +409,50 @@ func test_emergence_never_overlaps_a_combat_body() -> void:
 			"emergence must never materialise inside actor %d's combat body" % other_id)
 
 
+## MULTIPLE STARTING POSITIONS. The far-side vector is derived, not hardcoded to an axis, so
+## the geometry has to hold from anywhere around the player.
+func test_emergence_geometry_holds_from_many_starting_positions() -> void:
+	for angle_degrees in [0.0, 37.0, 90.0, 143.0, 180.0, 251.0, 310.0]:
+		sim = SimWorld.new()
+		_register_player(Vector3.ZERO)
+		var offset: Vector3 = Vector3(0, 0, -4.0).rotated(Vector3.UP, deg_to_rad(angle_degrees))
+		_register_fang(offset)
+		_burrow_to_underground()
+		_tick(UNDERGROUND + 2)
+		var emerged: Vector3 = sim.entities[ENEMY_ID]
+		assert_almost_eq(emerged.length(), RADIUS, 0.01,
+			"at %.0f deg: emerges at the authored radius from the player" % angle_degrees)
+		# Far side means the emergence sits OPPOSITE the entry direction, across the player.
+		assert_lt(emerged.normalized().dot(offset.normalized()), -0.9,
+			"at %.0f deg: emerges on the FAR side from where it went under" % angle_degrees)
+
+
+## The destination COMMITS at burrow entry. A player who keeps moving after the tell should be
+## able to degrade it -- that is the intended counterplay, not a bug.
+func test_player_movement_after_submerge_degrades_the_emergence() -> void:
+	_register_player(Vector3.ZERO)
+	_register_fang(Vector3(0, 0, -4.0))
+	_burrow_to_underground()
+	var committed_point: Vector3 = Vector3(0, 0, RADIUS)
+	# Walk away while it is underground.
+	for i in UNDERGROUND + 2:
+		sim.tick([Command.new(sim.tick_count, PLAYER_ID, "move", {"direction": Vector3(1, 0, 0)})], DT)
+	assert_almost_eq(sim.entities[ENEMY_ID].distance_to(committed_point), 0.0, 0.05,
+		"it surfaces at the COMMITTED point, not where the player now is -- no underground retargeting")
+	assert_gt(sim.entities[ENEMY_ID].distance_to(sim.entities[PLAYER_ID]), RADIUS,
+		"so moving after the tell genuinely degrades the ambush")
+
+
+## A player who holds still gets the ideal case, which is what makes the degradation meaningful.
+func test_a_stationary_player_gets_the_intended_close_emergence() -> void:
+	_register_player(Vector3.ZERO)
+	_register_fang(Vector3(0, 0, -4.0))
+	_burrow_to_underground()
+	_tick(UNDERGROUND + 2)
+	assert_almost_eq(sim.entities[ENEMY_ID].distance_to(sim.entities[PLAYER_ID]), RADIUS, 0.01,
+		"standing still leaves the Fang exactly at its authored ambush radius")
+
+
 func test_identical_runs_produce_identical_burrows() -> void:
 	var runs: Array = []
 	for run in 2:

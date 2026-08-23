@@ -131,6 +131,63 @@ func test_arena_fang_can_actually_burrow_from_shipped_content() -> void:
 		"and the lifecycle must actually be running afterwards")
 
 
+## THE FULL STAGE-1 CHAIN, driven through the REAL arena's real _physics_process: trigger ->
+## sim lifecycle -> Events -> _report_events -> presentation mirror. Everything a live session
+## exercises except the literal keypress.
+##
+## This exists because a Stage-1 session produced no burrow lines and nothing could distinguish
+## "not pressed" from "silently broken". Boot-clean is not interact-clean, and neither is
+## unit-clean: test_burrow.gd proves the SIM, and proved nothing about whether the driver
+## mirrors it onto the node the player actually looks at.
+func test_arena_drives_the_full_burrow_lifecycle_and_mirrors_participation() -> void:
+	var arena: Node3D = _instantiate_arena()
+	var fang: Node3D = arena.get_node("Fang")
+	var fang_id: int = fang.actor_id
+	var target_body: Node = fang.get_node("TargetBody")
+	assert_true(fang.visible, "sanity: present before burrowing")
+	assert_eq(target_body.collision_layer, 2, "sanity: aim-acquirable before burrowing")
+
+	assert_true(arena.sim.debug_trigger_burrow(fang_id, arena.envoy.actor_id), "the trigger must fire")
+
+	var submerged: bool = false
+	for i in 40:
+		arena._physics_process(1.0 / 30.0)
+		if arena.sim._combat_absent.has(fang_id):
+			submerged = true
+			break
+	assert_true(submerged, "the jump must reach SUBMERGED through the real driver")
+	await get_tree().process_frame  # set_deferred flush
+	assert_false(fang.visible, "presentation must HIDE an absent actor")
+	assert_eq(target_body.collision_layer, 0,
+		"and must disable the aim collider -- dimension 5, the targetability channel no sim gate can reach")
+
+	var emerged: bool = false
+	for i in 200:
+		arena._physics_process(1.0 / 30.0)
+		if not arena.sim._combat_absent.has(fang_id):
+			emerged = true
+			break
+	assert_true(emerged, "it must emerge")
+	await get_tree().process_frame
+	assert_true(fang.visible, "presentation must SHOW it again")
+	assert_eq(target_body.collision_layer, 2, "and restore aim acquisition")
+
+
+## The shipped .tres values must be the ones the sim actually runs on. A unit test using
+## synthetic numbers cannot catch an authored value that never reached registration.
+func test_shipped_fang_burrow_values_reach_the_sim() -> void:
+	var arena: Node3D = _instantiate_arena()
+	var fang_id: int = arena.get_node("Fang").actor_id
+	var stats: Resource = ContentDB.get_resource(&"enemy", &"fang")
+	var config: Dictionary = arena.sim._ai_burrow.get(fang_id, {})
+	assert_false(config.is_empty(), "the shipped Fang must have a registered burrow")
+	assert_almost_eq(float(config.jump_distance), stats.burrow_jump_distance, 0.001)
+	assert_almost_eq(float(config.emergence_radius), stats.burrow_emergence_radius, 0.001)
+	assert_eq(int(config.underground_ticks), stats.burrow_underground_ticks)
+	assert_eq(int(config.reacquisition_ticks), stats.burrow_reacquisition_ticks)
+	assert_eq(int(config.emergence_retry_ticks), stats.burrow_emergence_retry_ticks)
+
+
 func _is_event_kind_token(candidate: String) -> bool:
 	for index in candidate.length():
 		var character: String = candidate[index]

@@ -297,6 +297,10 @@ func _process_debug_burrow_trigger() -> void:
 		return
 	var held: bool = Input.is_physical_key_pressed(KEY_B)
 	if held and not _debug_burrow_held_prev:
+		# Logged on the EDGE, before any outcome, so a session can distinguish "the key was never
+		# observed" from "it was observed and every actor refused". A previous Stage-1 run left
+		# exactly that ambiguous, and the answer is not inferable after the fact.
+		print("burrow key: ", {"tick": sim.tick_count, "enemies": _enemies.size()})
 		for actor_id: int in _enemies.keys():
 			if sim.debug_trigger_burrow(actor_id, envoy.actor_id):
 				print("burrow triggered: ", {"actor_id": actor_id})
