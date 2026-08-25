@@ -453,6 +453,87 @@ func test_a_stationary_player_gets_the_intended_close_emergence() -> void:
 		"standing still leaves the Fang exactly at its authored ambush radius")
 
 
+# ===================================================================================
+# D. STAGE 2 — emerge -> reacquisition beat -> ORDINARY attack
+# ===================================================================================
+
+## Registers a Fang whose bite is genuinely available, so the post-emergence attack can occur.
+## The other tests suppress it deliberately to isolate mobility.
+func _register_attacking_fang(position: Vector3) -> void:
+	sim.add_entity(ENEMY_ID, position, 3.0)
+	sim.register_combatant(ENEMY_ID, 5000.0, &"fang", 0, 0.6, &"enemy")
+	sim.register_weapon(WEAPON_ID, 6.0, &"force", 1.65, 90.0, 0.0, 24)
+	sim.register_ai(
+		ENEMY_ID, CombatTestHelpers.single_action_repertoire(WEAPON_ID, 1.65, 12),
+		position, 1.65, 0.0, 60.0, 200.0, 0, 0,
+		JUMP_DISTANCE, JUMP_STEP, UNDERGROUND, RADIUS, RETRY, REACQUISITION, COOLDOWN)
+
+
+## THE STAGE-2 CHAIN. Burrow earns POSITION; the attack that follows is an ordinary decision
+## under existing selection and fire-time aim law, not something the burrow carried with it.
+func test_an_ordinary_attack_follows_the_reacquisition_beat() -> void:
+	_register_player(Vector3.ZERO)
+	_register_attacking_fang(Vector3(0, 0, -4.0))
+	_burrow_to_underground()
+
+	var emerged_tick: int = -1
+	var telegraph_tick: int = -1
+	var hit_tick: int = -1
+	for i in 200:
+		for event in sim.tick([], DT):
+			if event.kind == "burrow_emerged":
+				emerged_tick = event.tick
+			elif event.kind == "attack_telegraph" and emerged_tick != -1 and telegraph_tick == -1:
+				telegraph_tick = event.tick
+			elif event.kind == "hit" and int(event.payload.get("attacker_id", -1)) == ENEMY_ID and hit_tick == -1:
+				hit_tick = event.tick
+		if hit_tick != -1:
+			break
+
+	assert_ne(emerged_tick, -1, "it emerged")
+	assert_ne(telegraph_tick, -1, "and then telegraphed an ORDINARY attack")
+	assert_ne(hit_tick, -1, "which resolved")
+	assert_gte(telegraph_tick - emerged_tick, REACQUISITION,
+		"no attack may START before the reacquisition beat has run -- the beat is a real window, not a visible one")
+
+
+## The beat is silent, and provably so: nothing may telegraph during it.
+func test_no_attack_starts_during_the_reacquisition_beat() -> void:
+	_register_player(Vector3.ZERO)
+	_register_attacking_fang(Vector3(0, 0, -4.0))
+	_burrow_to_underground()
+	var during: Array[Event] = []
+	var emerged: bool = false
+	for i in 200:
+		var events: Array[Event] = sim.tick([], DT)
+		if not emerged:
+			for event in events:
+				if event.kind == "burrow_emerged":
+					emerged = true
+			continue
+		during.append_array(events)
+		if during.size() > 0 and sim.tick_count >= int(sim._burrow.get(ENEMY_ID, {}).get("deadline_tick", 0)) and not sim._burrow.has(ENEMY_ID):
+			break
+	assert_eq(_of(during, "attack_telegraph").size(), 0,
+		"the reacquisition beat must contain no attack start at all")
+
+
+## No attack target is carried underground: the Fang comes up with clean attack state and
+## re-decides from scratch.
+func test_no_attack_state_survives_the_trip() -> void:
+	_register_player(Vector3.ZERO)
+	_register_attacking_fang(Vector3(0, 0, -2.0))
+	# Get a windup committed BEFORE the burrow, then burrow out of it.
+	for i in 30:
+		sim.tick([], DT)
+		if sim._ai_attack_fire_tick.has(ENEMY_ID):
+			break
+	assert_true(sim._ai_attack_fire_tick.has(ENEMY_ID), "sanity: a windup was committed pre-burrow")
+	_burrow_to_underground()
+	assert_false(sim._ai_attack_fire_tick.has(ENEMY_ID),
+		"submerge cancels the committed windup -- it must never fire from underground or resume on emergence")
+
+
 func test_identical_runs_produce_identical_burrows() -> void:
 	var runs: Array = []
 	for run in 2:

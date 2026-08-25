@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **BURROW PRE-CODE SPEC (FROZEN)** | Weave, scurry and cutoff all falsified and reverted. Positive datum: the LUNGE. Burrow/ambush spec frozen: one participation predicate, fixed-candidate emergence with fail-safe timeout, Stage-1 action-only test |
+| P17 | Per-family engagement identities | **BURROW STAGE 1 PASSED / STAGE 2 PENDING** | Weave, scurry, cutoff all falsified. BURROW PASSED its human verdict 2026-08-25 — first P17 mechanic to survive. Emergence-presentation defect fixed separately; Stage 2 judges emerge→attack fairness |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -826,6 +826,88 @@ rotates through the fixed candidate set · **all candidates blocked before deadl
 underground, no overlap** · **a candidate becoming free → deterministic emergence** · **deadline
 expires → no materialization, normal authoritative death, burrow cleared, warning emitted, no
 later emergence** · never overlaps a combat body · determinism across identical runs.
+
+## STAGE 1 — **PASS (Breon, 2026-08-25).** First P17 mechanic to survive a human verdict.
+
+**Verdict against the frozen criterion:** the backward jump reads well · the sequence feels
+deliberate and predator-like · the disappearance reads intentionally, *"like it's disappearing
+into the bush"* · emergence feels predator-like · **burrow DOES change what Breon pays
+attention to** · overall a good mechanic, worth keeping and developing.
+
+Three pursuit-geometry experiments were falsified before this (weave, scurry, cutoff). The
+difference is not polish: burrow changed the player's QUESTION rather than the enemy's path.
+
+**Session evidence** (`dd02e63`, full log preserved): 9 burrow attempts, all nine completing
+`key → triggered → submerged → emerged`, with Ooze and Watcher correctly refusing all 18 times.
+Interleaved across the session and confirming two ruled behaviours in live play for the first
+time: a wand shot in flight while the Fang was absent **expired normally rather than hitting or
+being deleted**, and a Watcher survey fired undisturbed during another burrow.
+
+**PROVENANCE — commit-then-revert.** `dd02e63` DID carry `debug_burrow_trigger`
+committed-enabled; it was enabled in `dd2abbf` and inherited by every later commit, so the PASS
+was rendered on a build whose scene had exactly one deliberate `debug_*` override. The pattern,
+recorded for reuse: a candidate that must deviate from gate state COMMITS the deviation, so the
+running build still equals a commit and the verdict stays tied to an exact hash; the deviation
+is then reverted the moment the stage closes, whichever way the verdict went (`678df06`). A
+local Inspector flip would have kept the repo clean but produced a build matching no commit,
+breaking the traceability every P17 verdict has depended on.
+
+### DEFECT observed and fixed separately (`afd94ea`) — presentation, not mechanics
+Breon: on re-entry the Fang *"looked like it quickly flew from off-screen to the emergence point
+rather than coming up from underground."*
+
+**Root cause:** the project runs `physics_interpolation=true` at 30 Hz. The sim teleported
+correctly in a single tick and the transform never occupied an intermediate position — but to
+the RENDERER a one-tick jump is indistinguishable from very fast travel, so it smoothly drew the
+trip. **Fix:** `teleport_from_sim()` snaps the transform AND calls
+`reset_physics_interpolation()`. No animation added, no timing changed; the jump and
+disappearance that playtested well are byte-identical.
+
+**Bug class worth remembering:** invisible to every test that samples the scene tree, because
+the artifact exists only BETWEEN physics ticks. Automation can prove the transform teleports and
+the node stays hidden throughout; only a human eye could see the interpolation. The verification
+declares that limit rather than implying more.
+
+### CAPTURES riding with this closeout
+1. **Burrow presentation polish beyond the minimum emergence fix** — a real emerge-from-ground
+   animation, dust/ground cue, a submerge tell. Deliberately NOT done as part of the defect fix,
+   which was scoped to the minimum that communicates emergence.
+2. **PRE-EXISTING ASYMMETRY: the status-tick death path does not call `_clear_reaction_state`;
+   the hit-death path does.** Found while wiring burrow cleanup and deliberately NOT absorbed
+   into unrelated work. It must be either fixed deliberately or ruled intentional. Burrow works
+   around it by cleaning up from its own helper at both death sites, which is why a Burn death
+   underground does not leak combat-absence — but the asymmetry itself is untouched and still
+   owns whatever else `_clear_reaction_state` covers (pressure, parry exposure, bump slides) on
+   a status death.
+
+---
+
+# STAGE 2 — EMERGE → ATTACK FAIRNESS · **PRE-REGISTERED**
+
+**Question:** does the reacquisition beat provide a GENUINE response window before the
+post-emergence attack, or merely a visible one? **Verdict is Breon's alone**, rendered on the
+committed Stage-2 candidate.
+
+**Production burrow stores no Bite or attack target.** The attack that follows is an ordinary
+AI decision under existing selection and fire-time aim law. Controlled orchestration (the dev
+trigger) exposes the sequence reliably; it does not manufacture the attack.
+
+**Measured chain, shipped values** (`tools/diagnose_burrow_chain.gd`, reported not tuned):
+
+| | player stationary | player retreating |
+|---|---|---|
+| jump → submerge | 11 ticks (0.37 s) | 11 ticks (0.37 s) |
+| submerge → emerge | 40 ticks (1.33 s) | 40 ticks (1.33 s) |
+| emerge → telegraph | 28 ticks (0.93 s) — beat + approach, no attack may start | **never attacked** |
+| telegraph → hit | 12 ticks (0.40 s) — the tell itself | — |
+| **EMERGE → HIT** | **40 ticks (1.33 s) total response window** | — |
+
+The retreating case is the counterplay working: the destination commits at burrow entry, so a
+player who keeps moving leaves the Fang surfacing too far away to reach them at all.
+
+**FALSIFIED if** the attack lands before the player can realistically respond · the beat reads
+as visible but not usable · emergence-plus-attack feels like an unavoidable ambush rather than a
+readable one · or the sequence is threatening but unfair.
 
 ## FENCES
 No generic teleport framework · no generic phasing framework · no steering/pathfinding · no
