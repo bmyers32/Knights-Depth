@@ -57,7 +57,7 @@ func test_enemy_actors_expose_the_methods_the_arena_driver_calls() -> void:
 		# set_combat_present is the P17 burrow cross-layer contract: the TargetBody collider is the
 		# one targetability channel no sim gate can reach, so presentation must mirror the sim's
 		# participation fact. Exactly the set_active() failure class, pinned in advance.
-		for required in ["sync_from_sim", "show_telegraph", "show_vulnerable_window", "clear_telegraph", "set_combat_present"]:
+		for required in ["sync_from_sim", "show_telegraph", "show_vulnerable_window", "clear_telegraph", "set_combat_present", "teleport_from_sim"]:
 			assert_true(exposed.has(required), "%s must expose %s() -- arena.gd calls it from _report_events" % [actor_path, required])
 
 
@@ -171,6 +171,53 @@ func test_arena_drives_the_full_burrow_lifecycle_and_mirrors_participation() -> 
 	await get_tree().process_frame
 	assert_true(fang.visible, "presentation must SHOW it again")
 	assert_eq(target_body.collision_layer, 2, "and restore aim acquisition")
+
+
+## THE STAGE-1 EMERGENCE DEFECT, pinned. Samples the Fang every physics tick across a whole
+## burrow and asserts it never occupies an intermediate transform while combat-absent, and that
+## the tick it becomes visible is already the emergence tick.
+##
+## HONEST LIMIT, stated rather than implied: the observed defect was a RENDER-SIDE
+## interpolation artifact between physics ticks, which no scene-tree sample can see. What this
+## proves is that the transform teleports cleanly and the node stays hidden throughout -- the
+## preconditions for the fix. The fix itself (reset_physics_interpolation) is pinned only by the
+## contract test asserting teleport_from_sim exists and is what the driver calls.
+func test_no_visible_travel_while_combat_absent() -> void:
+	var arena: Node3D = _instantiate_arena()
+	var fang: Node3D = arena.get_node("Fang")
+	var fang_id: int = fang.actor_id
+	assert_true(arena.sim.debug_trigger_burrow(fang_id, arena.envoy.actor_id), "sanity: triggered")
+
+	var positions_while_absent: Array = []
+	var visible_while_absent: bool = false
+	var emerged_position: Vector3 = Vector3.ZERO
+	var visible_on_emergence: Vector3 = Vector3.ZERO
+	var was_absent: bool = false
+
+	for i in 240:
+		arena._physics_process(1.0 / 30.0)
+		var absent: bool = arena.sim._combat_absent.has(fang_id)
+		if absent:
+			was_absent = true
+			positions_while_absent.append(fang.position)
+			if fang.visible:
+				visible_while_absent = true
+		elif was_absent:
+			emerged_position = arena.sim.entities[fang_id]
+			visible_on_emergence = fang.position
+			break
+
+	assert_true(was_absent, "sanity: it submerged")
+	assert_false(visible_while_absent, "the node must never be drawn while the actor is absent")
+	assert_gt(positions_while_absent.size(), 5, "sanity: it really was absent for a span")
+	# One distinct transform for the whole absent span: it parks where the jump ended and does
+	# not creep toward the emergence point.
+	var distinct: Dictionary = {}
+	for entry in positions_while_absent:
+		distinct["%.4f,%.4f" % [entry.x, entry.z]] = true
+	assert_eq(distinct.size(), 1, "the hidden node must not move at all while absent -- no travel to interpolate")
+	assert_almost_eq(visible_on_emergence.distance_to(emerged_position), 0.0, 0.001,
+		"the first frame it is visible must already be AT the emergence point")
 
 
 ## The shipped .tres values must be the ones the sim actually runs on. A unit test using

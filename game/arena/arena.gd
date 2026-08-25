@@ -492,9 +492,12 @@ func _report_events(events: Array[Event]) -> void:
 				print("burrow emerged: ", event.payload)
 				var emerged_id: int = event.payload.get("actor_id")
 				if _enemies.has(emerged_id):
-					# Snap the node to the emergence position BEFORE showing it, so the first
-					# visible frame is already at the new spot rather than a frame at the old one.
-					_enemies[emerged_id].sync_from_sim(event.payload.get("position"))
+					# TELEPORT before showing, not sync: the node must arrive at the emergence
+					# point with its render-side interpolation CANCELLED. Snapping alone is not
+					# enough -- physics_interpolation is on, so the renderer would smoothly draw
+					# the one-tick jump and the emergence reads as flying in from off-screen
+					# (the Stage-1 playtest defect).
+					_enemies[emerged_id].teleport_from_sim(event.payload.get("position"))
 					_enemies[emerged_id].set_combat_present(true)
 			# DELIBERATELY NOT REPORTED: emitted for every actor every tick, so printing it
 			# would bury every other line. Recorded here so the next audit does not

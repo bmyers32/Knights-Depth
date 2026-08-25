@@ -55,3 +55,20 @@ func get_aim_anchor_position() -> Vector3:
 func set_combat_present(present: bool) -> void:
 	visible = present
 	$TargetBody.set_deferred("collision_layer", 2 if present else 0)
+
+
+## TELEPORT, not move. Snaps the transform AND cancels the render-side interpolation Godot would
+## otherwise draw across the gap.
+##
+## WHY IT EXISTS (Stage-1 playtest defect, 2026-08-25): the burrow emergence read as the Fang
+## "quickly flying from off-screen to the emergence point". The sim teleported correctly in a
+## single tick -- the transform never occupied an intermediate position -- but the project runs
+## physics_interpolation=true at 30 Hz, and to the renderer a one-tick position jump is
+## indistinguishable from very fast travel, so it smoothly drew the trip.
+##
+## Note the class of bug: it is invisible to every test that samples the scene tree, because the
+## artifact exists only between physics ticks. Automation can prove the transform snapped and the
+## node stayed hidden; only a human eye could see the interpolation.
+func teleport_from_sim(sim_position: Vector3) -> void:
+	position = sim_position
+	reset_physics_interpolation()
