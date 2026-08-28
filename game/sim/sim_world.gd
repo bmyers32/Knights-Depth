@@ -222,6 +222,185 @@ var tick_count: int = 0
 var _combat_rng := RandomNumberGenerator.new()
 
 
+## ---------------------------------------------------------------------------------
+## M2 FLOOR/RUN ARCHITECTURE. One SimWorld per RUN; each floor is a new encounter space
+## loaded into it. The sim is never recreated as a cleanup convenience and state is never
+## copied between worlds — that would rebuild M4's job at M2 and break M3's reconnect gate.
+## ---------------------------------------------------------------------------------
+
+## The loaded floor's walkable law (game/sim/walkable_bounds.gd). null = no floor loaded, in
+## which case every seam below is identity — which is exactly why the entire pre-M2 suite is
+## unaffected by construction rather than by luck: nothing that never calls load_floor can
+## observe bounds at all.
+var _bounds: WalkableBounds = null
+## actor_id -> true for the actors that SURVIVE a floor transition. Today the Envoy alone.
+## Deliberately an explicit opt-in registry rather than an allegiance test: "the player
+## persists" is a RUN decision, and an enemy that ever became allegiance "player" must not
+## silently inherit immortality across floors.
+var _run_persistent_actors: Dictionary = {}
+
+const SCOPE_RUN: StringName = &"run"
+const SCOPE_FLOOR: StringName = &"floor"
+const SCOPE_RUN_ACTOR: StringName = &"run_actor"
+const SCOPE_ACTOR_TRANSIENT: StringName = &"actor_transient"
+
+## THE EXECUTABLE DEFINITION OF load_floor(), not documentation. load_floor ITERATES this
+## map; it does not carry a second hand-written cleanup list. That kills the drift class
+## where a scope table and a clear-list disagree and the table is the one nobody runs.
+##
+## tests/test_floor_scope.gd enumerates SimWorld's script variables and FAILS on any that is
+## missing here, so new state must classify itself or break the build (§1.1's "every sim
+## change touches both futures" made mechanical).
+##
+##   SCOPE_RUN             untouched by a floor transition
+##   SCOPE_FLOOR           cleared wholesale — belongs to the departing encounter
+##   SCOPE_RUN_ACTOR       actor-keyed; entries survive ONLY for _run_persistent_actors.
+##                         Named for the RESTRICTION, not for "carried", so it cannot be
+##                         misread as "this whole collection persists".
+##   SCOPE_ACTOR_TRANSIENT actor-keyed; cleared for EVERY actor, run-persistent included
+##
+## FLOOR-TRANSITION LAW (Breon, 2026-08-28): a floor transition is an ENCOUNTER BOUNDARY.
+## This is deliberately unlike burrow, which is temporary non-participation INSIDE one
+## encounter. Durable run progression carries; transient combat effects do not. Burn
+## specifically does NOT survive a floor change.
+const STATE_SCOPES: Dictionary = {
+	# --- RUN: content registration tables (keyed by content id, not actor) and the clock.
+	"_weapons": SCOPE_RUN,
+	"_melee_combo_profiles": SCOPE_RUN,
+	"_melee_charge_profiles": SCOPE_RUN,
+	"_melee_charge_threshold_ticks": SCOPE_RUN,
+	"_melee_combo_reset_ticks": SCOPE_RUN,
+	"_melee_input_buffer_ticks": SCOPE_RUN,
+	"_matrix_families": SCOPE_RUN,
+	"_matrix_weak_multiplier": SCOPE_RUN,
+	"_matrix_resist_multiplier": SCOPE_RUN,
+	"_status_config": SCOPE_RUN,
+	"_status_priority": SCOPE_RUN,
+	"_action_susceptibility": SCOPE_RUN,
+	"_pressure_window_ticks": SCOPE_RUN,
+	"_flinch_recovery_ticks": SCOPE_RUN,
+	"_combat_rng": SCOPE_RUN,
+	"_run_persistent_actors": SCOPE_RUN,
+	# NEVER RESET: every absolute-tick deadline in this file is measured against it, so a
+	# mid-run reset would make every stale deadline instantly satisfied.
+	"tick_count": SCOPE_RUN,
+	# Stays monotonic even though _projectiles clears, so an id is never reused within a
+	# run and a run's event log stays unambiguous.
+	"_next_projectile_id": SCOPE_RUN,
+
+	# --- RUN_ACTOR: durable run state. Survives for the Envoy, pruned for floor actors.
+	"entities": SCOPE_RUN_ACTOR,  # + explicitly repositioned to the new entry point
+	"_move_speeds": SCOPE_RUN_ACTOR,
+	"_facings": SCOPE_RUN_ACTOR,
+	"_health": SCOPE_RUN_ACTOR,
+	"_families": SCOPE_RUN_ACTOR,
+	"_iframe_ticks_on_hit": SCOPE_RUN_ACTOR,
+	"_combat_radius": SCOPE_RUN_ACTOR,
+	"_allegiance": SCOPE_RUN_ACTOR,
+	"_flinch_thresholds": SCOPE_RUN_ACTOR,
+	"_equipped_weapon": SCOPE_RUN_ACTOR,
+	"_weapon_loadouts": SCOPE_RUN_ACTOR,
+	"_shields": SCOPE_RUN_ACTOR,
+	# SHIELD RULING (Breon): load_floor must NOT refill the meter. The shield already has
+	# exactly one recovery law — it regenerates whenever it is not raised (_apply_block) —
+	# and a floor-load refill would be a second, competing authority. The METER carries at
+	# whatever value ordinary play left it; only the transient state machine around it
+	# resets below. Clearing this instead would be a stealth NERF, not neutrality:
+	# _shield_meter.get(id, 0.0) defaults to zero.
+	"_shield_meter": SCOPE_RUN_ACTOR,
+
+	# --- ACTOR_TRANSIENT: combat state whose episode ended with the floor.
+	"_status_instances": SCOPE_ACTOR_TRANSIENT,  # Burn does NOT cross a floor boundary
+	"_iframe_ticks_remaining": SCOPE_ACTOR_TRANSIENT,
+	# Cooldowns are absolute-tick deadlines against a clock that keeps running; a carried
+	# value is either already expired or an arbitrary delay on the new floor's first swing.
+	"_next_fire_tick": SCOPE_ACTOR_TRANSIENT,
+	"_melee_hold": SCOPE_ACTOR_TRANSIENT,
+	"_combo_index": SCOPE_ACTOR_TRANSIENT,
+	"_combo_expire_tick": SCOPE_ACTOR_TRANSIENT,
+	"_melee_buffered_press": SCOPE_ACTOR_TRANSIENT,
+	# Shield INPUT/BREAK state (not the meter). Clearing restores the neutral machine for
+	# free: _shield_state.get(id, "ready") and _shield_break_ticks_remaining.get(id, 0)
+	# already default to exactly the values a fresh floor wants, so no re-priming rule —
+	# and therefore no second shield authority — is introduced.
+	"_shield_state": SCOPE_ACTOR_TRANSIENT,
+	"_shield_break_ticks_remaining": SCOPE_ACTOR_TRANSIENT,
+	"_block_held_prev": SCOPE_ACTOR_TRANSIENT,
+	"_block_start_tick": SCOPE_ACTOR_TRANSIENT,
+	"_shield_bump_ready_tick": SCOPE_ACTOR_TRANSIENT,
+	"_bump_slides": SCOPE_ACTOR_TRANSIENT,
+	"_parry_exposed_until_tick": SCOPE_ACTOR_TRANSIENT,
+	"_parry_exposed_damage_multiplier": SCOPE_ACTOR_TRANSIENT,
+	"_flinched_until_tick": SCOPE_ACTOR_TRANSIENT,
+	"_pressure_contributions": SCOPE_ACTOR_TRANSIENT,
+	"_combat_absent": SCOPE_ACTOR_TRANSIENT,
+	"_ai_attack_start_tick": SCOPE_ACTOR_TRANSIENT,
+	"_ai_attack_fire_tick": SCOPE_ACTOR_TRANSIENT,
+
+	# --- FLOOR: belongs entirely to the departing encounter's actors or geometry.
+	"_projectiles": SCOPE_FLOOR,  # in-flight shots always die with the floor
+	"_contact_transmitted_pairs": SCOPE_FLOOR,  # keyed by actor PAIR, not actor
+	"_ai_spawn_position": SCOPE_FLOOR,
+	"_ai_state": SCOPE_FLOOR,
+	"_ai_tuning": SCOPE_FLOOR,
+	"_ai_repertoire": SCOPE_FLOOR,
+	"_ai_last_in_close_band": SCOPE_FLOOR,
+	"_ai_last_frustration_commit": SCOPE_FLOOR,
+	"_ai_close_band": SCOPE_FLOOR,
+	"_ai_burrow": SCOPE_FLOOR,
+	"_burrow": SCOPE_FLOOR,
+	"_next_burrow_tick": SCOPE_FLOOR,
+	"_bounds": SCOPE_FLOOR,  # not a collection — assigned by load_floor, see below
+}
+
+
+## Marks an actor as surviving floor transitions. The driver calls this for the Envoy once,
+## at run setup.
+func mark_run_persistent(actor_id: int) -> void:
+	_run_persistent_actors[actor_id] = true
+
+
+## Installs a generated floor: retires the departing encounter, adopts the new walkable law,
+## and moves the run-persistent actors to the new entry point.
+##
+## Takes PLAIN VALUES rather than a FloorPlan on purpose — sim/ stays ignorant of gen/, the
+## same boundary ContentRegistrar draws for Resources (Prime Directive 1). The driver
+## unpacks the plan; sim never imports the layer above it.
+##
+## The new roster is registered by the caller AFTER this returns, through the ordinary
+## production path (ContentRegistrar.register_enemy_body/register_enemy_ai) — there is no
+## parallel "generated enemy" registration path to drift from the hand-authored one.
+func load_floor(bounds: WalkableBounds, entry_point: Vector3) -> void:
+	for state_name: String in STATE_SCOPES:
+		var scope: StringName = STATE_SCOPES[state_name]
+		if scope == SCOPE_RUN:
+			continue
+		var value: Variant = get(state_name)
+		if not (value is Dictionary):
+			continue  # non-collection floor state (_bounds) is assigned explicitly below
+		var collection: Dictionary = value
+		if scope == SCOPE_RUN_ACTOR:
+			for actor_id: int in collection.keys():
+				if not _run_persistent_actors.has(actor_id):
+					collection.erase(actor_id)
+		else:
+			collection.clear()
+
+	_bounds = bounds
+	# Entry placement is not routed through add_entity's validation: these actors are
+	# already registered, and the entry point's legality is the GENERATOR's contract
+	# (test_depth_generator.gd asserts it), not something to re-decide per floor.
+	for actor_id: int in _run_persistent_actors:
+		entities[actor_id] = entry_point
+
+
+## Displacement seam (see WalkableBounds.clamp_step). Every authoritative write to
+## entities[] that MOVES an already-placed actor routes through here; the audit of those
+## sites lives in tests/test_floor_bounds.gd, which drives each one at a wall.
+func _clamp_to_bounds(from: Vector3, to: Vector3) -> Vector3:
+	return to if _bounds == null else _bounds.clamp_step(from, to)
+
+
 func _init() -> void:
 	_combat_rng.seed = 0
 
@@ -235,10 +414,27 @@ func seed_combat_rng(seed: int) -> void:
 	_combat_rng.seed = seed
 
 
-func add_entity(actor_id: int, position: Vector3, move_speed: float, facing: Vector3 = Vector3(0.0, 0.0, -1.0)) -> void:
+## PLACEMENT seam (M2). Returns false and registers NOTHING when a floor is loaded and the
+## requested position is outside it.
+##
+## FAILS LOUDLY RATHER THAN CLAMPING, deliberately: silently sliding an illegal spawn into
+## the room would hide a generator or content defect behind a floor that merely looks a bit
+## odd. The generator's own contract is that it never emits a placement the sim would reject
+## (it validates against the same WalkableBounds), so reaching this branch always means a
+## real bug — and a missing enemy plus an error line is a diagnosable bug, while a quietly
+## relocated one is not.
+##
+## Returns bool rather than push_error alone so the failure is observable to a test and to
+## the caller (ContentRegistrar aborts the rest of that actor's registration on false,
+## instead of leaving a combatant with no position).
+func add_entity(actor_id: int, position: Vector3, move_speed: float, facing: Vector3 = Vector3(0.0, 0.0, -1.0)) -> bool:
+	if _bounds != null and not _bounds.is_inside(position):
+		push_error("SimWorld.add_entity: actor %d placed outside walkable bounds at %s — refusing to register (placement never silently clamps)" % [actor_id, position])
+		return false
 	entities[actor_id] = position
 	_move_speeds[actor_id] = move_speed
 	_facings[actor_id] = _normalize_horizontal(facing, Vector3(0.0, 0.0, -1.0))
+	return true
 
 
 ## Registers actor_id as a damageable target with a matrix row (GAME-RULES §3).
@@ -731,7 +927,10 @@ func _apply_move(command: Command, dt: float) -> Event:
 	if direction.length_squared() > 0.0:
 		direction = direction.normalized()
 		_facings[command.actor_id] = direction
+	var start: Vector3 = position
 	position += direction * speed * dt
+	# BOUNDS SEAM 1/6 — ordinary locomotion.
+	position = _clamp_to_bounds(start, position)
 	entities[command.actor_id] = position
 	return Event.new(tick_count, "moved", {"actor_id": command.actor_id, "position": position})
 
@@ -1156,10 +1355,13 @@ func _advance_melee_execution_tick(actor_id: int) -> Array[Event]:
 			var start: Vector3 = entities.get(actor_id, Vector3.ZERO)
 			var end: Vector3 = start + step
 			var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
+			# BOUNDS SEAM 2/6 — authored melee lunge displacement. The contact sweep
+			# shortens the segment first and the wall clamps whatever endpoint survived,
+			# so whichever legal stopping condition comes first is the one that wins.
 			if contact.is_empty():
-				entities[actor_id] = end
+				entities[actor_id] = _clamp_to_bounds(start, end)
 			else:
-				entities[actor_id] = contact.entry_position
+				entities[actor_id] = _clamp_to_bounds(start, contact.entry_position)
 				hold.clamped_target_id = contact.target_id
 
 	if tick_count >= int(hold.hit_tick) and not bool(hold.hit_resolved):
@@ -1499,7 +1701,10 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	var interrupts_this_windup: bool = target_is_winding_up and interrupt_strength > 0
 	var knocked_position: Vector3 = target_position
 	if not target_is_winding_up or interrupt_strength > 0:
-		knocked_position = target_position + resolved_aim * weapon.knockback_distance
+		# BOUNDS SEAM 3/6 — hit knockback. Displacement INFLICTED on an actor obeys the
+		# same walls as displacement it chooses: being shoved through a wall is the same
+		# defect as walking through one.
+		knocked_position = _clamp_to_bounds(target_position, target_position + resolved_aim * weapon.knockback_distance)
 		entities[target_id] = knocked_position
 	# ATOMICITY (locked): the enemy's current action is canceled EXACTLY ONCE, here at
 	# hit resolution -- windup clear, cooldown arming, the interruption Event, and the
@@ -1669,6 +1874,15 @@ func _spawn_projectile(attacker_id: int, weapon_id: String, weapon: Dictionary, 
 
 ## Sweeps every live projectile's this-tick travel SEGMENT (not just its endpoint)
 ## against combatants, so a shot can't tunnel through a target it crossed mid-tick.
+##
+## PROJECTILE-VS-WALL IS DEFERRED, NOT OVERLOOKED (M2 Slice 1 fence; ROADMAP P20 carries the
+## entry so the decision does not live only here). Projectiles do NOT consume the bounds
+## seam: Slice 1 floors are single convex chambers, so a shot leaving the walkable rect has
+## already left the play area and projectile_max_lifetime_ticks retires it through the
+## existing projectile_expired Event. Ruling it in now would mean inventing impact-position
+## and status-drop semantics against no geometry. TRIGGER TO REVISIT: the first floor with
+## interior geometry or a non-convex chamber. Player/enemy BODY displacement obeys bounds
+## today — this fence covers world/projectile collision only.
 ## A hit resolves through the same _resolve_hit_on_target melee uses — a bullet is
 ## gated by iframes/shield exactly like a sword swing. Expires unfired shots after
 ## max_lifetime_ticks (a sim-tick count, GAME-RULES §3).
@@ -1797,10 +2011,11 @@ func _apply_shield_bump(actor_id: int, shield: Dictionary) -> Array[Event]:
 ## the sword lunge uses (_find_earliest_lunge_contact), so bump inherits whatever the
 ## project authoritatively treats as a blocker rather than inventing its own rules.
 ## KNOWN LIMITATION, deliberately not fixed here (ROADMAP P20): that sweep only
-## considers actors of a DIFFERENT allegiance, and no walls or arena bounds exist
-## anywhere in this project. A bumped enemy can therefore slide through another enemy
-## and past the visual arena edge. Revalidate bump when body-blocking or world bounds
-## become real; do not pull that work forward for this Treat.
+## considers actors of a DIFFERENT allegiance, so a bumped enemy can still slide through
+## another enemy. UPDATED (M2 Slice 1): the "past the visual arena edge" half of this
+## limitation is now CLOSED — the slide clamps to the loaded floor's WalkableBounds like
+## every other authoritative displacement. Body-blocking between actors remains open, and
+## remains P20's.
 ## Autonomous-phase law (see tick()): sorted ids, no mutation of the collection while
 ## iterating -- completed slides are collected first and erased afterwards.
 ## FLINCH DOES NOT ABORT A SLIDE — ruled 2026-08-19, and NEWLY REVIEWED, not backdated.
@@ -1836,10 +2051,11 @@ func _advance_bump_slides() -> void:
 		# Closing-direction semantics mean separation is never clamped by the source,
 		# so this only stops the slide against something it is genuinely moving INTO.
 		var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
+		# BOUNDS SEAM 5/6 — shield bump slide.
 		if contact.is_empty():
-			entities[actor_id] = end
+			entities[actor_id] = _clamp_to_bounds(start, end)
 		else:
-			entities[actor_id] = contact.entry_position
+			entities[actor_id] = _clamp_to_bounds(start, contact.entry_position)
 			completed.append(actor_id)  # blocked: the slide ends here, never chases
 			continue
 		# Counted in STEPS rather than compared against an end tick: the record is
@@ -1863,7 +2079,8 @@ func _resolve_blocked_hit(target_id: int, target_position: Vector3, resolved_aim
 		_shield_meter[target_id] = 0.0
 		_shield_state[target_id] = "broken"
 		_shield_break_ticks_remaining[target_id] = shield.break_recovery_delay_ticks
-		var knocked_position: Vector3 = target_position + resolved_aim * shield.knockback_distance
+		# BOUNDS SEAM 4/6 — shield-break knockback.
+		var knocked_position: Vector3 = _clamp_to_bounds(target_position, target_position + resolved_aim * shield.knockback_distance)
 		entities[target_id] = knocked_position
 		return Event.new(tick_count, "shield_broken", {
 			"actor_id": target_id, "attacker_id": attacker_id, "position": knocked_position,
@@ -2366,6 +2583,14 @@ func _find_burrow_emergence_point(actor_id: int) -> Dictionary:
 	for degrees in BURROW_CANDIDATE_DEGREES:
 		var candidate: Vector3 = player_at_commit + far_side.rotated(Vector3.UP, deg_to_rad(degrees)) * float(config.emergence_radius)
 		candidate.y = 0.0
+		# PLACEMENT SEAM (M2) — emergence is placement, not displacement, so a candidate
+		# outside the walkable floor is invalid for EXACTLY the same reason an occupied one
+		# is, and is refused the same way: the fixed candidate set keeps rotating. The
+		# deterministic ordering, the retry window, and the fail-safe death on exhaustion
+		# (_resolve_burrow_emergence_timeout) are untouched — this adds a reason a candidate
+		# can be rejected, never a new way to resolve emergence.
+		if _bounds != null and not _bounds.is_inside(candidate):
+			continue
 		if not _burrow_point_is_occupied(actor_id, candidate):
 			return {"position": candidate, "degrees": degrees}
 	return {}
@@ -2401,7 +2626,8 @@ func _advance_burrow() -> Array[Event]:
 				var start: Vector3 = entities.get(actor_id, Vector3.ZERO)
 				var end: Vector3 = start + burrow.direction * float(burrow.step_distance)
 				var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
-				entities[actor_id] = contact.entry_position if not contact.is_empty() else end
+				# BOUNDS SEAM 6/6 — burrow backward-jump displacement.
+				entities[actor_id] = _clamp_to_bounds(start, contact.entry_position if not contact.is_empty() else end)
 				_facings[actor_id] = burrow.direction
 				burrow.steps_remaining = int(burrow.steps_remaining) - 1
 				if not contact.is_empty() or int(burrow.steps_remaining) <= 0:

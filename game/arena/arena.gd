@@ -4,17 +4,13 @@ extends Node3D
 ## scene owns setup (ContentDB lookups, entity/weapon/status registration) and drives
 ## the tick loop; actors only build Commands and mirror sim state onto their transform.
 
-## Real M1 roster is locked (GAME-RULES §3/§7 seed+7) — Fang/Ooze/Watcher stay named
-## scene children (a spawn-table system would be speculative generality for a fixed
-## 3-family roster), but the driver tracks them in one dictionary keyed by actor_id
-## instead of three separate if/elif chains, since later phases (death cleanup, and
-## eventually an AI scan) both need to reason about "all living enemies" generically.
+## M2 Slice 1 retired the hand-authored roster: Fang/Ooze/Watcher are no longer named scene
+## children. A floor's ENTIRE roster now comes from the FloorPlan the run seed produced, and
+## FloorBuilder instantiates it. The M1 roster is still what spawns (StratumConfig.enemy_keys
+## holds the locked §3/§7 seed+7 families) — what changed is who decides placement and count.
 @onready var envoy: CharacterBody3D = $Envoy
-@onready var _enemy_nodes: Dictionary = {
-	&"fang": $Fang,
-	&"ooze": $Ooze,
-	&"watcher": $Watcher,
-}
+@onready var _floor_builder: FloorBuilder = $FloorBuilder
+@onready var _seed_label: Label = $SeedHud/SeedLabel
 @onready var _failure_overlay: FailureOverlay = $FailureOverlay
 
 const PROJECTILE_TRACER: PackedScene = preload("res://game/actors/projectile_tracer.tscn")
@@ -41,9 +37,19 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 @export var debug_loadout_override: bool = false
 @export var debug_weapon_ids: Array[StringName] = [&"sword_A", &"sword_burn_A", &"wand_A", &"gun_pierce_A", &"gun_arc_A", &"gun_umbral_A"]
 
-## Combat RNG seed (GAME-RULES §1.3 debug-overlay law: the active seed is always
-## visible — printed in _ready() below, since no real debug overlay exists yet).
-@export var combat_seed: int = 0
+## THE RUN SEED (GAME-RULES §1.3: the active seed is always visible and logged; a bug
+## report is seed + command log). One seed drives the whole run — it seeds the combat RNG
+## AND derives every floor's layout — so "same seed, same run" is a single fact a human can
+## hold. It is rendered on screen by _update_seed_label, not merely printed, because a
+## printed seed is unavailable in exactly the shipped build a playtest runs.
+##
+## Generation never draws from the combat stream and vice versa (§1.3 separate streams):
+## DepthGenerator builds its own RandomNumberGenerator per call, so floor count cannot shift
+## a single combat roll.
+@export var run_seed: int = 0
+## Which depth to generate. Slice 1 loads exactly one floor at startup; the elevator that
+## advances this is explicitly out of scope (GAME-RULES §5 M2 run structure).
+@export var depth: int = 1
 
 ## Debug/diagnostic exports (manual-pass convention, this session): every export in
 ## this block is named debug_* and defaults to the AUTHENTIC game behavior — "all
@@ -53,11 +59,11 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## gating entirely (every enemy starts "active", not "idle") for rapid mechanics
 ## iteration without walking into range each time -- the real driver never sets this.
 @export var debug_force_aggro: bool = false
-## Per-family isolation for a diagnostic pass (a family disabled here is skipped
-## entirely -- no registration, node freed) -- all three true is the real roster.
-@export var debug_enable_fang: bool = true
-@export var debug_enable_ooze: bool = true
-@export var debug_enable_watcher: bool = true
+## REMOVED at M2 Slice 1: debug_enable_fang/ooze/watcher. Those exports isolated ONE named
+## scene child per family, a notion generated floors no longer have — a floor may contain
+## three Fangs and no Watcher. The reproduction handle they served is now the run seed,
+## which is strictly better: it reproduces the whole floor, not just its cast.
+
 ## Manual-pass tooling: this is the most temporally complex state machine in M1
 ## (lunge/windup/buffer) -- prints the Envoy's live pending-attack state
 ## (SimWorld.debug_describe_melee_state, a read-only public snapshot; never a
@@ -98,6 +104,10 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
+## Monotonic across the whole RUN, never reset per floor: a reused actor_id would make two
+## different enemies indistinguishable in one run's event log. Starts at 1 because the Envoy
+## holds 0 (envoy.gd) and is the only actor that outlives a floor.
+var _next_actor_id: int = 1
 var _debug_equipped_index: int = 0
 var _debug_tab_held_prev: bool = false
 var _debug_burrow_held_prev: bool = false
@@ -135,13 +145,14 @@ var _envoy_alive: bool = true
 
 
 func _ready() -> void:
-	sim.seed_combat_rng(combat_seed)
-	print("combat RNG seed: ", combat_seed)
+	sim.seed_combat_rng(run_seed)
+	print("run seed: ", run_seed)
 
 	sim.add_entity(envoy.actor_id, envoy.position, envoy.stats.move_speed)
 	sim.register_combatant(envoy.actor_id, envoy.stats.max_health, envoy.stats.family, 0, envoy.stats.combat_radius, &"player")
-
-	_register_enemies()
+	# The ONE actor that survives a floor transition. Everything else on a floor belongs to
+	# that floor (SimWorld.STATE_SCOPES).
+	sim.mark_run_persistent(envoy.actor_id)
 
 	for weapon_id in loadout_weapon_ids:
 		ContentRegistrar.register_weapon(sim, weapon_id)
@@ -184,6 +195,9 @@ func _ready() -> void:
 	var shield: ShieldStats = ContentDB.get_resource(&"shield", &"default")
 	sim.register_shield(envoy.actor_id, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance, shield.bump_padding, shield.bump_distance, shield.bump_slide_ticks, shield.bump_cooldown_ticks, shield.parry_window_ticks, shield.parry_exposure_ticks, shield.parry_damage_multiplier)
 
+	# LAST: every RUN-scoped registration above must exist before a floor is loaded into it.
+	_load_floor()
+
 
 ## Resolves tracer speed/colour for any GunStats in the given ids. Colour comes from the
 ## damage-type channel the telegraph already uses (GAME-RULES §3 channel law: types own
@@ -199,27 +213,60 @@ func _cache_gun_visuals(weapon_ids: Array[StringName]) -> void:
 			}
 
 
-func _register_enemies() -> void:
-	# debug_enable_* lookup -- read once here, never per-tick.
-	var family_enabled: Dictionary = {&"fang": debug_enable_fang, &"ooze": debug_enable_ooze, &"watcher": debug_enable_watcher}
-	for enemy_key: StringName in _enemy_nodes:
-		var actor: Node3D = _enemy_nodes[enemy_key]
-		if not family_enabled[enemy_key]:
-			actor.queue_free()
-			continue
+## Generates the floor for the current depth and installs it in BOTH layers: the sim gets
+## the walkable law and a cleared encounter, presentation gets geometry and actor scenes --
+## both from the SAME FloorPlan, so the room the player sees and the room the sim clamps
+## against can never be two different rooms.
+##
+## Ordering matters and is not incidental:
+##   1. generate      -- pure, no side effects, so a bad plan is diagnosable before anything
+##                       is mutated
+##   2. sim.load_floor -- retires the OLD encounter (statuses, projectiles, AI, old actors)
+##                       and adopts the new bounds, BEFORE any new actor is registered
+##   3. build         -- new scenes instantiated with freshly allocated actor_ids
+##   4. register      -- through the ordinary ContentRegistrar path, unchanged
+func _load_floor() -> void:
+	var plan: FloorPlan = DepthGenerator.generate(run_seed, depth)
+	print("floor loaded: ", {
+		"run_seed": run_seed, "depth": depth, "floor_seed": plan.floor_seed,
+		"stratum": plan.stratum_id, "spawns": plan.spawns.size(),
+	})
+
+	sim.load_floor(plan.make_bounds(), plan.entry_point)
+	# Presentation state keyed by the departing floor's actors dies with them. The sim has
+	# already dropped its side; these are the mirrors.
+	_enemies.clear()
+	_windup_cues.clear()
+	for projectile_id: int in _projectile_tracers.keys():
+		_despawn_tracer(projectile_id)
+	envoy.teleport_from_sim(plan.entry_point)
+
+	var spawned: Array[Dictionary] = _floor_builder.build(plan, _next_actor_id)
+	_next_actor_id += spawned.size()  # ids are never reused within a run
+	for record in spawned:
+		var actor: Node3D = record["node"]
+		var actor_id: int = record["actor_id"]
 		# Sim registration goes through the shared ContentRegistrar so headless
 		# fixtures exercise the SAME path this driver does (see that class's doc).
-		var actions: Dictionary = ContentRegistrar.register_enemy_body(sim, actor.actor_id, enemy_key, actor.position)
-		ContentRegistrar.register_enemy_ai(sim, actor.actor_id, enemy_key, actor.position)
+		var actions: Dictionary = ContentRegistrar.register_enemy_body(sim, actor_id, record["enemy_key"], record["position"])
+		if actions.is_empty():
+			# The sim refused this placement (out of bounds) and said so loudly. The
+			# generator's contract says this cannot happen, so reaching here is a real
+			# defect -- drop the orphaned node rather than render an actor the sim has
+			# never heard of.
+			_floor_builder.remove_child(actor)
+			actor.queue_free()
+			continue
+		ContentRegistrar.register_enemy_ai(sim, actor_id, record["enemy_key"], record["position"])
 		# Dev validation target -- setup-time only, both loud no-ops at their defaults.
 		if debug_validation_target_health > 0.0:
-			sim.debug_override_health(actor.actor_id, debug_validation_target_health)
+			sim.debug_override_health(actor_id, debug_validation_target_health)
 		if debug_flinch_threshold_override > 0.0:
-			sim.register_flinch_profile(actor.actor_id, debug_flinch_threshold_override)
+			sim.register_flinch_profile(actor_id, debug_flinch_threshold_override)
 		if debug_force_aggro:
-			sim.debug_set_ai_active(actor.actor_id)
+			sim.debug_set_ai_active(actor_id)
 
-		_enemies[actor.actor_id] = actor
+		_enemies[actor_id] = actor
 		for action_id: StringName in actions:
 			var action: NaturalWeaponStats = actions[action_id]
 			_action_telegraphs[String(action_id)] = {
@@ -238,6 +285,14 @@ func _register_enemies() -> void:
 					"color": action.telegraph_color,
 					"hit_radius": action.projectile_hit_radius,
 				}
+	_update_seed_label(plan)
+
+
+## §1.3's visibility law, satisfied ON SCREEN rather than in stdout: a printed seed is
+## unavailable in exactly the shipped build a playtest runs, which is the build whose floor
+## someone will want to reproduce.
+func _update_seed_label(plan: FloorPlan) -> void:
+	_seed_label.text = "seed %d · depth %d · %s" % [plan.run_seed, plan.depth, plan.stratum_id]
 
 
 func _physics_process(delta: float) -> void:

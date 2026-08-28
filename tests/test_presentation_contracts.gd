@@ -63,7 +63,7 @@ func test_enemy_actors_expose_the_methods_the_arena_driver_calls() -> void:
 
 func test_envoy_exposes_the_charge_cue_methods_the_arena_driver_calls() -> void:
 	var exposed: Array = _method_names(load("res://game/actors/envoy/envoy.gd"))
-	for required in ["show_charge_ready", "clear_charge_ready", "sync_from_sim", "build_commands"]:
+	for required in ["show_charge_ready", "clear_charge_ready", "sync_from_sim", "build_commands", "teleport_from_sim"]:
 		assert_true(exposed.has(required), "envoy.gd must expose %s() -- arena.gd calls it every frame or on an Event" % required)
 
 
@@ -90,6 +90,40 @@ func _instantiate_arena() -> Node3D:
 	return arena
 
 
+## M2 Slice 1: a floor's roster comes from the run seed, so "the Fang" is no longer a scene
+## child that can be fetched by name. Finds the lowest run seed whose depth-1 floor actually
+## contains the family under test and boots the REAL arena on it.
+##
+## Deliberately searched rather than hardcoded: a hardcoded seed silently stops testing the
+## family it names the moment stratum tuning shifts the draw, and it would fail as "the
+## telegraph broke" rather than "that seed no longer spawns a Watcher".
+func _instantiate_arena_containing(family: StringName) -> Node3D:
+	var chosen_seed: int = -1
+	for candidate in 256:
+		for spawn in DepthGenerator.generate(candidate, 1).spawns:
+			if spawn["enemy_key"] == family:
+				chosen_seed = candidate
+				break
+		if chosen_seed >= 0:
+			break
+	assert_true(chosen_seed >= 0,
+		"no run seed below 256 produces a '%s' -- StratumConfig's family pool or spawn counts changed" % family)
+	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+	arena.run_seed = chosen_seed  # set BEFORE add_child: _ready() generates the floor
+	add_child_autofree(arena)
+	assert_not_null(arena, "the real arena scene must instantiate")
+	return arena
+
+
+## The generated counterpart to the retired get_node("Fang"): asks the SIM which family an
+## actor belongs to, rather than assuming anything about actor_id allocation order.
+func _enemy_of_family(arena: Node3D, family: StringName) -> int:
+	for actor_id: int in arena._enemies.keys():
+		if arena.sim._families.get(actor_id, &"") == family:
+			return actor_id
+	return -1
+
+
 func test_arena_drives_the_player_charge_cue_without_crashing() -> void:
 	var arena: Node3D = _instantiate_arena()
 	var envoy_telegraph: Node3D = arena.envoy.get_node("TelegraphIndicator")
@@ -105,14 +139,15 @@ func test_arena_drives_the_player_charge_cue_without_crashing() -> void:
 
 
 func test_arena_drives_the_enemy_windup_cues_without_crashing() -> void:
-	var arena: Node3D = _instantiate_arena()
-	var watcher_id: int = arena.get_node("Watcher").actor_id
+	var arena: Node3D = _instantiate_arena_containing(&"watcher")
+	var watcher_id: int = _enemy_of_family(arena, &"watcher")
+	var watcher: Node3D = arena._enemies[watcher_id]
 
 	arena._report_events([Event.new(0, "attack_telegraph", {"actor_id": watcher_id, "damage_type": "force", "action_id": "watcher_survey"})] as Array[Event])
-	assert_true(arena.get_node("Watcher").get_node("TelegraphIndicator").visible, "the windup telegraph must appear")
+	assert_true(watcher.get_node("TelegraphIndicator").visible, "the windup telegraph must appear")
 
 	arena._report_events([Event.new(1, "windup_interrupted", {"actor_id": watcher_id, "attacker_id": 0})] as Array[Event])
-	assert_false(arena.get_node("Watcher").get_node("TelegraphIndicator").visible, "an interrupted windup must stop advertising its window")
+	assert_false(watcher.get_node("TelegraphIndicator").visible, "an interrupted windup must stop advertising its window")
 
 
 ## THE SHIPPED-CONTENT LINK. test_burrow.gd proves the MECHANIC with synthetic values; it
@@ -123,8 +158,8 @@ func test_arena_drives_the_enemy_windup_cues_without_crashing() -> void:
 ## Boot-clean is not interact-clean: instantiating the arena proves nothing about whether the
 ## dev trigger can fire, which is exactly the class of gap that has cost this project sessions.
 func test_arena_fang_can_actually_burrow_from_shipped_content() -> void:
-	var arena: Node3D = _instantiate_arena()
-	var fang_id: int = arena.get_node("Fang").actor_id
+	var arena: Node3D = _instantiate_arena_containing(&"fang")
+	var fang_id: int = _enemy_of_family(arena, &"fang")
 	assert_true(arena.sim.debug_trigger_burrow(fang_id, arena.envoy.actor_id),
 		"the SHIPPED Fang content must produce a triggerable burrow -- if this refuses, pressing B in the real build does nothing")
 	assert_true(arena.sim._combat_absent.has(fang_id) or arena.sim._burrow.has(fang_id),
@@ -140,9 +175,9 @@ func test_arena_fang_can_actually_burrow_from_shipped_content() -> void:
 ## unit-clean: test_burrow.gd proves the SIM, and proved nothing about whether the driver
 ## mirrors it onto the node the player actually looks at.
 func test_arena_drives_the_full_burrow_lifecycle_and_mirrors_participation() -> void:
-	var arena: Node3D = _instantiate_arena()
-	var fang: Node3D = arena.get_node("Fang")
-	var fang_id: int = fang.actor_id
+	var arena: Node3D = _instantiate_arena_containing(&"fang")
+	var fang_id: int = _enemy_of_family(arena, &"fang")
+	var fang: Node3D = arena._enemies[fang_id]
 	var target_body: Node = fang.get_node("TargetBody")
 	assert_true(fang.visible, "sanity: present before burrowing")
 	assert_eq(target_body.collision_layer, 2, "sanity: aim-acquirable before burrowing")
@@ -183,9 +218,9 @@ func test_arena_drives_the_full_burrow_lifecycle_and_mirrors_participation() -> 
 ## preconditions for the fix. The fix itself (reset_physics_interpolation) is pinned only by the
 ## contract test asserting teleport_from_sim exists and is what the driver calls.
 func test_no_visible_travel_while_combat_absent() -> void:
-	var arena: Node3D = _instantiate_arena()
-	var fang: Node3D = arena.get_node("Fang")
-	var fang_id: int = fang.actor_id
+	var arena: Node3D = _instantiate_arena_containing(&"fang")
+	var fang_id: int = _enemy_of_family(arena, &"fang")
+	var fang: Node3D = arena._enemies[fang_id]
 	assert_true(arena.sim.debug_trigger_burrow(fang_id, arena.envoy.actor_id), "sanity: triggered")
 
 	var positions_while_absent: Array = []
@@ -223,8 +258,8 @@ func test_no_visible_travel_while_combat_absent() -> void:
 ## The shipped .tres values must be the ones the sim actually runs on. A unit test using
 ## synthetic numbers cannot catch an authored value that never reached registration.
 func test_shipped_fang_burrow_values_reach_the_sim() -> void:
-	var arena: Node3D = _instantiate_arena()
-	var fang_id: int = arena.get_node("Fang").actor_id
+	var arena: Node3D = _instantiate_arena_containing(&"fang")
+	var fang_id: int = _enemy_of_family(arena, &"fang")
 	var stats: Resource = ContentDB.get_resource(&"enemy", &"fang")
 	var config: Dictionary = arena.sim._ai_burrow.get(fang_id, {})
 	assert_false(config.is_empty(), "the shipped Fang must have a registered burrow")
@@ -288,3 +323,37 @@ func test_arena_drives_the_projectile_tracer_lifecycle_without_crashing() -> voi
 
 	arena._report_events([Event.new(1, "hit", {"attacker_id": 0, "target_id": 1, "projectile_id": 7})] as Array[Event])
 	assert_eq(arena._projectile_tracers.size(), 0, "and its terminal event must remove it")
+
+
+## FloorBuilder is M2's new shared presentation component, and it is exactly the shape this
+## file exists to guard: the arena driver calls into it dynamically, presentation is
+## test-exempt by law, and a renamed method would fail at the first floor load rather than
+## at parse time.
+func test_floor_builder_exposes_the_methods_the_arena_driver_calls() -> void:
+	var exposed: Array = _method_names(preload("res://game/arena/floor_builder.gd"))
+	for required in ["build", "clear_floor"]:
+		assert_true(exposed.has(required), "arena.gd calls FloorBuilder.%s() on every floor load" % required)
+
+
+## The generated roster must be the plan's roster. Pins the presentation half of the floor
+## contract: what FloorBuilder instantiated, what the driver registered, and what the plan
+## asked for are one set -- not three that merely usually agree.
+func test_the_built_floor_matches_the_generated_plan() -> void:
+	var arena: Node3D = _instantiate_arena_containing(&"fang")
+	var plan: FloorPlan = DepthGenerator.generate(arena.run_seed, arena.depth)
+
+	assert_eq(arena._enemies.size(), plan.spawns.size(),
+		"every spawn the plan authored must exist as a live actor -- a dropped one means the sim refused a placement the generator promised was legal")
+
+	var planned: Dictionary = {}
+	for spawn in plan.spawns:
+		planned[String(spawn["enemy_key"])] = int(planned.get(String(spawn["enemy_key"]), 0)) + 1
+	var built: Dictionary = {}
+	for actor_id: int in arena._enemies.keys():
+		var family: String = String(arena.sim._families.get(actor_id, &""))
+		built[family] = int(built.get(family, 0)) + 1
+	assert_eq(built, planned, "the built roster's family census must equal the plan's")
+
+	for actor_id: int in arena._enemies.keys():
+		assert_true(arena.sim._bounds.is_inside(arena.sim.entities[actor_id]),
+			"actor %d was spawned outside the floor it lives on" % actor_id)

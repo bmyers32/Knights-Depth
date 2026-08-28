@@ -29,8 +29,8 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P17 | Per-family engagement identities | **CLOSED 2026-08-28 — BURROW SHIPPED** | Weave/scurry/cutoff falsified; BURROW passed all three human gates (action, fairness, selector). Fang has a validated ambush identity chosen by ordinary AI. Values frozen; debts carried out separately |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
-| P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
-| P21 | Arena camera-follow | PROPOSED | Fixed camera doesn't track the Envoy; noted repositioning Watcher for visibility |
+| P20 | Sim movement collision/bounds | **WALL HALF CLOSED 2026-08-28 (M2 Slice 1)** | Floor bounds now clamp all 6 displacement seams + 2 placement seams. STILL OPEN: actor-vs-actor body-blocking, and projectile-vs-world (named fence below) |
+| P21 | Arena camera-follow | PROPOSED — **now rate-limiting M2 floor size** | Fixed camera doesn't track the Envoy; StratumConfig's chamber Z ceiling is set by this, not by design taste |
 | P22 | Buffer eligibility during charge windup | PROPOSED | Scope cut, not canon — a projected `end_tick` is already computable |
 | P23 | Graded player poise | PROPOSED | Mirrors `interrupt_strength`; M1 ships unconditional cancel only |
 | P24 | Reactions beyond flinch + enemy action phases | PROPOSED | Knockdown, player-side reactions, punishable recoveries; second consumer decides shared infra |
@@ -43,6 +43,42 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
+
+## M2 SLICE 1 — SEEDED BOUNDED FLOOR. **HUMAN PASS 2026-08-28.**
+
+First M2 gate work. `run_seed -> DepthGenerator.generate(seed, depth) -> FloorPlan ->
+SimWorld.load_floor()` with sim-authoritative walkable bounds, floor-driven spawning, and
+mechanically-enforced run/floor state scopes. Suite 473 -> 523.
+
+**HUMAN VERDICT (Breon):** generated bounds read as natural; enemy placement feels
+fair/intended; combat behaviour unaffected. **The chamber is validated as a COMBAT-ROOM
+PRIMITIVE, not as a floor** — it does not yet resemble an exploration floor, and
+"enlarge the rectangle" is explicitly rejected as an answer. Reused, not discarded, as
+the COMBAT room type by the multi-room slice below.
+
+### What this slice established (do not re-litigate)
+- **One SimWorld per RUN.** Floors load into it; the sim is never recreated as a cleanup
+  convenience and state is never copied between worlds. `tick_count` is the run clock and
+  never resets.
+- **`STATE_SCOPES` is executable.** `load_floor()` iterates it rather than carrying a
+  parallel clear-list, and a scanner test fails the build on any unclassified sim state.
+  Proved capable of failing before being trusted.
+- **FLOOR-TRANSITION LAW:** a transition is an ENCOUNTER BOUNDARY — deliberately unlike
+  burrow, which is temporary non-participation inside ONE encounter. Durable run
+  progression carries (health, equipment, loadout); transient combat effects do not.
+  **Burn does NOT cross a floor.**
+- **SHIELD:** no floor-load refill. Continuous regeneration stays the single recovery
+  authority; the meter carries at whatever play left it. Clearing it would have been a
+  stealth nerf (it defaults to 0.0), refilling it a stealth heal.
+- **Placement fails loudly, displacement clamps.** An out-of-bounds spawn registers
+  NOTHING and errors; it is never silently relocated into the room.
+
+### THE STALE-AUDIT FINDING (the reason this slice was cheap)
+The remembered P17 position-write list (move / lunge / bump / burrow) was **incomplete**:
+it omitted BOTH knockback paths and registration placement. All eight authoritative
+`entities[]` writers now consume one legality seam, which is why the multi-room slice can
+add encounter gates as a ONE-FUNCTION change. `tests/test_floor_bounds.gd` drives each
+site at a wall. **Re-run that audit before adding any new displacement mechanic.**
 
 ## Deferred (known, intentionally outside M0–M5 — the standing NOT-list)
 - **Economy balance & trading** — auction-house *mechanics* are M5; economy *tuning*
@@ -1257,6 +1293,44 @@ generation gates that half); body-blocking has no trigger yet beyond "it looks o
 — revisit if playtesting finds overlap actively hurts readability/fairness, or when
 M2 floor generation lands and walls become real.
 
+**UPDATE 2026-08-28 — THE WALL HALF IS CLOSED (M2 Slice 1).** M2 floor generation
+landed, so walls became real and this entry's own trigger fired. `WalkableBounds`
+(`game/sim/walkable_bounds.gd`) is now the sim-authoritative walkable law for a
+loaded floor; Godot wall meshes are a rendering of it, never its source (GAME-RULES
+§4.6 — a server must be able to validate a position).
+
+A pre-implementation audit re-enumerated every authoritative write to
+`SimWorld.entities[]` and **found the remembered P17 list stale**: it named move /
+lunge / bump / burrow but omitted BOTH knockback paths and registration placement.
+All eight sites now consume the seam, and `tests/test_floor_bounds.gd` drives each
+one at a wall:
+- DISPLACEMENT (clamped, per-axis so wall contact slides rather than sticks):
+  `_apply_move` · melee lunge · hit knockback · shield-break knockback · bump slide ·
+  burrow backward jump.
+- PLACEMENT (refused, never clamped): burrow emergence candidates · `add_entity`.
+  An out-of-bounds spawn fails LOUDLY and registers nothing — silently relocating it
+  would hide a generator defect behind a floor that merely looks odd.
+Bounds are OPTIONAL (`_bounds == null` ⇒ every seam is identity), which is why the
+whole pre-M2 suite is unaffected by construction rather than by luck.
+
+**STILL OPEN, and still P20's:**
+1. **Actor-vs-actor body-blocking.** Untouched. Enemies and the Envoy still overlap
+   freely; the generator works around it with `min_spawn_separation` rather than the
+   sim solving it. The ally-separation question (co-op relevant, M3) also stays open.
+2. **PROJECTILE-VS-WORLD COLLISION — the named Slice 1 fence.** Projectiles
+   deliberately do NOT consume the bounds seam. Slice 1 floors are single convex
+   chambers, so a shot leaving the walkable rect has already left the play area and
+   `projectile_max_lifetime_ticks` retires it through the existing
+   `projectile_expired` Event. Ruling it in now would mean inventing impact-position
+   and status-drop semantics against no geometry. **This is a decision, not an
+   oversight** — recorded here as well as at `SimWorld._advance_projectiles` so it
+   cannot be mistaken for one. **TRIGGER TO REVISIT:** the first floor with interior
+   geometry or a non-convex chamber. Body displacement obeys bounds today; this fence
+   covers world/projectile collision only.
+3. **No navmesh, pathfinding, obstacle graph, or multi-rect doorway handling.**
+   `WalkableBounds` is axis-aligned rects and two predicates, and `clamp_step`'s
+   multi-rect path is explicitly untested — Slice 1 authors exactly one rect per floor.
+
 ### P21 — Arena camera-follow
 **Idea:** The M1 arena's `FixedCamera` doesn't track the Envoy — noted this session
 while repositioning Watcher's station specifically because its old position sat
@@ -1267,6 +1341,14 @@ problem the moment the arena is large enough for the player to walk off-frame (t
 **Why deferred:** M1's fixed framing is sufficient for the current combat-slice
 testing footprint; not worth the scope now. Revisit if the manual re-pass finds
 perimeter-station movement walking the Envoy off-frame.
+
+**UPDATE 2026-08-28 (M2 Slice 1): this is now a CONSTRAINT ON CONTENT, not just a
+comfort issue.** `StratumConfig.chamber_max_size`'s Z ceiling (26) exists because the
+`FixedCamera` at (0, 12, 12) walks the entry point off the bottom of frame on a deeper
+chamber — the generator is being sized around the camera. The chamber's south wall
+already sits marginally outside the frame at the current maximum. Recorded so the
+ceiling is never mistaken for a design preference: **when P21 lands, that number is the
+first thing that should rise.**
 
 ### P22 — Buffer eligibility during charge windup
 **Idea:** Extend the mid-swing input buffer (built alongside the lunge/windup

@@ -1,80 +1,101 @@
 # HANDOFF
-Milestone: **2 — Procedural depths. NOT STARTED.** No M2 gate item exists yet.
-Last session closed the **P29 Watcher arc (PASS)**; the repo is between build items.
+Milestone: **2 — Procedural depths. IN PROGRESS.** First M2 gate work has landed.
 
-Frozen P29 point: `9378316` · closure record: `bf9db99` · suite **425/425 green**.
+**M2 Slice 1 (seeded bounded floor) is COMMITTED and has a HUMAN PASS.** Suite **523/523**.
 Public M1 build: https://bmyers32.itch.io/knight-depths
 
 ## Where things stand
-M1 shipped and is closed. Everything since has been post-M1 combat work on the M2-era
-docket, not M2 gate work: **P16** (shield bump + perfect parry) then **P29** (enemy action
-repertoire → contextual Watcher selection). M2 itself — seeded floors, strata, elevators,
-minimap, run-end screen, netcode spike — has **zero lines written**.
+`run_seed → DepthGenerator.generate(seed, depth) → FloorPlan → SimWorld.load_floor()` is
+live and playable: one seeded rectangular chamber, sim-authoritative walkable bounds,
+floor-driven spawning, seed/depth visible on screen.
 
-## Next action (pick one, no discussion needed)
-1. **Start M2 properly** — `/kickoff 2`. Design against GAME-RULES §5's M2 row. This is
-   the milestone-advancing choice and the one the project's own gating wants next.
-2. **Take a Treat** (AGENTS.md Momentum Protocol — available now, P29 just closed).
-   ROADMAP has fun items ready: **P1 bombs**, **P30 wand commitment/reward**,
-   **P31 reflected-projectile parry**, **P17 family movement identities**.
-3. **Clear a follow-up** from the P29 docket below.
+**Human verdict:** bounds read as natural, placement feels fair, combat unaffected — but
+the chamber is a **COMBAT-ROOM PRIMITIVE, not a floor**. Ruled explicitly: *do not enlarge
+the rectangle and call that exploration.* It gets reused as the COMBAT room type.
 
-## P29 follow-up docket (dispatched, none are blockers)
-Each has a named trigger in its ROADMAP entry. Most likely to fire first:
-- **Melee-range animation readability** → **P32** (+ P28's open revalidation trigger).
-  Gates melee parry AND P28's weapon-reach/contact re-check. There is still no sword model
-  or attack animation; melee has no "now" moment to time a parry against.
-- **Kiting-punisher family** → **P17**. Owns the infinite-kite answer (see below).
-- Survey package escalation (+ disguise fence) · aim-lock fork → **P29**
-- Reflected-projectile parry → **P31** (replaces a banked mechanic; needs its own fork review)
-- Wand commitment/reward → **P30** · Family movement identities → **P17**
+## Next action — M2 MULTI-ROOM SLICE (proposal approved, 4 rulings issued)
+Build the complete linear floor before asking for another human look:
+**ENTRY → TRAVERSAL → COMBAT(lock) → CLEAR → TRAVERSAL → FLOOR END**
+
+Build order (do NOT stop for a human look after 1–3; hand back the integrated slice):
+1. **Multi-rect clamp fix** — evaluate legal candidates across ALL rects containing `from`,
+   pick the deterministic candidate nearest the intended destination. Array order must
+   never create a phantom wall at a doorway.
+2. **`RoomPlan[]` / `ConnectionPlan[]`** + linear-chain generator; `walkable_rects` becomes
+   the DERIVED flattened union (room rects + aperture rects). Apertures **overlap** both
+   rooms — abutting rects give a zero-area junction and break continuity.
+3. **Camera follow (P21)** — translating only, preserve the validated 45° angle and combat
+   framing/scale, clamp to floor extent. No room snapping.
+4. **Encounter lock + room roster + activation/clear + gate barriers.**
+
+### The four rulings (binding)
+1. **Enemy room confinement: ALWAYS**, not conditional on lock state. Applies to every
+   authoritative enemy displacement seam, not just locomotion. Consumes P18's
+   bounded-by-room direction.
+2. **Combat lock seals BOTH SIDES** — player and every living roster actor. Nothing may
+   push/lunge/bump/burrow out through a closed connection. Clears only when the roster is
+   dead; a burrowed Fang is ALIVE and still counts. On clear, gates reopen permanently.
+3. **End-of-floor marker: YES** — deterministic visual endpoint only. NOT an elevator, NOT
+   floor-transition logic, NOT run-end UI. It exists to make the test grammar visible.
+4. **Dormant combat aggro: NO** — a dormant roster does not detect the player through an
+   open doorway. Entry activates the encounter, then the roster wakes. **Do not build
+   doorway LOS/visibility propagation.**
+
+### One implementation detail called out as must-be-explicit
+Closed-aperture legality **must not shrink the combat space or snap an actor away from a
+doorway threshold**. Define which side/portion of an aperture belongs to the locked
+encounter, and **test activation while the player is mid-threshold**.
 
 ## Open items / live fences
-- **NUMERIC FENCE.** These are validated or ruled and do NOT move without a specific new
-  playtest finding: `close_frustration_ticks = 90` (Watcher patience, PROVISIONAL; **60**
-  is the recorded fallback), Survey package (`hit_radius` 0.20 / speed 7.0 / windup 34 /
-  vulnerable 23–34), `engagement_delay_ticks = 10`, wand basic `flinch_capability = none`,
-  all M1 HP/flinch thresholds.
-- **`vulnerable_start_tick` is explicitly frozen.** Ruled: positioning determines which
-  counterplay is available; the window is NOT to be moved so it becomes reachable from
-  arbitrary ranged positioning.
-- **Infinite-kite consequence (intended, watch only).** A player who never lets the Watcher
-  close gets exactly ONE Survey — the episode never clears. Ruling: *"If infinite-kite ever
-  proves too safe, that becomes evidence for a new episode-reset rule — never a reason to
-  weaken one-survey-per-episode preemptively."*
-- **GAME-RULES §3 aim law preserved.** Action-lock only. Correct phrasing, use verbatim:
-  *"Movement during windup changes the eventual fire-tick aim; it does not defeat the shot
-  by invalidating a previously locked target position."* Aim-lock is a filed fork, never a
-  workaround.
-- **Naming fence.** The close-frustration gate is deliberately narrow
-  (`requires_close_frustration`, `close_frustration_ticks`, `_close_frustration_satisfied`).
-  Generalise to a context framework **only** when a second real consumer exists.
-- **ROADMAP prune is DUE at M2 close** — Index has **31** live entries (cap 20). Not
-  mandatory until milestone completion. P16 / P28 / P29 are the obvious tombstone candidates.
-- Carried from M1: three GAME-RULES §3 rules still want a human edit · **P14** working title
-  (itch slug now permanent) · P16 BUMP pass-through (P20) · 5.10 chain-flinch feel.
+- **NUMERIC FENCE (M1, unchanged).** `close_frustration_ticks = 90` (PROVISIONAL, fallback
+  60) · Survey package (`hit_radius` 0.20 / speed 7.0 / windup 34 / vulnerable 23–34) ·
+  `engagement_delay_ticks = 10` · wand `flinch_capability = none` · all M1 HP/flinch values.
+  `vulnerable_start_tick` is explicitly FROZEN.
+- **M2 PROVISIONAL values** (StratumConfig, validated only by play):
+  `min_spawn_distance_from_entry = 10.0` · `min_spawn_separation = 3.0` · chamber size
+  ranges. The chamber Z ceiling (26) exists **because of the fixed camera** — P21 lifts it.
+- **PROJECTILE-VS-WORLD COLLISION: deferred by explicit fence** (ROADMAP P20, not only a
+  code comment). Body displacement obeys bounds; projectiles do not. Trigger to revisit:
+  first floor with interior geometry or a non-convex chamber.
+- **P20 body-blocking still open.** Actor-vs-actor overlap is unsolved; the generator works
+  around it with `min_spawn_separation`. Ally separation (M3 co-op) also undecided.
+- **Step 2 will deliberately invalidate `tests/fixtures/floor_plan_golden.json`.** That is a
+  DELIBERATE re-baseline with a dated reason in the same commit — never a re-record to make
+  red go green.
+- **ROADMAP prune DUE at M2 close** — Index over cap. P16/P28/P29 are tombstone candidates.
+- Carried from M1: three GAME-RULES §3 rules want a human edit · **P14** working title ·
+  P16 BUMP pass-through (P20) · 5.10 chain-flinch feel.
 
 ## Traps this repo has actually sprung (read before touching these areas)
-- **Presentation is test-exempt, so it is the blind spot.** A shared component under
-  `actors/enemies/` (TelegraphIndicator) is used by the **player** too; deleting a method
-  crashed the build with 416/416 green and a clean boot. `tests/test_presentation_contracts.gd`
-  now guards method surface + drives one real player verb through the real arena.
-- **Never re-record `tests/fixtures/ai_baseline_pre_p29.json`** to make a test pass. It is
-  the M1-preservation gate; regenerate only for a deliberate, dated behaviour change.
-- Run diagnostics **without** suppressing stderr, and confirm the mechanism fired before
-  trusting numbers (a tool once printed a clean all-zero table having done nothing).
+- **A remembered audit list goes stale.** P17's position-write list (move/lunge/bump/burrow)
+  was missing BOTH knockback paths and `add_entity`. **Re-run the `entities[]` audit before
+  adding any displacement mechanic** — `grep -n "entities\[" game/sim/sim_world.gd`.
+- **Presentation is test-exempt, so it is the blind spot.** `tests/test_presentation_contracts.gd`
+  pins method surfaces + drives real verbs through the real arena. It broke when Slice 1
+  retired the named `$Fang`/`$Watcher` scene children — generated rosters are now found via
+  `_enemy_of_family(arena, family)` on a searched seed, never a hardcoded one.
+- **Never re-record `ai_baseline_pre_p29.json`** (M1-preservation gate) or the P17 Fang
+  baseline to make a test pass.
+- **A scanner never proven to fail is not a scanner.** The STATE_SCOPES scanner was verified
+  by injecting a real unclassified var and watching it go red. Do this for the next one too.
+- Run diagnostics **without** suppressing stderr; confirm the mechanism fired before
+  trusting numbers.
+- A `-s` tool script compiles **before** autoloads register — `load()` anything touching
+  ContentDB dynamically, never by `class_name`.
 
 ## Commands
 - Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd`
 - New `class_name`? run `--headless --import` first.
-- Tools: `tools/record_ai_baseline.gd` (baseline regen — deliberate only) ·
-  `tools/diagnose_projectile_geometry.gd` · `tools/measure_survey_cadence.gd`
+- Boot check: `--headless --quit-after 120` (real main scene, prints seed + floor).
+- Tools: `tools/record_floor_plan_golden.gd` (golden re-baseline — deliberate only) ·
+  `tools/record_family_locomotion.gd` · `tools/diagnose_projectile_geometry.gd` ·
+  `tools/measure_survey_cadence.gd`
 
 ## Concepts introduced (learning ledger)
-Sim tick vs frame (`_physics_process` vs `_process`) · Command/Event plain-data boundary ·
-service-locator autoload (ContentDB) · seeded RNG streams · fixed combat pipeline order ·
-typed GDScript arrays (`Array[Command]`) · half-open interval conventions · Minkowski-sum
-collision (projectile radius + body radius) · derived-vs-stored state (episode consumption
-from two timestamps) · cosmetic prediction / dead reckoning (tracer) · golden-behaviour
-baselines + normalizer allow-lists · guard clauses vs world facts (refresh before early
-returns) · GUT scene-instantiation smoke tests.
+Sim tick vs frame · Command/Event plain-data boundary · service-locator autoload · seeded
+RNG streams · fixed combat pipeline order · typed GDScript arrays · half-open intervals ·
+Minkowski-sum collision · derived-vs-stored state · cosmetic prediction / dead reckoning ·
+golden-behaviour baselines · guard clauses vs world facts · GUT scene-instantiation smoke
+tests · **pure function + per-call RNG as a purity mechanism** · **reflection-based coverage
+scanners (`get_property_list`)** · **union-of-rects legality vs per-axis clamp (wall slide)**
+· **placement-refuses vs displacement-clamps as distinct seams**.

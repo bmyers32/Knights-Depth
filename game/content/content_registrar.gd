@@ -83,7 +83,12 @@ static func resolve_max_range(action: NaturalWeaponStats, enemy_stats: Resource)
 static func register_enemy_body(sim: SimWorld, actor_id: int, enemy_key: StringName, position: Vector3) -> Dictionary:
 	var stats: Resource = ContentDB.get_resource(&"enemy", enemy_key)
 
-	sim.add_entity(actor_id, position, stats.move_speed)
+	# M2 placement law: an out-of-bounds spawn is refused LOUDLY by the sim, and the rest of
+	# this actor's registration is abandoned with it. Registering health/AI for an actor
+	# that has no position would leave a combatant that exists but cannot be located --
+	# strictly worse to diagnose than one enemy simply missing from the floor.
+	if not sim.add_entity(actor_id, position, stats.move_speed):
+		return {}
 	sim.register_combatant(actor_id, stats.max_health, stats.family, stats.iframe_ticks_on_hit, stats.combat_radius, &"enemy")
 	# Registering a flinch profile is what makes an actor part of the reaction layer
 	# at all -- the Envoy deliberately gets none in M1 (player reactions: ROADMAP P23).

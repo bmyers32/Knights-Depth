@@ -149,3 +149,12 @@ func sync_from_sim(sim_position: Vector3) -> void:
 	# Presentation-only: mirrors sim state onto the transform, never writes sim state
 	# (Prime Directive 1).
 	position = sim_position
+
+
+## Arrival on a newly loaded floor (M2). Identical in kind to the enemies' burrow-emergence
+## teleport and for the same reason: physics_interpolation=true means the renderer would
+## otherwise smoothly draw the trip from the old floor's position to the new entry point,
+## and the Envoy would appear to fly across the room on arrival.
+func teleport_from_sim(sim_position: Vector3) -> void:
+	position = sim_position
+	reset_physics_interpolation()
