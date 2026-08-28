@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **BURROW STAGE 1 PASSED / STAGE 2 PENDING** | Weave, scurry, cutoff all falsified. BURROW PASSED its human verdict 2026-08-25 — first P17 mechanic to survive. Emergence-presentation defect fixed separately; Stage 2 judges emerge→attack fairness |
+| P17 | Per-family engagement identities | **BURROW ACTION VALIDATED / SELECTOR PROPOSED** | Weave, scurry, cutoff falsified. BURROW passed Stage 1 AND Stage 2 — action validated, six values frozen. P17 REMAINS OPEN: production Fang still needs a selector. Proposal filed, awaiting review, no code |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -908,6 +908,106 @@ player who keeps moving leaves the Fang surfacing too far away to reach them at 
 **FALSIFIED if** the attack lands before the player can realistically respond · the beat reads
 as visible but not usable · emergence-plus-attack feels like an unavoidable ambush rather than a
 readable one · or the sequence is threatening but unfair.
+
+## STAGE 2 — **PASS (Breon, 2026-08-28).** The burrow ACTION is validated.
+
+**Verdict:** can locate / turn / respond before the attack · emerge→attack feels fair · the
+reacquisition pause is appropriately timed · the attack follow-up strengthens Fang's predator
+identity · no additional mechanical concerns.
+
+**ACTION-VALIDATION PHASE CLOSED. Stage 1 PASS + Stage 2 PASS.** Six of the seven authored
+values are now VALIDATED-FOR-ACTION and **FROZEN**: jump distance and step, underground
+duration, emergence radius, emergence retry window, reacquisition beat. **Do not tune them
+without contrary playtest evidence** — two mechanics were already lost by iterating on the wrong
+layer, and a validated action is not a place to go looking for improvement.
+
+**`burrow_cooldown_ticks = 240` remains PROVISIONAL**, deliberately: it paces how OFTEN the
+action happens, and nothing has yet decided WHEN it happens at all. It is validated only once a
+selector exists and is itself validated.
+
+**Housekeeping:** Stage-2 trigger reverted, canonical build back to gate state (zero `debug_*`
+overrides). Commit-then-revert applied for the second time, as designed.
+
+### BITE-DISPLACEMENT CLASSIFICATION (asked and answered before classifying)
+**Does the shipped Bite profile author displacement after telegraph? NO.**
+- `fang_bite.tres` authors none;
+- `NaturalWeaponStats` has **no displacement fields at all** — an enemy action cannot author any;
+- `register_weapon`, the flat path every enemy action registers through, takes no lunge params;
+- every `entities[actor_id]` write in the sim is accounted for — `_apply_move`, the PLAYER's
+  melee lunge, bump slides, and burrow. `_resolve_melee_swing` never moves the attacker.
+
+So presentation is **not** hiding authoritative sim motion; the Fang genuinely stands still
+through its bite. **Filed as attack-movement animation/presentation debt**, not a presentation
+defect. Related to, and distinct from, P28's still-open weapon-reach/animation revalidation
+trigger and P32.
+
+---
+
+# P17 FINAL LEG — BURROW SELECTOR · **PROPOSAL, AWAITING REVIEW. NO CODE.**
+
+The action is validated; production Fang still has no way to choose it. Selector work inherits
+the standing doctrine: **the validated action stays frozen**, the selector is a design proposal
+first, trigger observability must be provable, and it must not repeat scurry's structurally
+blind detection.
+
+### 1. WHERE THE DECISION LIVES
+**NOT the P29 repertoire.** That law scopes action selection to attack SHAPE chosen by distance
+band; burrow is mobility, and giving a non-attack a band would corrupt the law it would be
+borrowing. The burrow gate belongs in `_decide_single_ai_command`, in the pursue branch,
+**after** the attack-eligibility check — so a Fang that can bite always bites, and burrow is
+what it does when the frontal approach is not available.
+
+### 2. THE SIGNAL — three forks, costed
+| Fork | Cost | Blindness profile | Risk |
+|---|---|---|---|
+| **A. Close-range frustration** *(lean)* | Reuses `_ai_last_in_close_band`, an existing, proven, already-instrumented fact (Watcher survey) | Measures the FANG'S OWN achievement — "did I reach close range" — not the player's velocity. Therefore sensitive to every kite shape that actually denies engagement, including the diagonal case that made scurry blind (at 45° the Fang gains only 0.17 u/s, so ~35 s to close from 6 units). Correctly does NOT fire while the player circles in contact, because engagement is working | Trips P29's naming fence — see §3 |
+| **B. Health threshold** | `_health` exists; zero new state | None — a fact about the Fang, always evaluable | Says nothing about whether the frontal approach is working; fires at a fixed HP so it becomes predictable, and needs the cooldown to avoid spamming at low health |
+| **C. Post-flinch disengage** | `_flinched_until_tick` exists | None | Likely feels BAD: the player lands a combo and the enemy vanishes, which reads as escaping punishment and rewards the enemy for being hit |
+
+**Lean: A alone for v1.** It is the only fork that answers the question the burrow exists to
+answer, and it is the only one already observable. B is a plausible later addition as an
+independent second trigger; C is not recommended.
+
+### 3. THE FENCE DECISION THIS FORCES
+P29's naming fence states that `requires_close_frustration` / `close_frustration_ticks` stay
+deliberately narrow, and generalise to a shared context concept **only when a second real
+consumer exists**. A burrow selector on fork A **would be that second consumer** — the rule of
+two fires, and it needs a deliberate answer rather than a default:
+- **generalise** the vocabulary into a shared "failed engagement" fact used by both, or
+- **duplicate narrowly** for burrow, keeping the Watcher's gate untouched.
+Surfaced, not decided. Same shape as the extraction decision that was deliberately answered NO
+at consumer #2 for authored displacement.
+
+### 4. GUARDS
+Off cooldown · not already burrowing · not mid-windup (structurally excluded — the attack gate
+returns before this point). A minimum-distance guard is probably redundant, since a frustrated
+Fang is by definition not close, and should not be added without evidence it is needed.
+
+### 5. OBSERVABILITY — mandatory, and pre-registered
+`debug_describe_burrow_selection(actor, player)` reporting each condition's LIVE value against
+its threshold — frustration elapsed vs required, cooldown remaining, distance — plus an arena
+`debug_show_burrow_selection`. The scurry's detector was falsified by an autopsy that should
+have been run before play; the selector must be diagnosable from a log without re-deriving it.
+
+### 6. PRE-REGISTERED DETECTOR VERIFICATION — before any human play
+A diagnostic must prove, on shipped content, that the trigger:
+- **fires** under sustained diagonal kiting, standoff at range, and wall-hugging retreat;
+- **does not fire** during ordinary close engagement or while the player circles in contact.
+Explicitly modelled on the scurry autopsy. A selector that has not been run against the movement
+shapes players actually use is not ready for a human.
+
+### 7. PRE-REGISTERED HUMAN CRITERION
+The selector passes only if burrow **appears at moments that read as the Fang deciding the
+frontal approach is not working** — the player should be able to feel why it happened.
+**FALSIFIED if** it reads as arbitrary · fires so often it becomes a rhythm rather than an event ·
+never appears in ordinary play · or makes the Fang feel evasive rather than predatory.
+`burrow_cooldown_ticks` is the tuning lever for frequency, and is the ONLY burrow value still
+open.
+
+### FENCES
+The validated action stays frozen · no selector implementation before proposal approval · no
+generic context framework without the §3 ruling · no Ooze/Watcher changes · no multi-Fang
+coordination · the human verdict remains Breon's.
 
 ## FENCES
 No generic teleport framework · no generic phasing framework · no steering/pathfinding · no

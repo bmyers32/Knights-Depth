@@ -124,7 +124,21 @@ extends Resource
 ## PAYS ATTENTION TO -- the disappearance/emergence must force meaningful target reacquisition
 ## and response, not preserve the same frontal engagement problem.
 ##
-## ALL SEVEN VALUES PROVISIONAL/UNVALIDATED, outside the M1 NUMERIC FENCE. 0 = off.
+## VALUE STATUS (updated 2026-08-28, after BOTH human stages PASSED):
+## Six of the seven are now VALIDATED-FOR-ACTION and FROZEN -- the jump distance and step, the
+## underground duration, the emergence radius and retry window, and the reacquisition beat were
+## all judged in live play across Stage 1 (does the action read as a predator?) and Stage 2 (is
+## emerge-then-attack fair?). Verdicts: PASS and PASS.
+##   Stage 1: "backward jump reads well... like it's disappearing into the bush", burrow DOES
+##            change what the player pays attention to.
+##   Stage 2: "can locate/turn/respond before the attack", emerge->attack feels fair, the
+##            reacquisition pause is appropriately timed.
+## DO NOT TUNE THESE without contrary playtest evidence. Two mechanics were already falsified
+## by tuning the wrong layer; a validated action is not a place to go looking for improvement.
+##
+## THE ONE EXCEPTION is burrow_cooldown_ticks, which remains PROVISIONAL: it paces how OFTEN the
+## action happens, and nothing has yet chosen when the action happens at all. It is validated
+## only once a selector exists and is itself validated.
 ## ---------------------------------------------------------------------------------
 
 ## The conspicuous disengage. 4.0 units is more than a second of ordinary movement delivered in

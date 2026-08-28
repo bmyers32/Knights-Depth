@@ -15,7 +15,6 @@ size = Vector3(40, 0.2, 40)
 
 [node name="Arena" type="Node3D"]
 script = ExtResource("1_script")
-debug_burrow_trigger = true
 
 [node name="Floor" type="StaticBody3D" parent="."]
 
