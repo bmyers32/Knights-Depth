@@ -44,6 +44,60 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## M2 MULTI-ROOM SLICE — EXPLORABLE FLOOR + LOCK-IN ENCOUNTER. **AWAITING HUMAN PASS.**
+
+Built on the committed Slice-1 baseline (`e7bea74`). Suite 523 -> 552.
+Grammar now playable end to end: **ENTRY -> TRAVERSAL -> COMBAT(seal) -> CLEAR -> TRAVERSAL
+-> FLOOR END.**
+
+### Topology
+`FloorPlan` -> `RoomPlan[]` + `ConnectionPlan[]` -> DERIVED `walkable_rects`. Room ROLES come
+from `StratumConfig.room_sequence` (content, not code), so a second combat room is a .tres
+edit. Sizes, rosters and placements are seeded. Branching graphs are later work.
+
+**Apertures OVERLAP the rooms they join** — never merely abut. Two rects touching on a line
+share zero area, so an actor is only ever inside one and the threshold becomes a
+discontinuity. That overlap is also what makes gating free: the room's own rect already covers
+its half of the aperture, so sealing removes only the corridor beyond and can never shrink the
+room or snap an actor off a doorway.
+
+### The four rulings, as built
+1. **Enemy room confinement is ALWAYS**, not lock-scoped, and binds every displacement seam —
+   proved for knockback, not just locomotion. Consumes P18's bounded-by-room direction.
+2. **The seal binds both sides.** One resolver (`SimWorld._legal_bounds_for`) answers "where
+   may this actor be" for enemies (own room, always), the sealed Envoy (locked room), and
+   everyone else (whole floor). `_bounds` is never mutated to express a gate.
+3. **Terminal marker** — deterministic endpoint, no elevator/transition/run-end logic.
+4. **Dormant rosters do not aggro through doorways.** Gated on ENCOUNTER STATE rather than
+   `_ai_state`, so `debug_force_aggro` cannot silently repeal the law. No LOS model exists.
+
+Clear condition keys on `_health`, so a **burrowed Fang is alive and keeps its room sealed** —
+burrow is temporary non-participation INSIDE an encounter and must never read as leaving one.
+
+### Fixed: the array-order phantom wall
+Slice 1's clamp chose the FIRST array-order rect containing the actor. In a doorway (inside
+both room and aperture) that made wall placement depend on authoring order. `clamp_step` now
+evaluates a candidate in every containing rect and keeps the one nearest the destination; ties
+break on array order, so it stays deterministic for M3.
+
+### Interactions found while building (recorded, not defects)
+- **Burrow emergence is bounded by room ownership.** Candidates are placed around the PLAYER;
+  if the player is in a different room, all are illegal and the fail-safe correctly kills the
+  Fang underground. Unreachable in real play — a live encounter seals the player in — but it
+  is why burrow tests must place the Envoy in-room.
+- **DIFFICULTY MOVED, and nobody has judged it.** Sealing removes retreat, which was the
+  implicit safety valve in Slice 1. Measured: the shipped 30 HP Envoy dies to a 4-Fang sealed
+  room in roughly 40 s of continuous engagement. `spawn_count_min/max` stay PROVISIONAL and
+  are the first knob if the first encounter reads as unfair. NOT retuned blind — combat values
+  are under a numeric fence and this is a human call.
+
+### P21 CONSUMED
+`FollowCamera` translates only: M1's validated 45-degree offset is preserved exactly, so combat
+readability and apparent scale are untouched. Edge clamp is deliberately CONSERVATIVE
+(`edge_margin_*` = 6.0) because the failure modes are asymmetric — showing void past a wall is
+cosmetic, holding focus so far from the Envoy that it leaves frame is fatal. Room-snapped
+framing deferred: it brings a transition-feel question that would confound this playtest.
+
 ## M2 SLICE 1 — SEEDED BOUNDED FLOOR. **HUMAN PASS 2026-08-28.**
 
 First M2 gate work. `run_seed -> DepthGenerator.generate(seed, depth) -> FloorPlan ->

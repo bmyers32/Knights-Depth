@@ -10,6 +10,7 @@ extends Node3D
 ## holds the locked §3/§7 seed+7 families) — what changed is who decides placement and count.
 @onready var envoy: CharacterBody3D = $Envoy
 @onready var _floor_builder: FloorBuilder = $FloorBuilder
+@onready var _camera: FollowCamera = $FollowCamera
 @onready var _seed_label: Label = $SeedHud/SeedLabel
 @onready var _failure_overlay: FailureOverlay = $FailureOverlay
 
@@ -108,6 +109,10 @@ var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 ## different enemies indistinguishable in one run's event log. Starts at 1 because the Envoy
 ## holds 0 (envoy.gd) and is the only actor that outlives a floor.
 var _next_actor_id: int = 1
+## room_id -> Array[int] of gated connection_ids, so an encounter Event can raise or drop
+## exactly the barriers around the room it names. Presentation mirroring an authoritative
+## fact -- it never decides that a room is sealed.
+var _room_gates: Dictionary = {}
 var _debug_equipped_index: int = 0
 var _debug_tab_held_prev: bool = false
 var _debug_burrow_held_prev: bool = false
@@ -229,10 +234,23 @@ func _load_floor() -> void:
 	var plan: FloorPlan = DepthGenerator.generate(run_seed, depth)
 	print("floor loaded: ", {
 		"run_seed": run_seed, "depth": depth, "floor_seed": plan.floor_seed,
-		"stratum": plan.stratum_id, "spawns": plan.spawns.size(),
+		"stratum": plan.stratum_id, "rooms": plan.rooms.size(),
+		"connections": plan.connections.size(), "spawns": plan.all_spawns().size(),
 	})
 
 	sim.load_floor(plan.make_bounds(), plan.entry_point)
+	# Rooms are registered BEFORE any actor, because assign_actor_room validates an actor
+	# against the room it claims to stand in.
+	_room_gates.clear()
+	for room in plan.rooms:
+		sim.register_room(room.room_id, room.kind, room.rect)
+		_room_gates[room.room_id] = []
+	for connection in plan.connections:
+		if not connection.gated:
+			continue
+		for room_id in [connection.room_ids.x, connection.room_ids.y]:
+			if _room_gates.has(room_id):
+				_room_gates[room_id].append(connection.connection_id)
 	# Presentation state keyed by the departing floor's actors dies with them. The sim has
 	# already dropped its side; these are the mirrors.
 	_enemies.clear()
@@ -240,6 +258,9 @@ func _load_floor() -> void:
 	for projectile_id: int in _projectile_tracers.keys():
 		_despawn_tracer(projectile_id)
 	envoy.teleport_from_sim(plan.entry_point)
+	_camera.set_target(envoy)
+	_camera.set_floor_extent(_floor_extent_of(plan))
+	_camera.snap_to_target()  # arrive framed, never sweeping across the floor to catch up
 
 	var spawned: Array[Dictionary] = _floor_builder.build(plan, _next_actor_id)
 	_next_actor_id += spawned.size()  # ids are never reused within a run
@@ -258,6 +279,10 @@ func _load_floor() -> void:
 			actor.queue_free()
 			continue
 		ContentRegistrar.register_enemy_ai(sim, actor_id, record["enemy_key"], record["position"])
+		# ROOM OWNERSHIP IS PERMANENT and unconditional (ruled): this enemy is confined to the
+		# room that generated it for its whole life, whatever the encounter state. Refused
+		# loudly by the sim if the generator ever emits a spawn outside its own room.
+		sim.assign_actor_room(actor_id, int(record["room_id"]))
 		# Dev validation target -- setup-time only, both loud no-ops at their defaults.
 		if debug_validation_target_health > 0.0:
 			sim.debug_override_health(actor_id, debug_validation_target_health)
@@ -286,6 +311,15 @@ func _load_floor() -> void:
 					"hit_radius": action.projectile_hit_radius,
 				}
 	_update_seed_label(plan)
+
+
+## Union AABB of everything walkable, for the camera's edge clamp. Derived from the plan, so
+## the camera can never disagree with the floor about where the floor is.
+func _floor_extent_of(plan: FloorPlan) -> Rect2:
+	var extent: Rect2 = Rect2()
+	for index in plan.walkable_rects.size():
+		extent = plan.walkable_rects[index] if index == 0 else extent.merge(plan.walkable_rects[index])
+	return extent
 
 
 ## §1.3's visibility law, satisfied ON SCREEN rather than in stdout: a printed seed is
@@ -550,6 +584,17 @@ func _report_events(events: Array[Event]) -> void:
 			# frustration elapsed at commitment. The scurry's detector was falsified by an autopsy
 			# that should have run before play -- this makes the selector's reasoning readable
 			# from an ordinary session log.
+			# ENCOUNTERS. Presentation mirrors the sim's authoritative seal; it never decides one.
+			# The barriers are a PICTURE of room confinement -- deleting them would leave a locked
+			# encounter just as inescapable, only invisible.
+			"encounter_activated":
+				print("ENCOUNTER ACTIVATED: ", event.payload)
+				for connection_id: int in _room_gates.get(event.payload.get("room_id"), []):
+					_floor_builder.set_gate_closed(connection_id, true)
+			"encounter_cleared":
+				print("ENCOUNTER CLEARED: ", event.payload)
+				for connection_id: int in _room_gates.get(event.payload.get("room_id"), []):
+					_floor_builder.set_gate_closed(connection_id, false)
 			"burrow_committed":
 				print("burrow committed: ", event.payload)
 			"burrow_submerged":

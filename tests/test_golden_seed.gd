@@ -39,7 +39,10 @@ func test_a_different_seed_does_not_match_the_golden_floor() -> void:
 
 
 ## The fixture is only trustworthy if a human could read it. Pins the shape a reviewer
-## inspected: one chamber, a legal entry point, and a non-empty roster standing inside it.
+## inspected: a connected chain, a legal arrival and endpoint, and a populated fight.
+##
+## Re-derives everything from the FIXTURE itself rather than from the generator that produced
+## it -- otherwise a generator bug would be validating its own output.
 func test_the_committed_fixture_describes_a_sane_floor() -> void:
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(FIXTURE_PATH))
 	assert_true(parsed is Dictionary, "the fixture must be a JSON object")
@@ -48,24 +51,75 @@ func test_the_committed_fixture_describes_a_sane_floor() -> void:
 	assert_eq(int(fixture["run_seed"]), GOLDEN_SEED)
 	assert_eq(int(fixture["depth"]), GOLDEN_DEPTH)
 	assert_eq(String(fixture["stratum_id"]), "archive")
-	assert_eq((fixture["walkable_rects"] as Array).size(), 1, "Slice 1 floors are a single chamber")
-	assert_gt((fixture["spawns"] as Array).size(), 0, "a floor with no enemies is not a floor")
 
-	# Re-derive the geometry from the fixture itself and check it, rather than trusting the
-	# generator that produced it -- otherwise a generator bug would validate its own output.
-	var rect: Dictionary = fixture["walkable_rects"][0]
-	var min_x: float = float(rect["x"])
-	var min_z: float = float(rect["z"])
-	var max_x: float = min_x + float(rect["w"])
-	var max_z: float = min_z + float(rect["d"])
+	var rooms: Array = fixture["rooms"]
+	var connections: Array = fixture["connections"]
+	assert_gt(rooms.size(), 1, "a floor is more than one room")
+	assert_eq(connections.size(), rooms.size() - 1, "a chain has one connection per adjacent pair")
+	assert_eq((fixture["walkable_rects"] as Array).size(), rooms.size() + connections.size(),
+		"the derived legality view must be exactly the rooms plus the apertures")
 
+	var kinds: Array = []
+	var populated_combat: int = 0
+	for room in rooms:
+		kinds.append(String(room["kind"]))
+		if String(room["kind"]) == "combat":
+			assert_gt((room["spawns"] as Array).size(), 0,
+				"an empty combat room would seal the player in and never reopen")
+			populated_combat += 1
+		else:
+			assert_eq((room["spawns"] as Array).size(), 0, "only combat rooms carry a roster")
+	assert_eq(kinds[0], "entry", "the chain must start where the Envoy arrives")
+	assert_gt(populated_combat, 0, "a floor needs a fight")
+	assert_true(kinds.has("traversal"), "and space between fights")
+
+	# Every aperture must genuinely OVERLAP both rooms it joins. Abutting rects share zero
+	# area, which would make each threshold a discontinuity.
+	for connection in connections:
+		for room_id in connection["room_ids"]:
+			var room: Dictionary = _room_with_id(rooms, int(room_id))
+			assert_gt(_rect_of(connection["aperture"]).intersection(_rect_of(room["rect"])).get_area(), 0.0,
+				"aperture %d only abuts room %d instead of overlapping it" % [int(connection["connection_id"]), int(room_id)])
+		var touches_combat: bool = false
+		for room_id in connection["room_ids"]:
+			if String(_room_with_id(rooms, int(room_id))["kind"]) == "combat":
+				touches_combat = true
+		assert_eq(bool(connection["gated"]), touches_combat, "only connections touching a fight are gated")
+
+	# Arrival and endpoint are both walkable, and the floor actually leads somewhere.
 	var entry: Dictionary = fixture["entry_point"]
-	assert_between(float(entry["x"]), min_x, max_x, "the entry point must be inside the chamber")
-	assert_between(float(entry["z"]), min_z, max_z, "the entry point must be inside the chamber")
+	var end_marker: Dictionary = fixture["end_marker"]
+	assert_true(_is_walkable(fixture, entry), "the Envoy would arrive out of bounds")
+	assert_true(_is_walkable(fixture, end_marker), "the terminal marker is unreachable")
+	assert_lt(float(end_marker["z"]), float(entry["z"]), "the marker must sit deeper than the entrance")
 
-	var minimum_distance: float = ContentDB.get_resource(&"stratum", &"archive").min_spawn_distance_from_entry
-	for spawn in fixture["spawns"]:
-		assert_between(float(spawn["x"]), min_x, max_x, "spawn outside the chamber on X")
-		assert_between(float(spawn["z"]), min_z, max_z, "spawn outside the chamber on Z")
-		var offset := Vector2(float(spawn["x"]) - float(entry["x"]), float(spawn["z"]) - float(entry["z"]))
-		assert_gt(offset.length(), minimum_distance - 0.001, "the floor must not open with an enemy on top of the player")
+	# And nothing was generated on top of the doorway into the fight.
+	var minimum: float = ContentDB.get_resource(&"stratum", &"archive").min_spawn_distance_from_entry
+	for room in rooms:
+		if String(room["kind"]) != "combat":
+			continue
+		var rect: Rect2 = _rect_of(room["rect"])
+		var entrance := Vector2(rect.get_center().x, rect.end.y)
+		for spawn in room["spawns"]:
+			var position := Vector2(float(spawn["position"]["x"]), float(spawn["position"]["z"]))
+			assert_true(rect.has_point(position), "spawn outside the room that owns it")
+			assert_gt(position.distance_to(entrance), minimum - 0.001, "spawn ambushes the doorway")
+
+
+func _rect_of(source: Dictionary) -> Rect2:
+	return Rect2(float(source["x"]), float(source["z"]), float(source["w"]), float(source["d"]))
+
+
+func _room_with_id(rooms: Array, room_id: int) -> Dictionary:
+	for room in rooms:
+		if int(room["room_id"]) == room_id:
+			return room
+	return {}
+
+
+func _is_walkable(fixture: Dictionary, point: Dictionary) -> bool:
+	var flat := Vector2(float(point["x"]), float(point["z"]))
+	for rect_source in fixture["walkable_rects"]:
+		if _rect_of(rect_source).has_point(flat):
+			return true
+	return false

@@ -240,3 +240,66 @@ func test_content_registrar_abandons_an_enemy_the_sim_refuses() -> void:
 	assert_false(sim.entities.has(ENEMY_ID), "no position")
 	assert_false(sim._health.has(ENEMY_ID), "and no orphaned combatant that exists but cannot be located")
 	assert_push_error("outside walkable bounds", "the refusal must be loud")
+
+
+# --- MULTI-RECT / DOORWAY (M2 multi-room slice) ---------------------------------------
+# Slice 1's clamp chose the FIRST array-order rect containing the actor. In a doorway -- where
+# an aperture rect deliberately overlaps both rooms -- that made wall placement depend on
+# authoring order, producing a PHANTOM WALL across a visibly open threshold.
+
+## Two rooms joined by an aperture that overlaps both, mirroring what DepthGenerator emits.
+##   room A  x[-6, 6]   z[-10, 0]
+##   room B  x[-10,10]  z[-36,-16]
+##   door    x[-2.5,2.5] z[-17.5,-8.5]  (1.5 into each room)
+func _two_room_floor() -> WalkableBounds:
+	var rects: Array[Rect2] = [
+		Rect2(-6.0, -10.0, 12.0, 10.0),
+		Rect2(-10.0, -36.0, 20.0, 20.0),
+		Rect2(-2.5, -17.5, 5.0, 9.0),
+	]
+	return WalkableBounds.new(rects)
+
+
+func test_an_actor_can_walk_between_two_rooms_through_their_aperture() -> void:
+	sim = SimWorld.new()
+	sim.load_floor(_two_room_floor(), Vector3(0.0, 0.0, -5.0))
+	sim.add_entity(PLAYER_ID, Vector3(0.0, 0.0, -5.0), 6.0)
+	for i in 200:
+		_move(PLAYER_ID, Vector3(0.0, 0.0, -1.0))
+	assert_lt(sim.entities[PLAYER_ID].z, -20.0, "the Envoy must reach the far room, not stop at the first wall")
+
+
+## THE PHANTOM-WALL REGRESSION ITSELF. Standing in the overlap strip, an actor is inside TWO
+## rects. Array order must not decide which one constrains it: the clamp picks the candidate
+## nearest the intended destination, so the open direction stays open.
+func test_standing_in_a_doorway_no_array_order_wall_appears() -> void:
+	var bounds: WalkableBounds = _two_room_floor()
+	# Inside both room A (z >= -10) and the aperture (z <= -8.5).
+	var threshold := Vector3(0.0, 0.0, -9.0)
+	assert_true(bounds.is_inside(threshold), "sanity: the threshold is legal")
+
+	# Deeper into the corridor is legal, and must be returned unchanged.
+	var onward := Vector3(0.0, 0.0, -12.0)
+	assert_eq(bounds.clamp_step(threshold, onward), onward, "a legal destination is never clamped")
+
+	# Sideways out of the corridor is illegal. Room A's wall is at x = 6, the aperture's at
+	# x = 2.5; the clamp must choose the one NEAREST the destination, never the first in the
+	# array -- which is what stops a doorway from acquiring an invisible wall.
+	var sideways := Vector3(9.0, 0.0, -9.0)
+	var clamped: Vector3 = bounds.clamp_step(threshold, sideways)
+	assert_true(bounds.is_inside(clamped), "the clamp must land somewhere legal")
+	assert_almost_eq(clamped.x, 6.0, 0.0001, "it must clamp to room A's wall, the nearer legal edge")
+
+
+func test_a_diagonal_through_a_doorway_is_not_blocked_by_the_corridor_walls() -> void:
+	sim = SimWorld.new()
+	sim.load_floor(_two_room_floor(), Vector3(0.0, 0.0, -5.0))
+	sim.add_entity(PLAYER_ID, Vector3(1.5, 0.0, -5.0), 6.0)
+	# Aim diagonally THROUGH the doorway, converging on it. The x component is absorbed by the
+	# corridor wall while the z component keeps carrying the actor onward -- a diagonal that
+	# instead drifted AWAY from the opening would legitimately hit the wall beside it, which is
+	# correct behaviour and not what this test is about.
+	for i in 300:
+		_move(PLAYER_ID, Vector3(-0.4, 0.0, -1.0).normalized())
+	assert_lt(sim.entities[PLAYER_ID].z, -20.0, "the diagonal must still get through the door")
+	assert_true(sim._bounds.is_inside(sim.entities[PLAYER_ID]), "and stay legal the whole way")

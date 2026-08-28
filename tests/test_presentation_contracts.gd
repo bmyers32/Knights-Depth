@@ -100,7 +100,7 @@ func _instantiate_arena() -> Node3D:
 func _instantiate_arena_containing(family: StringName) -> Node3D:
 	var chosen_seed: int = -1
 	for candidate in 256:
-		for spawn in DepthGenerator.generate(candidate, 1).spawns:
+		for spawn in DepthGenerator.generate(candidate, 1).all_spawns():
 			if spawn["enemy_key"] == family:
 				chosen_seed = candidate
 				break
@@ -113,6 +113,20 @@ func _instantiate_arena_containing(family: StringName) -> Node3D:
 	add_child_autofree(arena)
 	assert_not_null(arena, "the real arena scene must instantiate")
 	return arena
+
+
+## Puts the Envoy inside the room that owns `actor_id`, which is where a player necessarily IS
+## whenever that room's encounter is live.
+##
+## Load-bearing since room confinement landed: burrow emergence places candidates around the
+## PLAYER, and an owned actor may only surface inside its own room. Triggering a burrow while
+## the Envoy stands in a different room leaves every candidate illegal, so the fail-safe
+## correctly kills the Fang underground -- a real interaction, not a defect, but not the
+## scenario these lifecycle tests are about.
+func _place_envoy_in_room_of(arena: Node3D, actor_id: int) -> void:
+	var rect: Rect2 = arena.sim._rooms[int(arena.sim._actor_room[actor_id])]
+	var centre: Vector2 = rect.get_center()
+	arena.sim.entities[arena.envoy.actor_id] = Vector3(centre.x, 0.0, centre.y)
 
 
 ## The generated counterpart to the retired get_node("Fang"): asks the SIM which family an
@@ -160,6 +174,7 @@ func test_arena_drives_the_enemy_windup_cues_without_crashing() -> void:
 func test_arena_fang_can_actually_burrow_from_shipped_content() -> void:
 	var arena: Node3D = _instantiate_arena_containing(&"fang")
 	var fang_id: int = _enemy_of_family(arena, &"fang")
+	_place_envoy_in_room_of(arena, fang_id)
 	assert_true(arena.sim.debug_trigger_burrow(fang_id, arena.envoy.actor_id),
 		"the SHIPPED Fang content must produce a triggerable burrow -- if this refuses, pressing B in the real build does nothing")
 	assert_true(arena.sim._combat_absent.has(fang_id) or arena.sim._burrow.has(fang_id),
@@ -177,6 +192,7 @@ func test_arena_fang_can_actually_burrow_from_shipped_content() -> void:
 func test_arena_drives_the_full_burrow_lifecycle_and_mirrors_participation() -> void:
 	var arena: Node3D = _instantiate_arena_containing(&"fang")
 	var fang_id: int = _enemy_of_family(arena, &"fang")
+	_place_envoy_in_room_of(arena, fang_id)
 	var fang: Node3D = arena._enemies[fang_id]
 	var target_body: Node = fang.get_node("TargetBody")
 	assert_true(fang.visible, "sanity: present before burrowing")
@@ -220,6 +236,7 @@ func test_arena_drives_the_full_burrow_lifecycle_and_mirrors_participation() -> 
 func test_no_visible_travel_while_combat_absent() -> void:
 	var arena: Node3D = _instantiate_arena_containing(&"fang")
 	var fang_id: int = _enemy_of_family(arena, &"fang")
+	_place_envoy_in_room_of(arena, fang_id)
 	var fang: Node3D = arena._enemies[fang_id]
 	assert_true(arena.sim.debug_trigger_burrow(fang_id, arena.envoy.actor_id), "sanity: triggered")
 
@@ -260,6 +277,7 @@ func test_no_visible_travel_while_combat_absent() -> void:
 func test_shipped_fang_burrow_values_reach_the_sim() -> void:
 	var arena: Node3D = _instantiate_arena_containing(&"fang")
 	var fang_id: int = _enemy_of_family(arena, &"fang")
+	_place_envoy_in_room_of(arena, fang_id)
 	var stats: Resource = ContentDB.get_resource(&"enemy", &"fang")
 	var config: Dictionary = arena.sim._ai_burrow.get(fang_id, {})
 	assert_false(config.is_empty(), "the shipped Fang must have a registered burrow")
@@ -342,11 +360,11 @@ func test_the_built_floor_matches_the_generated_plan() -> void:
 	var arena: Node3D = _instantiate_arena_containing(&"fang")
 	var plan: FloorPlan = DepthGenerator.generate(arena.run_seed, arena.depth)
 
-	assert_eq(arena._enemies.size(), plan.spawns.size(),
+	assert_eq(arena._enemies.size(), plan.all_spawns().size(),
 		"every spawn the plan authored must exist as a live actor -- a dropped one means the sim refused a placement the generator promised was legal")
 
 	var planned: Dictionary = {}
-	for spawn in plan.spawns:
+	for spawn in plan.all_spawns():
 		planned[String(spawn["enemy_key"])] = int(planned.get(String(spawn["enemy_key"]), 0)) + 1
 	var built: Dictionary = {}
 	for actor_id: int in arena._enemies.keys():
@@ -357,3 +375,6 @@ func test_the_built_floor_matches_the_generated_plan() -> void:
 	for actor_id: int in arena._enemies.keys():
 		assert_true(arena.sim._bounds.is_inside(arena.sim.entities[actor_id]),
 			"actor %d was spawned outside the floor it lives on" % actor_id)
+		# Ownership is what makes confinement possible; an unowned actor would silently fall
+		# back to the whole floor and be free to roam.
+		assert_true(arena.sim._actor_room.has(actor_id), "actor %d was never bound to a room" % actor_id)

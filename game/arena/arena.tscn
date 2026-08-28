@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://game/actors/envoy/envoy.tscn" id="2_envoy"]
 [ext_resource type="PackedScene" path="res://game/ui/failure_overlay.tscn" id="6_failure_overlay"]
 [ext_resource type="Script" path="res://game/arena/floor_builder.gd" id="7_floor_builder"]
+[ext_resource type="Script" path="res://game/arena/follow_camera.gd" id="8_follow_camera"]
 
 [node name="Arena" type="Node3D"]
 script = ExtResource("1_script")
@@ -13,9 +14,10 @@ script = ExtResource("7_floor_builder")
 
 [node name="Envoy" parent="." instance=ExtResource("2_envoy")]
 
-[node name="FixedCamera" type="Camera3D" parent="."]
+[node name="FollowCamera" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 12, 12)
 current = true
+script = ExtResource("8_follow_camera")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.8660254, 0.38302222, -0.32139382, 0, 0.64278764, 0.76604444, 0.5, -0.66341394, 0.5566704, 0, 0, 0)
@@ -28,6 +30,6 @@ offset_top = 8.0
 offset_right = 512.0
 offset_bottom = 34.0
 theme_override_font_sizes/font_size = 16
-text = "seed —"
+text = "seed --"
 
 [node name="FailureOverlay" parent="." instance=ExtResource("6_failure_overlay")]

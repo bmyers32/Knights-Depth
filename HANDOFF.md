@@ -1,67 +1,54 @@
 # HANDOFF
 Milestone: **2 — Procedural depths. IN PROGRESS.** First M2 gate work has landed.
 
-**M2 Slice 1 (seeded bounded floor) is COMMITTED and has a HUMAN PASS.** Suite **523/523**.
-Public M1 build: https://bmyers32.itch.io/knight-depths
+**M2 Slice 1 COMMITTED (`e7bea74`, human PASS). M2 MULTI-ROOM SLICE BUILT — AWAITING HUMAN
+PASS.** Suite **552/552**. Public M1 build: https://bmyers32.itch.io/knight-depths
 
 ## Where things stand
-`run_seed → DepthGenerator.generate(seed, depth) → FloorPlan → SimWorld.load_floor()` is
-live and playable: one seeded rectangular chamber, sim-authoritative walkable bounds,
-floor-driven spawning, seed/depth visible on screen.
+One seeded, explorable, multi-room floor is playable end to end:
+**ENTRY -> TRAVERSAL -> COMBAT(seal) -> CLEAR -> TRAVERSAL -> FLOOR END.**
+`FloorPlan -> RoomPlan[] + ConnectionPlan[] -> derived walkable_rects`; room roles come from
+`StratumConfig.room_sequence` (content), sizes/rosters/placements are seeded. Follow camera
+(P21) consumed. Default `run_seed = 0` builds 4 rooms / 3 connections / 4 enemies.
 
-**Human verdict:** bounds read as natural, placement feels fair, combat unaffected — but
-the chamber is a **COMBAT-ROOM PRIMITIVE, not a floor**. Ruled explicitly: *do not enlarge
-the rectangle and call that exploration.* It gets reused as the COMBAT room type.
+## Next action — THE HUMAN PASS (this is the whole next step)
+Press play. The five questions this slice exists to answer:
+1. Does moving through connected spaces feel like **exploring a floor**, not standing in a
+   bigger arena?
+2. Does entering the combat room and having the exits **seal** read naturally?
+3. Does the fight stay **spatially coherent** under room confinement?
+4. Does clearing it and continuing onward feel like **meaningful progression**?
+5. Does the **follow camera** keep combat readable while allowing exploration?
 
-## Next action — M2 MULTI-ROOM SLICE (proposal approved, 4 rulings issued)
-Build the complete linear floor before asking for another human look:
-**ENTRY → TRAVERSAL → COMBAT(lock) → CLEAR → TRAVERSAL → FLOOR END**
-
-Build order (do NOT stop for a human look after 1–3; hand back the integrated slice):
-1. **Multi-rect clamp fix** — evaluate legal candidates across ALL rects containing `from`,
-   pick the deterministic candidate nearest the intended destination. Array order must
-   never create a phantom wall at a doorway.
-2. **`RoomPlan[]` / `ConnectionPlan[]`** + linear-chain generator; `walkable_rects` becomes
-   the DERIVED flattened union (room rects + aperture rects). Apertures **overlap** both
-   rooms — abutting rects give a zero-area junction and break continuity.
-3. **Camera follow (P21)** — translating only, preserve the validated 45° angle and combat
-   framing/scale, clamp to floor extent. No room snapping.
-4. **Encounter lock + room roster + activation/clear + gate barriers.**
-
-### The four rulings (binding)
-1. **Enemy room confinement: ALWAYS**, not conditional on lock state. Applies to every
-   authoritative enemy displacement seam, not just locomotion. Consumes P18's
-   bounded-by-room direction.
-2. **Combat lock seals BOTH SIDES** — player and every living roster actor. Nothing may
-   push/lunge/bump/burrow out through a closed connection. Clears only when the roster is
-   dead; a burrowed Fang is ALIVE and still counts. On clear, gates reopen permanently.
-3. **End-of-floor marker: YES** — deterministic visual endpoint only. NOT an elevator, NOT
-   floor-transition logic, NOT run-end UI. It exists to make the test grammar visible.
-4. **Dormant combat aggro: NO** — a dormant roster does not detect the player through an
-   open doorway. Entry activates the encounter, then the roster wakes. **Do not build
-   doorway LOS/visibility propagation.**
-
-### One implementation detail called out as must-be-explicit
-Closed-aperture legality **must not shrink the combat space or snap an actor away from a
-doorway threshold**. Define which side/portion of an aperture belongs to the locked
-encounter, and **test activation while the player is mid-threshold**.
+**FLAG FOR THAT PASS — difficulty moved and nobody has judged it.** Sealing removes retreat,
+which was Slice 1's implicit safety valve. Measured: the shipped 30 HP Envoy dies to a 4-Fang
+sealed room in roughly 40 s of continuous engagement. `spawn_count_min/max` (3-5) stay
+PROVISIONAL and are the first knob if the encounter reads as unfair. Deliberately NOT retuned
+blind — combat values are fenced and this is a human call.
 
 ## Open items / live fences
-- **NUMERIC FENCE (M1, unchanged).** `close_frustration_ticks = 90` (PROVISIONAL, fallback
-  60) · Survey package (`hit_radius` 0.20 / speed 7.0 / windup 34 / vulnerable 23–34) ·
+- **NUMERIC FENCE (M1, unchanged).** `close_frustration_ticks = 90` (PROVISIONAL, fallback 60)
+  · Survey package (`hit_radius` 0.20 / speed 7.0 / windup 34 / vulnerable 23-34) ·
   `engagement_delay_ticks = 10` · wand `flinch_capability = none` · all M1 HP/flinch values.
   `vulnerable_start_tick` is explicitly FROZEN.
-- **M2 PROVISIONAL values** (StratumConfig, validated only by play):
-  `min_spawn_distance_from_entry = 10.0` · `min_spawn_separation = 3.0` · chamber size
-  ranges. The chamber Z ceiling (26) exists **because of the fixed camera** — P21 lifts it.
-- **PROJECTILE-VS-WORLD COLLISION: deferred by explicit fence** (ROADMAP P20, not only a
-  code comment). Body displacement obeys bounds; projectiles do not. Trigger to revisit:
-  first floor with interior geometry or a non-convex chamber.
+- **M2 PROVISIONAL values** (StratumConfig, validated only by play): `spawn_count_min/max`
+  3-5 (see difficulty flag above) · `min_spawn_distance_from_entry = 10.0` ·
+  `min_spawn_separation = 3.0` · `corridor_length` 6.0 · `aperture_width` 5.0 ·
+  `aperture_overlap` 1.5 · connective room sizes. **Combat-room sizes (24-34 x 20-26) are
+  VALIDATED BY PLAY** — do not retune them to make a floor longer; add rooms instead.
+- **`aperture_overlap` MUST stay > 0.** Abutting rects share zero area, which turns every
+  threshold into a discontinuity and re-opens the gate/snap problem the overlap solves.
+- **PROJECTILE-VS-WORLD COLLISION: deferred by explicit fence** (ROADMAP P20). Body
+  displacement obeys bounds; projectiles do not. Trigger: first non-convex chamber or interior
+  geometry.
 - **P20 body-blocking still open.** Actor-vs-actor overlap is unsolved; the generator works
-  around it with `min_spawn_separation`. Ally separation (M3 co-op) also undecided.
-- **Step 2 will deliberately invalidate `tests/fixtures/floor_plan_golden.json`.** That is a
-  DELIBERATE re-baseline with a dated reason in the same commit — never a re-record to make
-  red go green.
+  around it with `min_spawn_separation`.
+- **Burrow emergence is bounded by room ownership.** Candidates sit around the PLAYER, so
+  triggering a burrow while the Envoy is in another room kills the Fang by fail-safe. Correct,
+  unreachable in real play (a live encounter seals the player in), and the reason burrow tests
+  call `_place_envoy_in_room_of`.
+- **Golden fixture was RE-BASELINED 2026-08-28** for the room schema — logged with its reason
+  in `tools/record_floor_plan_golden.gd`. It is not a drift-hiding re-record; never do one.
 - **ROADMAP prune DUE at M2 close** — Index over cap. P16/P28/P29 are tombstone candidates.
 - Carried from M1: three GAME-RULES §3 rules want a human edit · **P14** working title ·
   P16 BUMP pass-through (P20) · 5.10 chain-flinch feel.
@@ -69,7 +56,16 @@ encounter, and **test activation while the player is mid-threshold**.
 ## Traps this repo has actually sprung (read before touching these areas)
 - **A remembered audit list goes stale.** P17's position-write list (move/lunge/bump/burrow)
   was missing BOTH knockback paths and `add_entity`. **Re-run the `entities[]` audit before
-  adding any displacement mechanic** — `grep -n "entities\[" game/sim/sim_world.gd`.
+  adding any displacement mechanic** — `grep -n "entities\[" game/sim/sim_world.gd`. That
+  audit is why the multi-room seal was a one-function change: all 8 sites already funnel
+  through `_legal_bounds_for`.
+- **A test that stops measuring at the first hit can lie.** `test_combat_runs_normally_inside_
+  the_sealed_room` broke out on first damage and reported "no attacks" — the Envoy had already
+  died during the walk-in, and a dead player produces no AI at all. Use a FIXED window and
+  confirm the mechanism fired before believing a zero.
+- **`Rect2.has_point` is EXCLUSIVE on the far edge; `WalkableBounds.is_inside` is INCLUSIVE.**
+  A correctly-clamped actor rests exactly ON the boundary, so `has_point` reports it as having
+  escaped. Use an inclusive check in tests.
 - **Presentation is test-exempt, so it is the blind spot.** `tests/test_presentation_contracts.gd`
   pins method surfaces + drives real verbs through the real arena. It broke when Slice 1
   retired the named `$Fang`/`$Watcher` scene children — generated rosters are now found via
@@ -98,4 +94,6 @@ Minkowski-sum collision · derived-vs-stored state · cosmetic prediction / dead
 golden-behaviour baselines · guard clauses vs world facts · GUT scene-instantiation smoke
 tests · **pure function + per-call RNG as a purity mechanism** · **reflection-based coverage
 scanners (`get_property_list`)** · **union-of-rects legality vs per-axis clamp (wall slide)**
-· **placement-refuses vs displacement-clamps as distinct seams**.
+· **placement-refuses vs displacement-clamps as distinct seams** · **overlapping rects as
+connectivity (no portal/graph model)** · **per-actor legality regions (floor / owned room /
+encounter seal) resolved at one seam** · **exponential frame-rate-independent camera lerp**.

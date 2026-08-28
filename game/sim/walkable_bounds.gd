@@ -14,9 +14,17 @@ extends RefCounted
 ##
 ## DELIBERATELY NARROW (§1.4 rule of two): axis-aligned rectangles on the XZ plane and two
 ## predicates. This is NOT a wall/obstacle/navmesh/pathfinding framework and must not grow
-## into one without two real consumers. Slice 1 authors exactly ONE rect per floor; the
-## Array shape exists because FloorPlan already needs to describe a floor's walkable set,
-## not as a down payment on multi-room connectivity (see clamp_step's doorway note).
+## into one without two real consumers. A floor is a UNION of rects -- room rects plus the
+## aperture rects that overlap them -- and connectivity is exactly that overlap. There is no
+## graph, no portal list and no pathfinding here, and adding one needs its own justification.
+##
+## APERTURES MUST OVERLAP THE ROOMS THEY JOIN, never merely abut them. Two rects that touch
+## on a line share zero area, so an actor is only ever inside one of them and the junction
+## becomes a discontinuity the clamp cannot reason about. A real overlap gives a transition
+## zone where is_inside() is true for both, which is what makes crossing a threshold
+## continuous -- and it is also what makes an encounter gate free (see SimWorld: the room's
+## own rect already covers the part of the aperture inside it, so closing the aperture
+## cannot shrink the room or snap an actor off the threshold).
 
 var rects: Array[Rect2] = []
 
@@ -49,32 +57,56 @@ func is_inside(point: Vector3) -> bool:
 ## shorten the segment first, this clamps whatever endpoint survived, so whichever legal
 ## stopping condition occurs first is the one that wins.
 ##
-## `from` selects WHICH rect constrains the move -- an actor is clamped against the room it
-## is standing in. Doorways/overlapping rects are NOT handled and NOT tested: Slice 1
-## authors one rect, and multi-rect connectivity is a later M2 question that must arrive
-## with its own tests rather than inherit an untested code path here.
+## MULTI-RECT (M2 multi-room slice). Evaluates a clamp candidate in EVERY rect that
+## contains `from` and keeps the one nearest the intended destination.
+##
+## Slice 1 clamped into `_rect_index_containing(from)` -- the FIRST array-order rect holding
+## the actor. In a doorway, where an aperture rect deliberately overlaps both rooms, an actor
+## is inside two rects at once, so array order decided which wall it hit: a PHANTOM WALL
+## across an opening the player can see is open. Choosing by distance-to-destination instead
+## makes the outcome a property of the geometry rather than of authoring order.
+##
+## Ties break on array order (strict <, first rect wins), so the result stays deterministic
+## and replayable -- required for M3, where a client and the server must clamp identically.
+##
+## Note the ordinary doorway case never reaches any of this: `to` inside ANY rect returns
+## early, so walking through an opening is simply legal.
 func clamp_step(from: Vector3, to: Vector3) -> Vector3:
 	if rects.is_empty() or is_inside(to):
 		return to
-	var index: int = _rect_index_containing(from)
-	if index < 0:
-		# `from` outside every rect should be unreachable: spawn/registration placement
-		# fails loudly (SimWorld.add_entity) and every displacement path routes through
-		# this clamp, so an actor can never arrive somewhere illegal. Falling back to the
-		# first rect keeps a defect contained instead of returning an illegal point.
-		index = 0
-	var rect: Rect2 = rects[index]
+	var best: Vector3 = to
+	var best_distance: float = INF
+	for rect in rects:
+		if not _contains(rect, from):
+			continue
+		var candidate: Vector3 = _clamp_into(rect, to)
+		var distance: float = candidate.distance_squared_to(to)
+		if distance < best_distance:
+			best_distance = distance
+			best = candidate
+	if best_distance < INF:
+		return best
+	# `from` outside every rect should be unreachable: placement fails loudly
+	# (SimWorld.add_entity) and every displacement path routes through this clamp, so an
+	# actor can never arrive somewhere illegal. Clamping into the nearest rect keeps a defect
+	# contained rather than returning an illegal point.
+	for rect in rects:
+		var candidate: Vector3 = _clamp_into(rect, to)
+		var distance: float = candidate.distance_squared_to(to)
+		if distance < best_distance:
+			best_distance = distance
+			best = candidate
+	return best
+
+
+func _clamp_into(rect: Rect2, point: Vector3) -> Vector3:
 	return Vector3(
-		clampf(to.x, rect.position.x, rect.end.x),
-		to.y,
-		clampf(to.z, rect.position.y, rect.end.y),
+		clampf(point.x, rect.position.x, rect.end.x),
+		point.y,
+		clampf(point.z, rect.position.y, rect.end.y),
 	)
 
 
-func _rect_index_containing(point: Vector3) -> int:
-	for index in rects.size():
-		var rect: Rect2 = rects[index]
-		if point.x >= rect.position.x and point.x <= rect.end.x \
-				and point.z >= rect.position.y and point.z <= rect.end.y:
-			return index
-	return -1
+func _contains(rect: Rect2, point: Vector3) -> bool:
+	return point.x >= rect.position.x and point.x <= rect.end.x \
+			and point.z >= rect.position.y and point.z <= rect.end.y

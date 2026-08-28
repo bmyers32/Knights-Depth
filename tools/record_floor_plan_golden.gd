@@ -4,6 +4,14 @@ extends SceneTree
 ##
 ## Run:  & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s tools/record_floor_plan_golden.gd
 ##
+## RE-BASELINE LOG (append a dated line for every regeneration):
+##   2026-08-28  FIRST RECORDING. Single rectangular chamber (M2 Slice 1).
+##   2026-08-28  RE-BASELINED for the multi-room slice. The FloorPlan schema itself changed --
+##               a floor became RoomPlan[] + ConnectionPlan[] with a derived walkable union,
+##               and spawns moved from the plan onto their owning room. The old fixture
+##               described a shape the generator can no longer produce, so this is a schema
+##               migration, not a drift-hiding re-record. Hand-inspected before commit.
+##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the
 ## question is "what did I change about generation, and did I mean to?" -- re-record only
@@ -45,7 +53,9 @@ func _init() -> void:
 
 	print("recorded floor plan -> %s" % OUTPUT_PATH)
 	print("  seed %d depth %d -> floor_seed %d" % [GOLDEN_SEED, GOLDEN_DEPTH, serialized["floor_seed"]])
-	print("  chamber %s" % [serialized["walkable_rects"]])
-	print("  entry %s" % [serialized["entry_point"]])
-	print("  spawns %d: %s" % [serialized["spawns"].size(), serialized["spawns"]])
+	print("  entry %s -> end %s" % [serialized["entry_point"], serialized["end_marker"]])
+	for room in serialized["rooms"]:
+		print("  room %d %-10s %s  spawns=%d" % [room["room_id"], room["kind"], room["rect"], room["spawns"].size()])
+	for connection in serialized["connections"]:
+		print("  connection %d %s gated=%s %s" % [connection["connection_id"], connection["room_ids"], connection["gated"], connection["aperture"]])
 	quit(0)

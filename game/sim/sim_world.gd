@@ -239,6 +239,29 @@ var _bounds: WalkableBounds = null
 ## silently inherit immortality across floors.
 var _run_persistent_actors: Dictionary = {}
 
+## --- ROOMS & ENCOUNTERS (M2 multi-room slice) ------------------------------------------
+## THREE DISTINCT NOTIONS OF "WHERE MAY THIS ACTOR BE", deliberately never merged:
+##   1. FLOOR WALKABILITY (_bounds) -- permanent for the floor, the union of every room and
+##      aperture rect. Where traversal is legal at all.
+##   2. ROOM OWNERSHIP (_actor_room) -- permanent for an ENEMY's lifetime. Every floor enemy
+##      belongs to one room and never leaves it, whatever the encounter state. A combat-room
+##      Fang must not chase the player down a corridor.
+##   3. ENCOUNTER LOCK (_active_lock_room) -- TEMPORARY. While a combat encounter runs, the
+##      Envoy is sealed into that room too.
+## _bounds is NEVER mutated to express (2) or (3). Legality is resolved per actor at the one
+## seam every authoritative displacement already funnels through (_legal_bounds_for), which is
+## why sealing an encounter is a one-function change that automatically covers knockback,
+## lunge, bump and burrow rather than only locomotion.
+var _rooms: Dictionary = {}             # room_id -> Rect2
+var _room_kind: Dictionary = {}         # room_id -> StringName (RoomPlan.KIND_*)
+var _room_bounds: Dictionary = {}       # room_id -> WalkableBounds, one rect, built once
+var _room_roster: Dictionary = {}       # room_id -> Array[int] of the actors that room owns
+var _actor_room: Dictionary = {}        # actor_id -> room_id (enemies only)
+var _encounter_state: Dictionary = {}   # room_id -> "dormant" | "active" | "cleared"
+## The room currently sealing its participants, or -1. At most one at a time: a linear chain
+## cannot present two simultaneously, and a set would be speculative generality (§1.4).
+var _active_lock_room: int = -1
+
 const SCOPE_RUN: StringName = &"run"
 const SCOPE_FLOOR: StringName = &"floor"
 const SCOPE_RUN_ACTOR: StringName = &"run_actor"
@@ -351,6 +374,15 @@ const STATE_SCOPES: Dictionary = {
 	"_burrow": SCOPE_FLOOR,
 	"_next_burrow_tick": SCOPE_FLOOR,
 	"_bounds": SCOPE_FLOOR,  # not a collection — assigned by load_floor, see below
+	# Rooms and encounters describe ONE floor's geometry and encounter progress. All of it
+	# dies with the floor, including which room owned which actor.
+	"_rooms": SCOPE_FLOOR,
+	"_room_kind": SCOPE_FLOOR,
+	"_room_bounds": SCOPE_FLOOR,
+	"_room_roster": SCOPE_FLOOR,
+	"_actor_room": SCOPE_FLOOR,
+	"_encounter_state": SCOPE_FLOOR,
+	"_active_lock_room": SCOPE_FLOOR,  # not a collection — reset by load_floor
 }
 
 
@@ -387,6 +419,7 @@ func load_floor(bounds: WalkableBounds, entry_point: Vector3) -> void:
 			collection.clear()
 
 	_bounds = bounds
+	_active_lock_room = -1  # not a Dictionary, so the clearing loop above cannot reach it
 	# Entry placement is not routed through add_entity's validation: these actors are
 	# already registered, and the entry point's legality is the GENERATOR's contract
 	# (test_depth_generator.gd asserts it), not something to re-decide per floor.
@@ -394,11 +427,125 @@ func load_floor(bounds: WalkableBounds, entry_point: Vector3) -> void:
 		entities[actor_id] = entry_point
 
 
-## Displacement seam (see WalkableBounds.clamp_step). Every authoritative write to
-## entities[] that MOVES an already-placed actor routes through here; the audit of those
-## sites lives in tests/test_floor_bounds.gd, which drives each one at a wall.
-func _clamp_to_bounds(from: Vector3, to: Vector3) -> Vector3:
-	return to if _bounds == null else _bounds.clamp_step(from, to)
+## THE ONE PLACE "where may this actor legally be" is decided. Resolves the three notions
+## documented at _rooms into a single region, most specific first:
+##   1. an ENEMY is confined to its own room, ALWAYS -- never conditional on lock state
+##      (ruled: a combat-room Fang must not chase the player down a corridor)
+##   2. a run-persistent actor is sealed into the locked room while an encounter runs
+##   3. otherwise, the whole floor
+##
+## Returns null when no floor is loaded, which keeps every seam an identity operation for a
+## bare SimWorld -- the property that leaves the entire pre-M2 suite untouched.
+func _legal_bounds_for(actor_id: int) -> WalkableBounds:
+	if _actor_room.has(actor_id):
+		return _room_bounds.get(int(_actor_room[actor_id]), _bounds)
+	if _active_lock_room >= 0 and _run_persistent_actors.has(actor_id):
+		return _room_bounds.get(_active_lock_room, _bounds)
+	return _bounds
+
+
+## Displacement seam (see WalkableBounds.clamp_step). Every authoritative write to entities[]
+## that MOVES an already-placed actor routes through here; the audit of those sites lives in
+## tests/test_floor_bounds.gd, which drives each one at a wall AND at a sealed gate.
+func _clamp_to_bounds(actor_id: int, from: Vector3, to: Vector3) -> Vector3:
+	var region: WalkableBounds = _legal_bounds_for(actor_id)
+	return to if region == null else region.clamp_step(from, to)
+
+
+## PLACEMENT seam counterpart -- same per-actor region as the clamp, so a burrowing Fang can
+## never surface outside the room that owns it.
+func _point_is_legal_for(actor_id: int, point: Vector3) -> bool:
+	var region: WalkableBounds = _legal_bounds_for(actor_id)
+	return true if region == null else region.is_inside(point)
+
+
+## Registers one room of the loaded floor. Called by the driver after load_floor, unpacked
+## from the FloorPlan -- sim never imports gen/.
+func register_room(room_id: int, kind: StringName, rect: Rect2) -> void:
+	_rooms[room_id] = rect
+	_room_kind[room_id] = kind
+	var rects: Array[Rect2] = [rect]
+	_room_bounds[room_id] = WalkableBounds.new(rects)
+	_room_roster[room_id] = []
+	if kind == &"combat":
+		_encounter_state[room_id] = "dormant"
+
+
+## Binds an actor to the room that owns it for the rest of its life. Refuses LOUDLY if the
+## actor is not standing in that room -- the same placement law as add_entity, for the same
+## reason: silently accepting it would leave an actor permanently clamped against a region it
+## is not inside, which presents as "the enemy is stuck" rather than as the content bug it is.
+func assign_actor_room(actor_id: int, room_id: int) -> bool:
+	if not _rooms.has(room_id):
+		push_error("SimWorld.assign_actor_room: unknown room %d" % room_id)
+		return false
+	var room: WalkableBounds = _room_bounds[room_id]
+	if not room.is_inside(entities.get(actor_id, Vector3.ZERO)):
+		push_error("SimWorld.assign_actor_room: actor %d at %s is not inside room %d" % [actor_id, entities.get(actor_id, Vector3.ZERO), room_id])
+		return false
+	_actor_room[actor_id] = room_id
+	var roster: Array = _room_roster[room_id]
+	if not roster.has(actor_id):
+		roster.append(actor_id)
+	return true
+
+
+func debug_describe_encounters() -> Dictionary:
+	return {"active_lock": _active_lock_room, "states": _encounter_state.duplicate()}
+
+
+## Advances every combat encounter by one tick. Runs inside tick() BEFORE AI decides, so an
+## activation seals the room and wakes its roster on the same tick the player crosses the
+## threshold rather than one tick late.
+##
+## THE ACTIVATION TRIGGER IS THE ROOM RECT ITSELF, not an inset sub-region, and that choice is
+## what makes the threshold case safe: the aperture deliberately overlaps the room, so a
+## player standing in the doorway is ALREADY inside the room rect. They activate the encounter
+## and remain legal, because the room's own rect covers their half of the aperture. Sealing
+## therefore removes only the corridor beyond them, never the ground under their feet.
+func _advance_encounters() -> Array[Event]:
+	var events: Array[Event] = []
+	var room_ids: Array = _encounter_state.keys()
+	room_ids.sort()  # autonomous-phase law: deterministic order, never Dictionary order
+	for room_id: int in room_ids:
+		var state: String = String(_encounter_state[room_id])
+		if state == "dormant":
+			if _active_lock_room >= 0:
+				continue  # one encounter at a time
+			var room: WalkableBounds = _room_bounds[room_id]
+			for actor_id: int in _run_persistent_actors:
+				if _health.get(actor_id, 0.0) <= 0.0:
+					continue
+				if not room.is_inside(entities.get(actor_id, Vector3.ZERO)):
+					continue
+				_encounter_state[room_id] = "active"
+				_active_lock_room = room_id
+				# The roster wakes HERE, not by detection. A dormant room's enemies do not
+				# perceive the player through an open doorway (ruled) -- entering the room is
+				# what starts the fight, so there is no line-of-sight model to build.
+				for member_id: int in _room_roster[room_id]:
+					if _health.get(member_id, 0.0) > 0.0:
+						debug_set_ai_active(member_id)
+				events.append(Event.new(tick_count, "encounter_activated", {
+					"room_id": room_id, "actor_id": actor_id, "roster": _room_roster[room_id].size(),
+				}))
+				break
+		elif state == "active":
+			# A COMBAT-ABSENT actor (a burrowed Fang) is ALIVE, so it still counts. Keying the
+			# clear on _health rather than on participation is what makes that true with no
+			# special case -- burrow is temporary non-participation INSIDE an encounter, and
+			# must never be mistaken for leaving it.
+			var roster_alive: bool = false
+			for member_id: int in _room_roster[room_id]:
+				if _health.get(member_id, 0.0) > 0.0:
+					roster_alive = true
+					break
+			if roster_alive:
+				continue
+			_encounter_state[room_id] = "cleared"
+			_active_lock_room = -1
+			events.append(Event.new(tick_count, "encounter_cleared", {"room_id": room_id}))
+	return events
 
 
 func _init() -> void:
@@ -870,6 +1017,10 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# "attack_telegraph" Events directly into this tick's events (a side effect of the
 	# DECISION itself, not of a Command being applied, so it can't be an
 	# _apply_*-returned Event like everything else here).
+	# ENCOUNTERS advance before AI decides, so entering a combat room seals it and wakes its
+	# roster on the SAME tick the threshold is crossed -- not one tick later, which would let
+	# a player step in and back out through a gate that had not closed yet.
+	events.append_array(_advance_encounters())
 	var all_commands: Array[Command] = commands + _decide_ai_commands(events)
 	for command in all_commands:
 		if command.kind == "move":
@@ -930,7 +1081,7 @@ func _apply_move(command: Command, dt: float) -> Event:
 	var start: Vector3 = position
 	position += direction * speed * dt
 	# BOUNDS SEAM 1/6 — ordinary locomotion.
-	position = _clamp_to_bounds(start, position)
+	position = _clamp_to_bounds(command.actor_id, start, position)
 	entities[command.actor_id] = position
 	return Event.new(tick_count, "moved", {"actor_id": command.actor_id, "position": position})
 
@@ -1359,9 +1510,9 @@ func _advance_melee_execution_tick(actor_id: int) -> Array[Event]:
 			# shortens the segment first and the wall clamps whatever endpoint survived,
 			# so whichever legal stopping condition comes first is the one that wins.
 			if contact.is_empty():
-				entities[actor_id] = _clamp_to_bounds(start, end)
+				entities[actor_id] = _clamp_to_bounds(actor_id, start, end)
 			else:
-				entities[actor_id] = _clamp_to_bounds(start, contact.entry_position)
+				entities[actor_id] = _clamp_to_bounds(actor_id, start, contact.entry_position)
 				hold.clamped_target_id = contact.target_id
 
 	if tick_count >= int(hold.hit_tick) and not bool(hold.hit_resolved):
@@ -1704,7 +1855,7 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		# BOUNDS SEAM 3/6 — hit knockback. Displacement INFLICTED on an actor obeys the
 		# same walls as displacement it chooses: being shoved through a wall is the same
 		# defect as walking through one.
-		knocked_position = _clamp_to_bounds(target_position, target_position + resolved_aim * weapon.knockback_distance)
+		knocked_position = _clamp_to_bounds(target_id, target_position, target_position + resolved_aim * weapon.knockback_distance)
 		entities[target_id] = knocked_position
 	# ATOMICITY (locked): the enemy's current action is canceled EXACTLY ONCE, here at
 	# hit resolution -- windup clear, cooldown arming, the interruption Event, and the
@@ -2053,9 +2204,9 @@ func _advance_bump_slides() -> void:
 		var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
 		# BOUNDS SEAM 5/6 — shield bump slide.
 		if contact.is_empty():
-			entities[actor_id] = _clamp_to_bounds(start, end)
+			entities[actor_id] = _clamp_to_bounds(actor_id, start, end)
 		else:
-			entities[actor_id] = _clamp_to_bounds(start, contact.entry_position)
+			entities[actor_id] = _clamp_to_bounds(actor_id, start, contact.entry_position)
 			completed.append(actor_id)  # blocked: the slide ends here, never chases
 			continue
 		# Counted in STEPS rather than compared against an end tick: the record is
@@ -2080,7 +2231,7 @@ func _resolve_blocked_hit(target_id: int, target_position: Vector3, resolved_aim
 		_shield_state[target_id] = "broken"
 		_shield_break_ticks_remaining[target_id] = shield.break_recovery_delay_ticks
 		# BOUNDS SEAM 4/6 — shield-break knockback.
-		var knocked_position: Vector3 = _clamp_to_bounds(target_position, target_position + resolved_aim * shield.knockback_distance)
+		var knocked_position: Vector3 = _clamp_to_bounds(target_id, target_position, target_position + resolved_aim * shield.knockback_distance)
 		entities[target_id] = knocked_position
 		return Event.new(tick_count, "shield_broken", {
 			"actor_id": target_id, "attacker_id": attacker_id, "position": knocked_position,
@@ -2278,6 +2429,17 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 	# not combat entities that already exist.
 	if tick_count < int(_flinched_until_tick.get(actor_id, -1)):
 		return []
+
+	# DORMANT ROSTER (ruled): a combat room's enemies do not perceive the player through an
+	# open doorway. Crossing into the room activates the encounter, and THAT wakes them --
+	# which is precisely why this slice needs no line-of-sight or visibility propagation.
+	#
+	# Gated on ENCOUNTER STATE rather than on _ai_state, deliberately: debug_force_aggro
+	# writes _ai_state directly at setup, and a state-based guard would let a debug hook
+	# silently repeal a design law it only claims to skip detection gating for.
+	if _actor_room.has(actor_id):
+		if String(_encounter_state.get(int(_actor_room[actor_id]), "")) == "dormant":
+			return []
 
 	var tuning: Dictionary = _ai_tuning[actor_id]
 	var spawn_position: Vector3 = _ai_spawn_position[actor_id]
@@ -2589,7 +2751,7 @@ func _find_burrow_emergence_point(actor_id: int) -> Dictionary:
 		# deterministic ordering, the retry window, and the fail-safe death on exhaustion
 		# (_resolve_burrow_emergence_timeout) are untouched — this adds a reason a candidate
 		# can be rejected, never a new way to resolve emergence.
-		if _bounds != null and not _bounds.is_inside(candidate):
+		if not _point_is_legal_for(actor_id, candidate):
 			continue
 		if not _burrow_point_is_occupied(actor_id, candidate):
 			return {"position": candidate, "degrees": degrees}
@@ -2627,7 +2789,7 @@ func _advance_burrow() -> Array[Event]:
 				var end: Vector3 = start + burrow.direction * float(burrow.step_distance)
 				var contact: Dictionary = _find_earliest_lunge_contact(start, end, actor_id)
 				# BOUNDS SEAM 6/6 — burrow backward-jump displacement.
-				entities[actor_id] = _clamp_to_bounds(start, contact.entry_position if not contact.is_empty() else end)
+				entities[actor_id] = _clamp_to_bounds(actor_id, start, contact.entry_position if not contact.is_empty() else end)
 				_facings[actor_id] = burrow.direction
 				burrow.steps_remaining = int(burrow.steps_remaining) - 1
 				if not contact.is_empty() or int(burrow.steps_remaining) <= 0:
