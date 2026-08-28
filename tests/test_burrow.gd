@@ -622,6 +622,53 @@ func test_re_entering_the_close_band_permits_a_later_burrow() -> void:
 		"re-entering the close band clears the spent episode, so frustration may build again")
 
 
+## THE FIRST-BURROW ANOMALY, classified (ordinary-play session, 2026-08-28). Breon reported the
+## Fang emerging in front of him and then "not responding" until he attacked it -- once, on the
+## first burrow only.
+##
+## THE DISCRIMINATOR this test exists to settle: is post-emergence stillness caused by BURROW
+## state failing to clear, or by an unrelated, already-locked mechanic? It asserts the burrow
+## lifecycle is completely gone while the Fang is still held motionless -- so the stillness
+## cannot be attributed to burrow.
+##
+## The session cause was P16 SHIELD BUMP, which suppresses the bumped actor's own move Command
+## for the whole slide by design (locked: authored displacement replaces locomotion). Shipped
+## values: 2.5 units over 10 ticks, and the log shows TWO bumps landing on the Fang immediately
+## after it emerged. Stacked on the 24-tick reacquisition beat, that is roughly a second and a
+## half of legitimately suppressed locomotion at exactly the moment a player is watching for a
+## reaction. Valid existing behavior, not a lifecycle defect.
+func test_post_emergence_stillness_is_bump_suppression_not_leftover_burrow_state() -> void:
+	_register_player(Vector3.ZERO)
+	_register_selecting_fang(Vector3(0, 0, -6.0))
+	sim.register_shield(PLAYER_ID, 100.0, 0.0, 30, 1.5, 0.35, 2.5, 10, 45, 0, 0, 1.0)
+	for i in 300:
+		sim.tick([_retreat()], DT)
+		if sim._burrow.has(ENEMY_ID):
+			break
+	assert_true(sim._burrow.has(ENEMY_ID), "sanity: a selector burrow committed")
+
+	# Run the whole lifecycle out: jump, underground, emergence, reacquisition beat.
+	for i in 300:
+		sim.tick([], DT)
+		if not sim._burrow.has(ENEMY_ID):
+			break
+	assert_false(sim._burrow.has(ENEMY_ID), "the lifecycle EXITED and erased its record")
+	assert_false(sim._combat_absent.has(ENEMY_ID), "and combat participation was restored")
+
+	# Ordinary AI is demonstrably live: it pursues.
+	var before_pursuit: Vector3 = sim.entities[ENEMY_ID]
+	sim.tick([], DT)
+	assert_ne(sim.entities[ENEMY_ID], before_pursuit, "ordinary AI resumed and is pursuing")
+
+	# Now bump it, with the burrow long gone, and it stops moving under its own power.
+	sim.entities[PLAYER_ID] = sim.entities[ENEMY_ID] + Vector3(0, 0, 1.0)
+	var events: Array[Event] = sim.tick([Command.new(sim.tick_count, PLAYER_ID, "block", {"held": true})], DT)
+	assert_eq(_of(events, "shield_bumped").size(), 1, "sanity: the bump landed")
+	assert_true(sim._bump_slides.has(ENEMY_ID), "a bump slide is now suppressing its locomotion")
+	assert_false(sim._burrow.has(ENEMY_ID),
+		"and NO burrow state exists -- so any stillness now is bump suppression, not the burrow")
+
+
 func test_identical_runs_produce_identical_burrows() -> void:
 	var runs: Array = []
 	for run in 2:

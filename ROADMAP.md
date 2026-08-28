@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **BURROW SELECTOR IMPLEMENTED / ORDINARY-PLAY PENDING** | Weave, scurry, cutoff falsified; BURROW passed Stage 1 and Stage 2. Selector on close-range frustration, shared fact consolidated without broadening, detector proof 14/14 pre-play. Awaiting the ordinary-AI verdict |
+| P17 | Per-family engagement identities | **CLOSED 2026-08-28 — BURROW SHIPPED** | Weave/scurry/cutoff falsified; BURROW passed all three human gates (action, fairness, selector). Fang has a validated ambush identity chosen by ordinary AI. Values frozen; debts carried out separately |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -1075,6 +1075,86 @@ reports every condition's live value against its threshold.
 candidate. **Burrow frequency is instrumented and reported as a FINDING, not judged against a
 preselected target.** No further burrow ACTION tuning unless selector play produces contrary
 evidence.
+
+### SELECTOR — **PASS (Breon, 2026-08-28). P17 CLOSED.**
+
+**Verdict against the frozen criterion:** ordinary AI chose burrow in appropriate situations ·
+burrow improved Fang's predator identity · it did not become repetitive or arbitrary · no
+general selector or frequency concern surfaced.
+
+**INSTRUMENTED FINDING, not a target:** 6 burrows across the session, all `source: "selector"`,
+five committing at `frustration_elapsed: 90` (the threshold exactly) and one at `127` — the
+latter matured while suppressed by either the cooldown floor or a still-spent episode, then
+fired once clear. Six commits, six submerges, six emergences; no aborts, no timeouts, no repeat
+inside an unresolved episode. **Recorded as an observation. Nothing tuned from it.**
+
+**FROZEN:** `close_frustration_ticks = 90`, `burrow_cooldown_ticks = 240`, emergence geometry,
+and the validated burrow action. No tuning without contrary evidence.
+
+### FIRST-BURROW ANOMALY — CLASSIFIED, NO DEFECT, NO CHANGE
+Reported once, on the first burrow only: Fang emerged in front of Breon, appeared not to
+respond, and resumed only after he attacked it.
+
+**Answered from the captured session evidence:**
+- **Did the lifecycle exit and erase its state?** YES — and the log proves it independently: the
+  SECOND burrow committed at `frustration_elapsed: 90`, which requires the Fang to have
+  **re-entered its close band** (clearing the spent episode) and then failed to close for 90
+  fresh ticks. It could not have done either while suspended.
+- **Did ordinary AI resume?** YES. Successive projectile hits track the Fang from `(-9.11, 2.53)`
+  through `(-1.52, 0.86)`, `(0.07, 0.75)`, `(2.37, 0.64)`, `(4.57, 0.55)` to `(7.37, 0.44)` —
+  it was pursuing the retreating player the whole time.
+- **Position/distance after emergence:** emerged at `(-4.27, 2.61)`; the player's next shot came
+  from `(-2.97, 0.31)`, about **2.6 units** away.
+- **Active/aggroed?** YES — proven by the later selector burrow, which the selector cannot reach
+  from an inactive actor.
+- **Decision-suppressing state?** **YES, and this is the cause.** Two `shield bumped` events land
+  on the Fang immediately after emergence. A bump slide suppresses the bumped actor's own move
+  Command for its whole duration — locked P16 behaviour, authored displacement replaces
+  locomotion. Shipped values are 2.5 units over 10 ticks with a 45-tick cooldown, so two bumps
+  span ~65 ticks, and the emergence-to-first-hit displacement of ~4.8 units matches two bumps'
+  worth of 5.0 almost exactly. Stacked on the 24-tick reacquisition beat, that is roughly a
+  second and a half of legitimately suppressed locomotion at precisely the moment a player is
+  watching for a reaction.
+- **Were ordinary move Commands emitted while it looked still?** NO — correctly. The beat
+  suspends AI by design; the bump slides suppress locomotion by design.
+- **Did the attack change a state that explains resumption?** **NO — the timing was
+  coincidental.** A wand hit clears no bump slide and alters no AI state, and the Fang was
+  already active. The weapon switch and first shots simply coincided with the slides expiring.
+
+**VERDICT: valid existing behavior, compounding.** Two independently validated mechanics — the
+Stage-1/2-validated reacquisition beat and the locked P16 bump — overlapped at the worst moment
+for readability. Recorded and closed with **no change**, per the standing rule.
+
+Pinned by `test_post_emergence_stillness_is_bump_suppression_not_leftover_burrow_state`, which
+asserts the burrow record and combat-absence are BOTH gone, that ordinary AI is demonstrably
+pursuing, and that a bump then holds the Fang still anyway — so post-emergence stillness can
+never again be misattributed to burrow state.
+
+**Observation filed, not acted on:** a freshly-emerged Fang is bump-eligible before it acts. That
+is a balance question about two validated mechanics meeting, not a defect, and it needs its own
+evidence before anyone touches either.
+
+---
+
+# P17 — **CLOSED 2026-08-28.**
+
+Four experiments, three falsified, one validated across three human gates.
+
+| Experiment | Verdict | Lesson banked |
+|---|---|---|
+| Approach weave | FALSIFIED | *A different path is not a different decision* |
+| Scurry | FALSIFIED (detector specifically) | *Closing distance is not the same as contesting movement* |
+| Cutoff | FALSIFIED BY PLAY | grammar rejected upstream of any number |
+| **Burrow** | **PASS × 3** (action Stage 1, fairness Stage 2, selector) | mode change beats path geometry |
+
+Fang now has a validated ambush identity chosen by ordinary AI. **Frozen** unless contrary
+evidence appears.
+
+**Debts and captures carried out of P17** (none silently absorbed): burrow presentation polish
+beyond the minimum emergence fix · attack-movement animation debt (the shipped Bite authors no
+displacement, confirmed at four levels) · the `_clear_reaction_state` asymmetry between the
+hit-death and status-death paths, to be fixed deliberately or ruled intentional · the
+bump-on-emergence readability observation above.
 
 ### FENCES
 The validated action stays frozen · no selector implementation before proposal approval · no
