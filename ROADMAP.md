@@ -44,11 +44,140 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
-## M2 MULTI-ROOM SLICE — EXPLORABLE FLOOR + LOCK-IN ENCOUNTER. **AWAITING HUMAN PASS.**
+## M2 FLOOR GRAMMAR — DIRECTION SET 2026-08-28 (pre-code; model under review)
+
+The floor is NOT `rooms + doors + combat rooms`. It is **a continuous, stateful traversal
+space whose available routes change in response to player actions.**
+
+### FROZEN HUMAN CRITERION (verbatim; do not paraphrase when judging)
+> "The floor passes only if it feels like traversing and interacting with a place — seeing
+> somewhere before you can reach it, finding what opens the way — rather than moving between
+> generated arenas."
+
+Verdict is Breon's alone, rendered against this exact sentence on the committed candidate.
+(An earlier working paraphrase was superseded 2026-08-28; this is the binding wording.)
+The already-validated encounter trigger/lock behaviour is NOT re-tested from zero — this
+slice judges whether those mechanics now live inside a convincing exploration-floor grammar.
+
+### FOUR INDEPENDENT CONCEPTS — a physical room is NOT the parent of any of them
+1. **SPATIAL** — walkable patches/open areas, narrower connectors, irregular silhouettes,
+   ramps/elevation PRESENTATION, voids/blockers, folded topology (later destinations visible
+   before reachable).
+2. **PROGRESSION** — controlled traversal connections, one-way commitment, gates/blockers,
+   switches, objective dependencies, route availability state.
+3. **ENCOUNTER** — encounter sites/regions, spawn groups, AUTHORED activation conditions,
+   MANDATORY / OPTIONAL / AMBIENT, temporary confinement, completion conditions.
+4. **WORLD INTERACTION** — interactables, minimal breakables, concealed interactables.
+
+**ENCOUNTER REGION != PHYSICAL ROOM.** A room may survive as authored metadata or as a
+combat shape; it is not the abstraction the other three hang from.
+
+### CONTROLLED TRAVERSAL CONNECTION LAW
+A gate/door/blocker is a traversal connection whose availability is controlled by
+authoritative floor state. **The connection does not need to know WHY it opened or closed.**
+Controllers may be switch state, objective completion, encounter activation/clear, one-way
+commitment, or a party button. Keep controller / state / effect separation explicit.
+
+**BRAIN CANDIDATE (banked):** *"The gate does not need to understand why it opened."*
+
+### INTERACTION / OBJECTIVE LAW
+One interactable may ATOMICALLY cause multiple deterministic floor-state changes. Reference:
+a PARTY BUTTON seals the rear route, opens forward route(s), spawns/activates an encounter
+roster, and begins encounter state — as ONE authored action. Do not distribute ownership of
+that sequence across gate code, spawn code and presentation independently.
+
+### ENCOUNTER ACTIVATION IS AUTHORED
+`enter encounter area => start combat` is REJECTED as the universal rule (it is what the
+multi-room slice shipped). Initial activation vocabulary stays narrow: explicit
+pressure/party button · ordinary interactable/switch · trigger volume WHERE SPECIFICALLY
+AUTHORED. Roles: MANDATORY (may control required progression) · OPTIONAL (physically
+bypassable without activation) · AMBIENT (inhabits the floor, no arena-lock semantics).
+The validated lock/confinement mechanics remain usable by triggered encounters.
+
+### SPATIAL DEPTH — NOT VERTICAL COMBAT
+Obtain depth first through irregular silhouettes, paths wrapping voids, ramps/raised
+PRESENTATION, occlusion, foreground/background masses, folded topology, and areas visible
+before reachable. Combat stays on the established plane. **Only if the hand-authored
+prototype still feels flat after these spatial changes does that become evidence for
+authoritative height mechanics.**
+
+### SCOPE FENCES FOR THE NEXT PROTOTYPE
+- **HAND-AUTHORED FIRST.** DepthGenerator does NOT procedurally assemble this yet.
+- **MINIMAL BREAKABLE APPROVED**, narrowly: breakable -> destroyed -> optionally reveals /
+  enables a contained interactable. Its only job is to test *search environment -> discover
+  progression control*. NO currency, NO hearts, NO loot table, NO generalized destructible
+  framework. Destructible/drop ECONOMY stays OUT.
+- **THROWABLE PUZZLE DEFERRED.** A respawning throwable / ranged switch is a new gameplay
+  capability, not floor-state plumbing, and must get its own narrow costed design. Prove
+  switch-controlled topology with an ordinary interactable or a second switch instead.
+  **Do not smuggle it in as level-design work.**
+  **PRINCIPLE BANKED (design law):** *if progression requires a capability, the floor must
+  guarantee access to that capability.* The mutually-exclusive switch-door puzzle from the
+  live reference is deferred WITH its throwable, as one unit.
+- Still out: branching procedural generation · minimap · elevator · drop economy ·
+  treasure/shop/puzzle taxonomy · full vertical combat · presentation polish.
+
+### TARGET PROTOTYPE FLOOR (one deterministic hand-authored floor)
+START/LOADOUT-PREP -> one-way commitment -> irregular traversal/open space -> visible-but-
+blocked route -> alternate/side path -> breakable search revealing an interactable ->
+interactable changes blocker state -> explicit PARTY-BUTTON encounter -> rear seals +
+forward route(s) change + enemies spawn -> clear -> ramp/elevation transition -> ordinary
+switch-controlled route interaction -> endpoint.
+
+Requirements: >=1 branch · >=1 route visible before reachable · >=1 irregular/open area ·
+>=1 narrower path · 1 blocker whose solution is elsewhere · 1 concealment-by-breakable ·
+1 explicit triggered encounter · **encounter must NOT start merely because the player entered
+its physical area** · 1 post-clear continuation · >=1 ramp/elevation presentation change ·
+simple endpoint.
+
+### STATE-SCOPE OBLIGATION
+Every new authoritative floor state gets an explicit STATE_SCOPES classification and scanner
+coverage. At minimum: connection/gate state · objective/interactable state · encounter state ·
+spawned encounter roster ownership · breakable/reveal state. All FLOOR-scoped; none may leak
+into run-persistent actor state.
+
+## M2 MULTI-ROOM SLICE — **SPLIT VERDICT 2026-08-28. MECHANICS PASS / GRAMMAR FALSIFIED.**
 
 Built on the committed Slice-1 baseline (`e7bea74`). Suite 523 -> 552.
 Grammar now playable end to end: **ENTRY -> TRAVERSAL -> COMBAT(seal) -> CLEAR -> TRAVERSAL
 -> FLOOR END.**
+
+### PLAYTEST CLOSEOUT — build `5cff467` (provenance verified, not inferred)
+HEAD `5cff46747f68f2693fefa0ad1c92b9c4771dbf54`, committed 2026-08-28 16:46:36 -0400.
+Working tree clean, zero commits after it, reflog shows HEAD never moved, no source file
+modified after the commit timestamp.
+
+**RAW HUMAN FINDINGS (Breon, near-verbatim):**
+> "It's still giving 4 boxes."
+- bounds/connections were readable and natural
+- placement felt fair/intended
+- combat remained solid and unaffected by the floor changes
+- the explicit "hit this button, start the encounter" sequence was solid
+- the build worked as a battle-arena/combat-room structure
+- it did NOT yet feel like the desired exploration-style floor
+- the world lacked the spatial/depth feeling shown in the live references
+
+### VERDICT — BOTH HALVES, RECORDED SEPARATELY
+
+**PASS (validated; NOT to be re-tested from zero, NOT to be erased):**
+1. connected walkability
+2. combat-room confinement / locking
+3. encounter trigger -> spawn -> lock sequence
+4. clear -> reopen -> continue
+5. follow-camera viability
+6. **POSITIVE DATUM (Breon, verbatim):** the explicit "hit this button, start the encounter"
+   sequence **"was solid."** This is the seed of the authored-activation direction, not an
+   incidental nicety — the thing that worked is the thing being generalised.
+
+**FALSIFIED / INSUFFICIENT AS FLOOR GRAMMAR:**
+"FloorPlan = sequential rectangular rooms connected by doors" as the PRIMARY
+exploration-floor abstraction. A chain of boxes reads as generated arenas, not as a place.
+
+**THE ERROR WAS THE PARENT ABSTRACTION, NOT THE MECHANICS.** Making the rectangles bigger,
+more numerous, or more varied does not fix this and is explicitly rejected. The pivot keeps
+every validated mechanic and re-parents the spatial/content model around them: a floor is a
+CONTINUOUS, STATEFUL TRAVERSAL SPACE whose available routes change in response to player
+actions. See the floor-grammar entry below.
 
 ### Topology
 `FloorPlan` -> `RoomPlan[]` + `ConnectionPlan[]` -> DERIVED `walkable_rects`. Room ROLES come
