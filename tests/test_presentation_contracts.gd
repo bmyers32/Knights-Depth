@@ -98,18 +98,12 @@ func _instantiate_arena() -> Node3D:
 ## family it names the moment stratum tuning shifts the draw, and it would fail as "the
 ## telegraph broke" rather than "that seed no longer spawns a Watcher".
 func _instantiate_arena_containing(family: StringName) -> Node3D:
-	var chosen_seed: int = -1
-	for candidate in 256:
-		for spawn in DepthGenerator.generate(candidate, 1).all_spawns():
-			if spawn["enemy_key"] == family:
-				chosen_seed = candidate
-				break
-		if chosen_seed >= 0:
-			break
-	assert_true(chosen_seed >= 0,
-		"no run seed below 256 produces a '%s' -- StratumConfig's family pool or spawn counts changed" % family)
+	var present: bool = false
+	for spawn in DepthGenerator.generate(0, 1).all_spawns():
+		if spawn["enemy_key"] == family:
+			present = true
+	assert_true(present, "the authored floor no longer contains a '%s'" % family)
 	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
-	arena.run_seed = chosen_seed  # set BEFORE add_child: _ready() generates the floor
 	add_child_autofree(arena)
 	assert_not_null(arena, "the real arena scene must instantiate")
 	return arena
@@ -124,9 +118,14 @@ func _instantiate_arena_containing(family: StringName) -> Node3D:
 ## correctly kills the Fang underground -- a real interaction, not a defect, but not the
 ## scenario these lifecycle tests are about.
 func _place_envoy_in_room_of(arena: Node3D, actor_id: int) -> void:
-	var rect: Rect2 = arena.sim._rooms[int(arena.sim._actor_room[actor_id])]
+	var rect: Rect2 = arena.sim._encounters[int(arena.sim._actor_encounter[actor_id])]["region"]
 	var centre: Vector2 = rect.get_center()
 	arena.sim.entities[arena.envoy.actor_id] = Vector3(centre.x, 0.0, centre.y)
+	# A deferred roster is combat-ABSENT and hidden until summoned; these lifecycle tests need
+	# it fully present, so activate its site through the real path rather than half-faking it.
+	arena.sim._activate_encounter(int(arena.sim._actor_encounter[actor_id]))
+	if arena._enemies.has(actor_id):
+		arena._enemies[actor_id].set_combat_present(true)
 
 
 ## The generated counterpart to the retired get_node("Fang"): asks the SIM which family an
@@ -377,4 +376,4 @@ func test_the_built_floor_matches_the_generated_plan() -> void:
 			"actor %d was spawned outside the floor it lives on" % actor_id)
 		# Ownership is what makes confinement possible; an unowned actor would silently fall
 		# back to the whole floor and be free to roam.
-		assert_true(arena.sim._actor_room.has(actor_id), "actor %d was never bound to a room" % actor_id)
+		assert_true(arena.sim._actor_encounter.has(actor_id), "actor %d was never bound to a site" % actor_id)

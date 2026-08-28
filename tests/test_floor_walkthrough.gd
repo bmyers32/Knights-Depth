@@ -1,0 +1,295 @@
+extends GutTest
+## END-TO-END: the whole authored grammar, walked in the real arena through the real driver.
+##
+##   START -> one-way commitment -> hall wrapping a void -> forward route VISIBLE BUT BLOCKED
+##   -> branch west -> break the crate -> reveal the switch -> use it -> route opens
+##   -> party button: rear seals, forward opens, roster ARRIVES, fight begins
+##   -> clear -> ramp opens -> raised ground -> ordinary switch -> endpoint
+##
+## The unit tests each prove one law. This proves they COMPOSE into something a player can
+## actually walk, which is the only thing that answers "is this slice playable?" short of a
+## human at the keyboard. BOOT-CLEAN IS NOT INTERACT-CLEAN.
+
+const DT := 1.0 / 30.0
+## preload, not a class_name alias: a class_name is not a constant expression in GDScript.
+const L = preload("res://game/gen/layouts/archive_prototype.gd")
+
+
+func _boot() -> Node3D:
+	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+	add_child_autofree(arena)
+	# The floor is a long walk with a real fight in it; survivability keeps a TRAVERSAL test
+	# measuring traversal. Never a balance claim.
+	arena.sim.debug_override_health(arena.envoy.actor_id, 100000.0)
+	return arena
+
+
+func _plan(arena: Node3D) -> FloorPlan:
+	return DepthGenerator.generate(arena.run_seed, arena.depth)
+
+
+func _envoy(arena: Node3D) -> int:
+	return arena.envoy.actor_id
+
+
+## Drives the Envoy toward a point through the REAL Command path. Deliberately not a teleport:
+## walking is what exercises the clamp, the apertures and every region trigger on the way.
+##
+## STRAIGHT-LINE STEERING, with no pathfinding -- the same thing a player does by holding a
+## direction. Tests therefore route through intermediate points, and a direct walk that fails
+## because geometry is in the way is the geometry working.
+func _walk_to(arena: Node3D, target: Vector3, max_ticks: int = 1500) -> bool:
+	var envoy_id: int = _envoy(arena)
+	for i in max_ticks:
+		var position: Vector3 = arena.sim.entities[envoy_id]
+		if position.distance_to(target) < 1.2:
+			return true
+		var direction: Vector3 = target - position
+		direction.y = 0.0
+		arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "move", {"direction": direction.normalized()})] as Array[Command], DT)
+	return arena.sim.entities[envoy_id].distance_to(target) < 1.2
+
+
+func _interact(arena: Node3D) -> Array[Event]:
+	return arena.sim.tick([Command.new(arena.sim.tick_count, _envoy(arena), "interact", {})] as Array[Command], DT)
+
+
+## Walks into range of an interactable and operates it. The walk matters: use_radius is the
+## SIM's decision, so a test that teleports would never exercise the range check a player does.
+func _use(arena: Node3D, position: Vector3) -> Array[Event]:
+	assert_true(_walk_to(arena, position), "the interactable at %s must be reachable" % position)
+	return _interact(arena)
+
+
+func _patch_centre(arena: Node3D, patch_id: int) -> Vector3:
+	return _plan(arena).patch_by_id(patch_id).centre()
+
+
+func _open(arena: Node3D, connection_id: int) -> bool:
+	return bool(arena.sim._connection_open[connection_id])
+
+
+func _kinds(events: Array[Event]) -> Array:
+	var kinds: Array = []
+	for event in events:
+		kinds.append(event.kind)
+	return kinds
+
+
+## Walks up to the crate and swings until it is gone.
+##
+## PRESS THEN RELEASE, not a bare "attack": the shipped loadout's sword is a combo weapon
+## registered through register_melee_profiles, so a phase-less Command is not a swing at all.
+## Driving the real weapon the real way is the point of an integration test -- a synthetic
+## one-shot sword here would have proved nothing about the build a human will play.
+func _break_the_crate(arena: Node3D) -> Array[Event]:
+	var envoy_id: int = _envoy(arena)
+	var crate: Vector3 = _plan(arena).breakables[0].position
+	assert_true(_walk_to(arena, crate + Vector3(0.0, 0.0, 1.6)), "the crate must be reachable")
+	var events: Array[Event] = []
+	for swing in 12:
+		var aim: Vector3 = (crate - arena.sim.entities[envoy_id]).normalized()
+		events.append_array(arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim, "phase": "pressed"})] as Array[Command], DT))
+		events.append_array(arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim, "phase": "released"})] as Array[Command], DT))
+		for i in 14:  # let the swing resolve and the cooldown clear
+			events.append_array(arena.sim.tick([] as Array[Command], DT))
+		if arena.sim._breakables.is_empty():
+			break
+	assert_true(arena.sim._breakables.is_empty(), "the crate must be destructible with the shipped weapon")
+	return events
+
+
+## Everything up to and including the party button being pressed.
+func _reach_and_start_the_fight(arena: Node3D) -> void:
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)))
+	_break_the_crate(arena)
+	_use(arena, _plan(arena).interactables[0].position)
+	_use(arena, _plan(arena).interactables[1].position)
+
+
+func _kill_the_roster(arena: Node3D) -> void:
+	for actor_id: int in arena.sim._encounter_roster[L.E_ARENA]:
+		arena.sim.debug_override_health(actor_id, 0.0)
+	arena.sim.tick([] as Array[Command], DT)
+
+
+# --- THE FLOOR EXISTS -------------------------------------------------------------------
+
+func test_the_arena_boots_the_authored_floor_with_all_four_layers() -> void:
+	var arena: Node3D = _boot()
+	assert_gt(arena.sim._patch_rects.size(), 4, "spatial layer registered")
+	assert_gt(arena.sim._connections.size(), 0, "progression layer registered")
+	assert_gt(arena.sim._triggers.size(), 0, "controllers registered")
+	assert_gt(arena.sim._encounters.size(), 1, "encounter layer registered")
+	assert_gt(arena.sim._interactables.size(), 0, "interaction layer registered")
+	assert_eq(arena.sim._breakables.size(), 1, "and one prop to search behind")
+
+
+## SEED HONESTY on screen: while the layout is authored the HUD must say so, rather than
+## implying a different seed would give a different floor.
+func test_the_hud_declares_the_layout_authored() -> void:
+	var shown: String = _boot()._seed_label.text
+	assert_true(shown.contains("authored layout"),
+		"the HUD must not advertise variety that does not exist, got '%s'" % shown)
+	assert_true(shown.contains("seed 0"), "the seed is still shown as reproduction metadata, got '%s'" % shown)
+
+
+func test_only_the_ambient_roster_is_present_before_anything_is_triggered() -> void:
+	var arena: Node3D = _boot()
+	var present: int = 0
+	var absent: int = 0
+	for actor_id: int in arena._enemies.keys():
+		if arena.sim.debug_is_combat_absent(actor_id):
+			absent += 1
+		else:
+			present += 1
+	assert_eq(present, 1, "exactly the ambient territory is inhabited at load")
+	assert_eq(absent, 3, "the mandatory roster is registered but has not been summoned")
+
+
+# --- TRAVERSAL AND COMMITMENT -----------------------------------------------------------
+
+func test_reaching_the_hall_commits_the_envoy_forward() -> void:
+	var arena: Node3D = _boot()
+	assert_true(_open(arena, L.C_COMMIT), "sanity: the way in starts open")
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_SOUTH)), "the Envoy must reach the hall")
+	assert_false(_open(arena, L.C_COMMIT), "entering must seal the way back")
+	assert_false(_walk_to(arena, _patch_centre(arena, L.P_START), 300), "and the start is unreachable now")
+
+
+## The hall is a ring, so both arms lead onward -- a real branch, not a corridor with a bend.
+func test_the_hall_offers_a_genuine_branch_around_a_void() -> void:
+	var arena: Node3D = _boot()
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_SOUTH)))
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)), "west arm reachable")
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_NORTH)), "and it leads onward")
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_EAST)), "so does the east arm")
+	assert_false(_walk_to(arena, Vector3(0.0, 0.0, -22.0), 400), "and the middle is a genuine void")
+
+
+func test_the_forward_route_is_visible_but_blocked_until_earned() -> void:
+	var arena: Node3D = _boot()
+	assert_false(_open(arena, L.C_TO_APPROACH), "the way on starts closed")
+	# Routed via an arm on purpose: _walk_to steers in a STRAIGHT LINE, exactly like a player
+	# holding a direction, and the hall's void sits between the entrance and the far side. A
+	# direct walk failing here is the void doing its job, not a defect.
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)), "round the west arm")
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_NORTH)), "to the far side of the hall")
+	assert_false(_walk_to(arena, _patch_centre(arena, L.P_APPROACH), 400),
+		"the Envoy must not be able to walk into the approach yet")
+
+
+# --- SEARCH -> DISCOVER -> OPEN -----------------------------------------------------------
+
+func test_breaking_the_crate_reveals_the_switch_that_opens_the_route() -> void:
+	var arena: Node3D = _boot()
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)))
+	assert_eq(arena.sim._interactables[L.I_HIDDEN_SWITCH]["state"], &"hidden", "concealed to begin with")
+
+	var kinds: Array = _kinds(_break_the_crate(arena))
+	assert_true(kinds.has("breakable_destroyed"), "the crate must be destructible")
+	assert_true(kinds.has("interactable_revealed"), "and must reveal what it hid")
+
+	assert_false(_open(arena, L.C_TO_APPROACH), "revealing is not yet using")
+	_use(arena, _plan(arena).interactables[0].position)
+	assert_true(_open(arena, L.C_TO_APPROACH), "using the found switch is what opens the way")
+
+
+# --- THE PARTY BUTTON --------------------------------------------------------------------
+
+## The reference sequence end to end: one press, four consequences, one tick.
+func test_the_party_button_seals_the_rear_opens_the_way_and_summons_the_roster() -> void:
+	var arena: Node3D = _boot()
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)))
+	_break_the_crate(arena)
+	_use(arena, _plan(arena).interactables[0].position)
+	assert_true(_walk_to(arena, _plan(arena).interactables[1].position))
+
+	assert_true(_open(arena, L.C_TO_APPROACH), "sanity: rear open before the press")
+	assert_false(_open(arena, L.C_TO_ARENA), "sanity: forward closed before the press")
+
+	var kinds: Array = _kinds(_interact(arena))
+
+	assert_false(_open(arena, L.C_TO_APPROACH), "the rear route seals")
+	assert_true(_open(arena, L.C_TO_ARENA), "the forward route opens")
+	assert_eq(arena.sim._encounter_state[L.E_ARENA], "active", "the encounter begins")
+	assert_true(kinds.has("encounter_activated"), "and announces itself")
+	for actor_id: int in arena.sim._encounter_roster[L.E_ARENA]:
+		assert_false(arena.sim.debug_is_combat_absent(actor_id), "the roster ARRIVES on the press")
+
+
+func test_the_sealed_encounter_confines_both_sides() -> void:
+	var arena: Node3D = _boot()
+	_reach_and_start_the_fight(arena)
+	var region: Rect2 = _plan(arena).encounters_of_role(FloorLayers.ROLE_MANDATORY)[0].region
+
+	assert_false(_walk_to(arena, _patch_centre(arena, L.P_HALL_NORTH), 500), "the Envoy must not escape")
+	var position: Vector3 = arena.sim.entities[_envoy(arena)]
+	assert_true(position.z <= region.end.y + 0.001 and position.z >= region.position.y - 0.001,
+		"the Envoy left the sealed encounter to %s" % position)
+	for actor_id: int in arena.sim._encounter_roster[L.E_ARENA]:
+		var enemy: Vector3 = arena.sim.entities[actor_id]
+		assert_true(enemy.z <= region.end.y + 0.001 and enemy.z >= region.position.y - 0.001,
+			"roster actor %d left the sealed encounter to %s" % [actor_id, enemy])
+
+
+func test_clearing_the_encounter_opens_the_way_onward() -> void:
+	var arena: Node3D = _boot()
+	_reach_and_start_the_fight(arena)
+	assert_false(_open(arena, L.C_TO_RAMP), "sanity: the exit starts closed")
+	_kill_the_roster(arena)
+	assert_eq(arena.sim._encounter_state[L.E_ARENA], "cleared")
+	assert_true(_open(arena, L.C_TO_RAMP), "clearing must open the way onward")
+	assert_eq(arena.sim.debug_describe_floor()["active_confinement"], -1, "and lift the seal")
+
+
+## Combat still works, inside the summoned fight, on the real floor.
+func test_the_summoned_roster_actually_fights() -> void:
+	var arena: Node3D = _boot()
+	_reach_and_start_the_fight(arena)
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_ARENA)))
+	var envoy_id: int = _envoy(arena)
+	var before: float = arena.sim._health[envoy_id]
+	var telegraphs: int = 0
+	for i in 900:
+		for event in arena.sim.tick([] as Array[Command], DT):
+			if event.kind == "attack_telegraph":
+				telegraphs += 1
+	assert_gt(telegraphs, 0, "a summoned roster must commit attacks")
+	assert_lt(arena.sim._health[envoy_id], before, "and be able to land them")
+
+
+# --- THE WHOLE GRAMMAR --------------------------------------------------------------------
+
+## One continuous run from arrival to endpoint, using only player Commands. If this passes, a
+## human can walk the floor.
+func test_the_envoy_can_traverse_the_entire_floor_to_the_endpoint() -> void:
+	var arena: Node3D = _boot()
+	var plan: FloorPlan = _plan(arena)
+
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_SOUTH)), "into the hall")
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)), "down the west branch")
+	_break_the_crate(arena)
+	_use(arena, plan.interactables[0].position)
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_APPROACH)), "through the route it opened")
+	_use(arena, plan.interactables[1].position)
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_ARENA)), "into the fight")
+	_kill_the_roster(arena)
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_RAMP)), "up the ramp")
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HIGH)), "onto the high ground")
+	assert_false(_open(arena, L.C_TO_END), "the last route needs its own switch")
+	_use(arena, plan.interactables[2].position)
+	assert_true(_open(arena, L.C_TO_END), "which opens the last route")
+	assert_true(_walk_to(arena, plan.end_marker), "and the floor ends somewhere")
+
+
+## Elevation is PRESENTATION: the sim stays flat while the rendered Envoy climbs.
+func test_the_envoy_is_lifted_onto_high_ground_without_the_sim_knowing() -> void:
+	var arena: Node3D = _boot()
+	_reach_and_start_the_fight(arena)
+	_kill_the_roster(arena)
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HIGH)), "reach the raised ground")
+
+	assert_almost_eq(arena.sim.entities[_envoy(arena)].y, 0.0, 0.001, "the sim stays on one plane")
+	arena._physics_process(DT)
+	assert_gt(arena.envoy.position.y, 1.0, "while presentation lifts the Envoy onto it")

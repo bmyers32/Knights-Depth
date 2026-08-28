@@ -239,28 +239,38 @@ var _bounds: WalkableBounds = null
 ## silently inherit immortality across floors.
 var _run_persistent_actors: Dictionary = {}
 
-## --- ROOMS & ENCOUNTERS (M2 multi-room slice) ------------------------------------------
-## THREE DISTINCT NOTIONS OF "WHERE MAY THIS ACTOR BE", deliberately never merged:
-##   1. FLOOR WALKABILITY (_bounds) -- permanent for the floor, the union of every room and
-##      aperture rect. Where traversal is legal at all.
-##   2. ROOM OWNERSHIP (_actor_room) -- permanent for an ENEMY's lifetime. Every floor enemy
-##      belongs to one room and never leaves it, whatever the encounter state. A combat-room
-##      Fang must not chase the player down a corridor.
-##   3. ENCOUNTER LOCK (_active_lock_room) -- TEMPORARY. While a combat encounter runs, the
-##      Envoy is sealed into that room too.
-## _bounds is NEVER mutated to express (2) or (3). Legality is resolved per actor at the one
-## seam every authoritative displacement already funnels through (_legal_bounds_for), which is
-## why sealing an encounter is a one-function change that automatically covers knockback,
-## lunge, bump and burrow rather than only locomotion.
-var _rooms: Dictionary = {}             # room_id -> Rect2
-var _room_kind: Dictionary = {}         # room_id -> StringName (RoomPlan.KIND_*)
-var _room_bounds: Dictionary = {}       # room_id -> WalkableBounds, one rect, built once
-var _room_roster: Dictionary = {}       # room_id -> Array[int] of the actors that room owns
-var _actor_room: Dictionary = {}        # actor_id -> room_id (enemies only)
-var _encounter_state: Dictionary = {}   # room_id -> "dormant" | "active" | "cleared"
-## The room currently sealing its participants, or -1. At most one at a time: a linear chain
-## cannot present two simultaneously, and a set would be speculative generality (§1.4).
-var _active_lock_room: int = -1
+## --- FLOOR LAYERS (M2 floor grammar) --------------------------------------------------
+## FOUR INDEPENDENT LAYERS; no layer parents another. Rooms-plus-doors was falsified as the
+## parent abstraction, so geometry, progression, encounters and interactions are siblings.
+##
+## THREE NOTIONS OF "WHERE MAY THIS ACTOR BE", still never merged:
+##   1. FLOOR WALKABILITY (_bounds) -- every patch plus the apertures of OPEN connections.
+##      Rebuilt whenever a connection changes, which is what makes a blocked gate an actual
+##      wall rather than a picture of one.
+##   2. TERRITORY (_actor_encounter) -- permanent for an enemy lifetime. Every floor enemy
+##      belongs to one encounter site and never leaves its region, whatever the state. True for
+##      AMBIENT rosters too: ambient means no ceremony and no player lock, NOT whole-floor
+##      roaming, and this slice adds no roaming or pathfinding system.
+##   3. CONFINEMENT (_active_confinement) -- TEMPORARY. While a confining encounter runs, the
+##      Envoy is sealed into that site region as well.
+## _bounds is never mutated to express (2) or (3). Legality resolves per actor at the one seam
+## every authoritative displacement already funnels through (_legal_bounds_for).
+var _connections: Dictionary = {}        # connection_id -> {aperture}
+var _connection_open: Dictionary = {}    # connection_id -> bool  (THE gate state)
+var _triggers: Dictionary = {}           # trigger_id -> {kind, region, source_id, once, effects}
+var _triggers_fired: Dictionary = {}     # trigger_id -> true
+var _interactables: Dictionary = {}      # interactable_id -> {position, use_radius, state}
+var _breakables: Dictionary = {}         # breakable_id -> {position, radius, durability}
+var _encounters: Dictionary = {}         # encounter_id -> {region, role, confines_player}
+var _encounter_bounds: Dictionary = {}   # encounter_id -> WalkableBounds, region CLIPPED to walkable
+var _encounter_roster: Dictionary = {}   # encounter_id -> Array[int]
+var _encounter_state: Dictionary = {}    # encounter_id -> "dormant" | "active" | "cleared"
+var _actor_encounter: Dictionary = {}    # actor_id -> encounter_id (enemies only)
+## All patch rects, kept so bounds can be rebuilt when a connection opens or closes.
+var _patch_rects: Array[Rect2] = []
+## The site currently sealing the Envoy, or -1. At most one: a second simultaneous seal has no
+## authored consumer and would be speculative generality.
+var _active_confinement: int = -1
 
 const SCOPE_RUN: StringName = &"run"
 const SCOPE_FLOOR: StringName = &"floor"
@@ -376,13 +386,19 @@ const STATE_SCOPES: Dictionary = {
 	"_bounds": SCOPE_FLOOR,  # not a collection — assigned by load_floor, see below
 	# Rooms and encounters describe ONE floor's geometry and encounter progress. All of it
 	# dies with the floor, including which room owned which actor.
-	"_rooms": SCOPE_FLOOR,
-	"_room_kind": SCOPE_FLOOR,
-	"_room_bounds": SCOPE_FLOOR,
-	"_room_roster": SCOPE_FLOOR,
-	"_actor_room": SCOPE_FLOOR,
+	"_connections": SCOPE_FLOOR,
+	"_connection_open": SCOPE_FLOOR,
+	"_triggers": SCOPE_FLOOR,
+	"_triggers_fired": SCOPE_FLOOR,
+	"_interactables": SCOPE_FLOOR,
+	"_breakables": SCOPE_FLOOR,
+	"_encounters": SCOPE_FLOOR,
+	"_encounter_bounds": SCOPE_FLOOR,
+	"_encounter_roster": SCOPE_FLOOR,
 	"_encounter_state": SCOPE_FLOOR,
-	"_active_lock_room": SCOPE_FLOOR,  # not a collection — reset by load_floor
+	"_actor_encounter": SCOPE_FLOOR,
+	"_patch_rects": SCOPE_FLOOR,         # Array — cleared by the same loop
+	"_active_confinement": SCOPE_FLOOR,  # not a collection — reset by load_floor
 }
 
 
@@ -408,8 +424,11 @@ func load_floor(bounds: WalkableBounds, entry_point: Vector3) -> void:
 		if scope == SCOPE_RUN:
 			continue
 		var value: Variant = get(state_name)
+		if value is Array:
+			(value as Array).clear()
+			continue
 		if not (value is Dictionary):
-			continue  # non-collection floor state (_bounds) is assigned explicitly below
+			continue  # non-collection floor state (_bounds, _active_confinement) set below
 		var collection: Dictionary = value
 		if scope == SCOPE_RUN_ACTOR:
 			for actor_id: int in collection.keys():
@@ -419,7 +438,7 @@ func load_floor(bounds: WalkableBounds, entry_point: Vector3) -> void:
 			collection.clear()
 
 	_bounds = bounds
-	_active_lock_room = -1  # not a Dictionary, so the clearing loop above cannot reach it
+	_active_confinement = -1  # not a Dictionary, so the clearing loop above cannot reach it
 	# Entry placement is not routed through add_entity's validation: these actors are
 	# already registered, and the entry point's legality is the GENERATOR's contract
 	# (test_depth_generator.gd asserts it), not something to re-decide per floor.
@@ -428,19 +447,19 @@ func load_floor(bounds: WalkableBounds, entry_point: Vector3) -> void:
 
 
 ## THE ONE PLACE "where may this actor legally be" is decided. Resolves the three notions
-## documented at _rooms into a single region, most specific first:
-##   1. an ENEMY is confined to its own room, ALWAYS -- never conditional on lock state
-##      (ruled: a combat-room Fang must not chase the player down a corridor)
-##   2. a run-persistent actor is sealed into the locked room while an encounter runs
-##   3. otherwise, the whole floor
+## documented at the floor-layer state into a single region, most specific first:
+##   1. an ENEMY is confined to its own encounter site's territory, ALWAYS -- never conditional
+##      on activation, and true for AMBIENT rosters as much as triggered ones
+##   2. the Envoy is sealed into a confining site's region while its encounter runs
+##   3. otherwise, the whole floor as currently connected
 ##
-## Returns null when no floor is loaded, which keeps every seam an identity operation for a
-## bare SimWorld -- the property that leaves the entire pre-M2 suite untouched.
+## Returns null when no floor is loaded, keeping every seam an identity operation for a bare
+## SimWorld -- the property that leaves the whole pre-M2 suite untouched.
 func _legal_bounds_for(actor_id: int) -> WalkableBounds:
-	if _actor_room.has(actor_id):
-		return _room_bounds.get(int(_actor_room[actor_id]), _bounds)
-	if _active_lock_room >= 0 and _run_persistent_actors.has(actor_id):
-		return _room_bounds.get(_active_lock_room, _bounds)
+	if _actor_encounter.has(actor_id):
+		return _encounter_bounds.get(int(_actor_encounter[actor_id]), _bounds)
+	if _active_confinement >= 0 and _run_persistent_actors.has(actor_id):
+		return _encounter_bounds.get(_active_confinement, _bounds)
 	return _bounds
 
 
@@ -453,99 +472,351 @@ func _clamp_to_bounds(actor_id: int, from: Vector3, to: Vector3) -> Vector3:
 
 
 ## PLACEMENT seam counterpart -- same per-actor region as the clamp, so a burrowing Fang can
-## never surface outside the room that owns it.
+## never surface outside the territory that owns it.
 func _point_is_legal_for(actor_id: int, point: Vector3) -> bool:
 	var region: WalkableBounds = _legal_bounds_for(actor_id)
 	return true if region == null else region.is_inside(point)
 
 
-## Registers one room of the loaded floor. Called by the driver after load_floor, unpacked
-## from the FloorPlan -- sim never imports gen/.
-func register_room(room_id: int, kind: StringName, rect: Rect2) -> void:
-	_rooms[room_id] = rect
-	_room_kind[room_id] = kind
-	var rects: Array[Rect2] = [rect]
-	_room_bounds[room_id] = WalkableBounds.new(rects)
-	_room_roster[room_id] = []
-	if kind == &"combat":
-		_encounter_state[room_id] = "dormant"
+# --- FLOOR REGISTRATION (the driver unpacks a FloorPlan; sim never imports gen/) ---------
+
+func register_patches(rects: Array[Rect2]) -> void:
+	_patch_rects = rects.duplicate()
+	_rebuild_regions()
 
 
-## Binds an actor to the room that owns it for the rest of its life. Refuses LOUDLY if the
-## actor is not standing in that room -- the same placement law as add_entity, for the same
-## reason: silently accepting it would leave an actor permanently clamped against a region it
-## is not inside, which presents as "the enemy is stuck" rather than as the content bug it is.
-func assign_actor_room(actor_id: int, room_id: int) -> bool:
-	if not _rooms.has(room_id):
-		push_error("SimWorld.assign_actor_room: unknown room %d" % room_id)
+## A connection owns AVAILABILITY and nothing else -- it is never told which controller changed
+## it. That is the point of the law: switches, objectives, encounter clears and one-way
+## commitment all reach it through the same effect and stay indistinguishable from here.
+func register_connection(connection_id: int, aperture: Rect2, starts_open: bool) -> void:
+	_connections[connection_id] = {"aperture": aperture}
+	_connection_open[connection_id] = starts_open
+	_rebuild_regions()
+
+
+func register_trigger(trigger_id: int, kind: StringName, region: Rect2, source_id: int, once: bool, effects: Array) -> void:
+	_triggers[trigger_id] = {"kind": kind, "region": region, "source_id": source_id, "once": once, "effects": effects}
+
+
+func register_interactable(interactable_id: int, position: Vector3, use_radius: float, starts_hidden: bool) -> void:
+	_interactables[interactable_id] = {
+		"position": position, "use_radius": use_radius,
+		"state": &"hidden" if starts_hidden else &"available",
+	}
+
+
+## A BREAKABLE IS NOT A COMBATANT (see the pre-code inheritance audit, ROADMAP). It is
+## deliberately absent from _families / _health / _combat_radius, so it enters none of the six
+## scans a combatant would join -- no shield bump, no lunge clamp, no burrow occupancy, no Burn
+## contact-spread, no i-frames, no flinch, no pressure, no knockback, no status -- and crucially
+## it is never a valid target for an enemy. It shares only DETECTION with melee and projectiles;
+## resolution forks immediately into _resolve_hit_on_breakable.
+func register_breakable(breakable_id: int, position: Vector3, radius: float, durability: float) -> void:
+	_breakables[breakable_id] = {"position": position, "radius": radius, "durability": durability}
+
+
+func register_encounter(encounter_id: int, region: Rect2, role: StringName, confines_player: bool, spawn_at_floor_load: bool = true) -> void:
+	_encounters[encounter_id] = {
+		"region": region, "role": role, "confines_player": confines_player,
+		"spawn_at_floor_load": spawn_at_floor_load,
+	}
+	_encounter_roster[encounter_id] = []
+	# AMBIENT sites never seal, so they get no dormant/active/cleared life at all -- their
+	# roster simply exists and fights if you walk through. Giving them a state machine they
+	# never advance would invite a future reader to believe ambient encounters can be cleared.
+	if role != &"ambient":
+		_encounter_state[encounter_id] = "dormant"
+	_rebuild_regions()
+
+
+## Binds an actor to the site that owns it for the rest of its life. Refuses LOUDLY if the actor
+## is not standing in that territory -- the same placement law as add_entity, for the same
+## reason: silently accepting it would leave an actor permanently clamped against a region it is
+## not inside, which presents as "the enemy is stuck" rather than as the content bug it is.
+func assign_actor_encounter(actor_id: int, encounter_id: int) -> bool:
+	if not _encounters.has(encounter_id):
+		push_error("SimWorld.assign_actor_encounter: unknown encounter %d" % encounter_id)
 		return false
-	var room: WalkableBounds = _room_bounds[room_id]
-	if not room.is_inside(entities.get(actor_id, Vector3.ZERO)):
-		push_error("SimWorld.assign_actor_room: actor %d at %s is not inside room %d" % [actor_id, entities.get(actor_id, Vector3.ZERO), room_id])
+	var territory: WalkableBounds = _encounter_bounds[encounter_id]
+	if not territory.is_inside(entities.get(actor_id, Vector3.ZERO)):
+		push_error("SimWorld.assign_actor_encounter: actor %d at %s is outside encounter %d" % [actor_id, entities.get(actor_id, Vector3.ZERO), encounter_id])
 		return false
-	_actor_room[actor_id] = room_id
-	var roster: Array = _room_roster[room_id]
+	_actor_encounter[actor_id] = encounter_id
+	var roster: Array = _encounter_roster[encounter_id]
 	if not roster.has(actor_id):
 		roster.append(actor_id)
+	# A DEFERRED roster is registered up front but does not PARTICIPATE until its site is
+	# activated: alive, untargetable, and not drawn. That is precisely what _combat_absent
+	# already means (burrow authored it), so this reuses the one predicate every hit scan,
+	# contact clamp and bump selection already funnels through rather than inventing a second
+	# notion of "present". It is also what gives the party button a roster that ARRIVES.
+	if not bool(_encounters[encounter_id]["spawn_at_floor_load"]):
+		_combat_absent[actor_id] = true
 	return true
 
 
-func debug_describe_encounters() -> Dictionary:
-	return {"active_lock": _active_lock_room, "states": _encounter_state.duplicate()}
-
-
-## Advances every combat encounter by one tick. Runs inside tick() BEFORE AI decides, so an
-## activation seals the room and wakes its roster on the same tick the player crosses the
-## threshold rather than one tick late.
+## Recomputes both legality views. A BLOCKED connection contributes no aperture, which removes
+## the passage beyond a threshold while each patch's own rect still covers its half of it -- so
+## closing a gate never shrinks a space and never snaps an actor off a doorway.
 ##
-## THE ACTIVATION TRIGGER IS THE ROOM RECT ITSELF, not an inset sub-region, and that choice is
-## what makes the threshold case safe: the aperture deliberately overlaps the room, so a
-## player standing in the doorway is ALREADY inside the room rect. They activate the encounter
-## and remain legal, because the room's own rect covers their half of the aperture. Sealing
-## therefore removes only the corridor beyond them, never the ground under their feet.
+## Encounter territories are the site's region CLIPPED TO WALKABLE GROUND, not the raw rect: a
+## region is an authoring convenience that may overhang a void, and confining an actor to a raw
+## rectangle would let it walk on nothing.
+func _rebuild_regions() -> void:
+	var open_rects: Array[Rect2] = _patch_rects.duplicate()
+	for connection_id in _connections:
+		if bool(_connection_open.get(connection_id, false)):
+			open_rects.append(_connections[connection_id]["aperture"])
+	_bounds = WalkableBounds.new(open_rects)
+	for encounter_id in _encounters:
+		var region: Rect2 = _encounters[encounter_id]["region"]
+		var clipped: Array[Rect2] = []
+		for rect in open_rects:
+			var shared: Rect2 = rect.intersection(region)
+			if shared.get_area() > 0.0:
+				clipped.append(shared)
+		_encounter_bounds[encounter_id] = WalkableBounds.new(clipped)
+
+
+## Read-only participation query, so the driver can mirror a deferred roster without poking a
+## private field (same precedent as debug_describe_melee_state).
+func debug_is_combat_absent(actor_id: int) -> bool:
+	return _combat_absent.has(actor_id)
+
+
+func debug_describe_floor() -> Dictionary:
+	return {
+		"connections_open": _connection_open.duplicate(),
+		"encounters": _encounter_state.duplicate(),
+		"active_confinement": _active_confinement,
+		"interactables": _interactables.size(),
+		"breakables": _breakables.size(),
+	}
+
+
+# --- CONTROLLERS: trigger -> effect -----------------------------------------------------
+
+## Advances region triggers and every encounter by one tick. Runs inside tick() BEFORE AI
+## decides, so a commitment boundary or an activation takes hold on the same tick it is earned.
+func _advance_floor_state() -> Array[Event]:
+	var events: Array[Event] = []
+	var trigger_ids: Array = _triggers.keys()
+	trigger_ids.sort()  # autonomous-phase law: deterministic order, never Dictionary order
+	for trigger_id: int in trigger_ids:
+		var trigger: Dictionary = _triggers[trigger_id]
+		if trigger["kind"] != &"region_entered" or _triggers_fired.has(trigger_id):
+			continue
+		var region: Rect2 = trigger["region"]
+		for actor_id: int in _run_persistent_actors:
+			if _health.get(actor_id, 0.0) <= 0.0:
+				continue
+			var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
+			if region.has_point(Vector2(position.x, position.z)):
+				events.append_array(_fire_trigger(trigger_id))
+				break
+	events.append_array(_advance_encounters())
+	return events
+
+
+## Applies one trigger's effects ATOMICALLY -- the whole ordered list lands within this call, so
+## a trigger can never be observed half-fired. This is where the party button's "seal the rear,
+## open the way forward, wake the roster" becomes one indivisible consequence instead of three
+## systems that happen to agree.
+func _fire_trigger(trigger_id: int) -> Array[Event]:
+	var trigger: Dictionary = _triggers[trigger_id]
+	if bool(trigger["once"]):
+		_triggers_fired[trigger_id] = true
+	var events: Array[Event] = [Event.new(tick_count, "floor_trigger_fired", {
+		"trigger_id": trigger_id, "kind": String(trigger["kind"]), "effects": trigger["effects"].size(),
+	})]
+	for effect in trigger["effects"]:
+		events.append_array(_apply_floor_effect(effect))
+	return events
+
+
+func _apply_floor_effect(effect: Dictionary) -> Array[Event]:
+	var kind: StringName = effect["kind"]
+	var target_id: int = int(effect["target_id"])
+	match String(kind):
+		"open_connection", "block_connection":
+			var opened: bool = kind == &"open_connection"
+			if not _connection_open.has(target_id) or bool(_connection_open[target_id]) == opened:
+				return []
+			_connection_open[target_id] = opened
+			_rebuild_regions()
+			return [Event.new(tick_count, "connection_changed", {"connection_id": target_id, "open": opened})]
+		"activate_encounter":
+			return _activate_encounter(target_id)
+		"reveal_interactable":
+			if not _interactables.has(target_id) or _interactables[target_id]["state"] != &"hidden":
+				return []
+			_interactables[target_id]["state"] = &"available"
+			return [Event.new(tick_count, "interactable_revealed", {"interactable_id": target_id})]
+	push_warning("SimWorld: unknown floor effect kind '%s'" % kind)
+	return []
+
+
+## ACTIVATION IS AUTHORED. There is no "the player entered the region, therefore fight" rule
+## anywhere in this file -- an encounter starts because an effect said so. That generalises the
+## one thing the last playtest positively liked: the explicit button-then-encounter beat.
+func _activate_encounter(encounter_id: int) -> Array[Event]:
+	if String(_encounter_state.get(encounter_id, "")) != "dormant":
+		return []
+	_encounter_state[encounter_id] = "active"
+	if bool(_encounters[encounter_id]["confines_player"]):
+		_active_confinement = encounter_id
+	var arrived: Array = []
+	for member_id: int in _encounter_roster[encounter_id]:
+		if _health.get(member_id, 0.0) <= 0.0:
+			continue
+		# A deferred roster becomes PRESENT here -- the same participation flip burrow uses on
+		# emergence, so presentation already knows how to mirror it.
+		_combat_absent.erase(member_id)
+		debug_set_ai_active(member_id)
+		arrived.append(member_id)
+	return [Event.new(tick_count, "encounter_activated", {
+		"encounter_id": encounter_id, "roster": _encounter_roster[encounter_id].size(),
+		"actor_ids": arrived,
+	})]
+
+
+## Only the CLEAR half runs autonomously; activation is always an effect.
 func _advance_encounters() -> Array[Event]:
 	var events: Array[Event] = []
-	var room_ids: Array = _encounter_state.keys()
-	room_ids.sort()  # autonomous-phase law: deterministic order, never Dictionary order
-	for room_id: int in room_ids:
-		var state: String = String(_encounter_state[room_id])
-		if state == "dormant":
-			if _active_lock_room >= 0:
-				continue  # one encounter at a time
-			var room: WalkableBounds = _room_bounds[room_id]
-			for actor_id: int in _run_persistent_actors:
-				if _health.get(actor_id, 0.0) <= 0.0:
-					continue
-				if not room.is_inside(entities.get(actor_id, Vector3.ZERO)):
-					continue
-				_encounter_state[room_id] = "active"
-				_active_lock_room = room_id
-				# The roster wakes HERE, not by detection. A dormant room's enemies do not
-				# perceive the player through an open doorway (ruled) -- entering the room is
-				# what starts the fight, so there is no line-of-sight model to build.
-				for member_id: int in _room_roster[room_id]:
-					if _health.get(member_id, 0.0) > 0.0:
-						debug_set_ai_active(member_id)
-				events.append(Event.new(tick_count, "encounter_activated", {
-					"room_id": room_id, "actor_id": actor_id, "roster": _room_roster[room_id].size(),
-				}))
+	var encounter_ids: Array = _encounter_state.keys()
+	encounter_ids.sort()
+	for encounter_id: int in encounter_ids:
+		if String(_encounter_state[encounter_id]) != "active":
+			continue
+		# A COMBAT-ABSENT actor (a burrowed Fang) is ALIVE, so it still counts. Keying the clear
+		# on _health rather than on participation is what makes that true with no special case:
+		# burrow is temporary non-participation INSIDE an encounter, never leaving one.
+		var roster_alive: bool = false
+		for member_id: int in _encounter_roster[encounter_id]:
+			if _health.get(member_id, 0.0) > 0.0:
+				roster_alive = true
 				break
-		elif state == "active":
-			# A COMBAT-ABSENT actor (a burrowed Fang) is ALIVE, so it still counts. Keying the
-			# clear on _health rather than on participation is what makes that true with no
-			# special case -- burrow is temporary non-participation INSIDE an encounter, and
-			# must never be mistaken for leaving it.
-			var roster_alive: bool = false
-			for member_id: int in _room_roster[room_id]:
-				if _health.get(member_id, 0.0) > 0.0:
-					roster_alive = true
-					break
-			if roster_alive:
-				continue
-			_encounter_state[room_id] = "cleared"
-			_active_lock_room = -1
-			events.append(Event.new(tick_count, "encounter_cleared", {"room_id": room_id}))
+		if roster_alive:
+			continue
+		_encounter_state[encounter_id] = "cleared"
+		if _active_confinement == encounter_id:
+			_active_confinement = -1
+		events.append(Event.new(tick_count, "encounter_cleared", {"encounter_id": encounter_id}))
+		events.append_array(_fire_triggers_watching(&"encounter_cleared", encounter_id))
 	return events
+
+
+## Fires every not-yet-spent trigger watching a given source. The source never knows its
+## watchers exist -- an encounter does not open doors, it merely finishes.
+func _fire_triggers_watching(kind: StringName, source_id: int) -> Array[Event]:
+	var events: Array[Event] = []
+	var trigger_ids: Array = _triggers.keys()
+	trigger_ids.sort()
+	for trigger_id: int in trigger_ids:
+		var trigger: Dictionary = _triggers[trigger_id]
+		if trigger["kind"] != kind or int(trigger["source_id"]) != source_id:
+			continue
+		if _triggers_fired.has(trigger_id):
+			continue
+		events.append_array(_fire_trigger(trigger_id))
+	return events
+
+
+## The "interact" Command: the player operates the nearest AVAILABLE interactable in range.
+## Range and candidacy are decided HERE, never by presentation -- a client may ask, the sim
+## answers (GAME-RULES §4.2: a client message is a request, validated server-side, never a
+## command the server obeys blindly).
+func _apply_interact(command: Command) -> Array[Event]:
+	var actor_id: int = command.actor_id
+	var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var chosen_id: int = -1
+	var chosen_distance: float = INF
+	var interactable_ids: Array = _interactables.keys()
+	interactable_ids.sort()
+	for interactable_id: int in interactable_ids:
+		var interactable: Dictionary = _interactables[interactable_id]
+		if interactable["state"] != &"available":
+			continue
+		var distance: float = position.distance_to(interactable["position"])
+		if distance <= float(interactable["use_radius"]) and distance < chosen_distance:
+			chosen_distance = distance
+			chosen_id = interactable_id
+	if chosen_id < 0:
+		return [Event.new(tick_count, "interact_rejected", {"actor_id": actor_id, "reason": "nothing_in_range"})]
+	_interactables[chosen_id]["state"] = &"used"
+	var events: Array[Event] = [Event.new(tick_count, "interactable_used", {
+		"actor_id": actor_id, "interactable_id": chosen_id,
+	})]
+	events.append_array(_fire_triggers_watching(&"interacted", chosen_id))
+	return events
+
+
+## BREAKABLE RESOLUTION -- the fork point. Detection is shared with the melee cone and the
+## projectile sweep; everything past this line is deliberately NOT the combatant pipeline. No
+## i-frames, no matrix, no shield, no parry, no pressure, no flinch, no knockback, no status,
+## no death Event: a prop takes direct durability damage and either survives or is gone.
+func _resolve_hit_on_breakable(attacker_id: int, breakable_id: int, damage: float) -> Array[Event]:
+	if not _breakables.has(breakable_id):
+		return []
+	var breakable: Dictionary = _breakables[breakable_id]
+	breakable["durability"] = float(breakable["durability"]) - damage
+	var events: Array[Event] = [Event.new(tick_count, "breakable_hit", {
+		"attacker_id": attacker_id, "breakable_id": breakable_id,
+		"durability": breakable["durability"],
+	})]
+	if float(breakable["durability"]) > 0.0:
+		return events
+	_breakables.erase(breakable_id)
+	events.append(Event.new(tick_count, "breakable_destroyed", {"breakable_id": breakable_id}))
+	events.append_array(_fire_triggers_watching(&"breakable_destroyed", breakable_id))
+	return events
+
+
+## Breakables inside a melee swing's cone. Reuses the SAME reach and cone test the combatant
+## scan applies, against a second small collection -- not a duplicated sweep.
+func _breakables_in_cone(attacker_position: Vector3, resolved_aim: Vector3, weapon: Dictionary) -> Array:
+	var hit_ids: Array = []
+	var breakable_ids: Array = _breakables.keys()
+	breakable_ids.sort()
+	for breakable_id: int in breakable_ids:
+		var breakable: Dictionary = _breakables[breakable_id]
+		var offset: Vector3 = breakable["position"] - attacker_position
+		offset.y = 0.0
+		var distance_sq: float = offset.length_squared()
+		# Minkowski, exactly as the projectile sweep does it: reach plus the prop's own body,
+		# so a wide crate is hittable from where it visually is.
+		var reach: float = float(weapon.reach) + float(breakable["radius"])
+		if distance_sq > reach * reach:
+			continue
+		if distance_sq > _FACING_EPSILON_SQ:
+			var normalized_offset: Vector3 = offset / sqrt(distance_sq)
+			if resolved_aim.dot(normalized_offset) < weapon.cone_threshold:
+				continue
+		hit_ids.append(breakable_id)
+	return hit_ids
+
+
+## Earliest breakable along a projectile's travel segment, as {breakable_id, t}, or empty.
+## Same Minkowski segment test _find_earliest_swept_hit uses on combatants.
+func _find_earliest_breakable_hit(start: Vector3, end: Vector3, hit_radius: float) -> Dictionary:
+	var travel: Vector3 = end - start
+	var travel_length_sq: float = travel.length_squared()
+	var best_id: int = -1
+	var best_t: float = INF
+	var breakable_ids: Array = _breakables.keys()
+	breakable_ids.sort()
+	for breakable_id: int in breakable_ids:
+		var breakable: Dictionary = _breakables[breakable_id]
+		var position: Vector3 = breakable["position"]
+		var t: float = 0.0
+		if travel_length_sq > _FACING_EPSILON_SQ:
+			t = clamp((position - start).dot(travel) / travel_length_sq, 0.0, 1.0)
+		var closest_point: Vector3 = start + travel * t
+		var effective_radius: float = hit_radius + float(breakable["radius"])
+		if closest_point.distance_squared_to(position) <= effective_radius * effective_radius and t < best_t:
+			best_t = t
+			best_id = breakable_id
+	return {} if best_id < 0 else {"breakable_id": best_id, "t": best_t}
 
 
 func _init() -> void:
@@ -1017,10 +1288,10 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# "attack_telegraph" Events directly into this tick's events (a side effect of the
 	# DECISION itself, not of a Command being applied, so it can't be an
 	# _apply_*-returned Event like everything else here).
-	# ENCOUNTERS advance before AI decides, so entering a combat room seals it and wakes its
-	# roster on the SAME tick the threshold is crossed -- not one tick later, which would let
-	# a player step in and back out through a gate that had not closed yet.
-	events.append_array(_advance_encounters())
+	# FLOOR STATE advances before AI decides, so a commitment boundary, an authored activation
+	# or a newly-opened route takes hold on the same tick it is earned -- never one tick later,
+	# which would let a player slip through a gate that had already logically closed.
+	events.append_array(_advance_floor_state())
 	var all_commands: Array[Command] = commands + _decide_ai_commands(events)
 	for command in all_commands:
 		if command.kind == "move":
@@ -1047,6 +1318,8 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 			events.append_array(_apply_block(command))
 		elif command.kind == "switch_weapon":
 			events.append_array(_apply_switch_weapon(command))
+		elif command.kind == "interact":
+			events.append_array(_apply_interact(command))
 	# Contact spread reads this tick's post-attack status state (so a hit-applied
 	# status this same tick is visible as a snapshot candidate, but its one-tick grace
 	# keeps it from actually transmitting until a later tick); status ticking then
@@ -1647,6 +1920,12 @@ func _resolve_melee_swing(actor_id: int, attacker_position: Vector3, resolved_ai
 		# cone direction is well-defined and the normal check already applies correctly.
 		events.append_array(_resolve_hit_on_target(actor_id, target_id, weapon, resolved_aim, weapon_id, attack_profile_id))
 
+	# BREAKABLES share this swing DETECTION and nothing else. The cone/reach test above is
+	# reused against the prop registry; resolution then forks away from the combatant pipeline
+	# entirely (see _resolve_hit_on_breakable and the ROADMAP inheritance audit).
+	for breakable_id: int in _breakables_in_cone(attacker_position, resolved_aim, weapon):
+		events.append_array(_resolve_hit_on_breakable(actor_id, breakable_id, float(weapon.damage)))
+
 	return events
 
 
@@ -2049,9 +2328,22 @@ func _advance_projectiles(dt: float) -> Array[Event]:
 		var start_position: Vector3 = projectile.position
 		var end_position: Vector3 = start_position + projectile.direction * weapon.speed * dt
 
-		var hit_target_id: int = _find_earliest_swept_hit(start_position, end_position, projectile.attacker_id, weapon.hit_radius)
-		if hit_target_id != -1:
-			events.append_array(_resolve_hit_on_target(projectile.attacker_id, hit_target_id, weapon, projectile.direction, projectile.weapon_id, "", projectile_id))
+		# A shot is checked against combatants AND breakables on the same segment, and whichever
+		# is met FIRST stops it. Props are therefore lightweight physical cover for projectile
+		# traversal (ruled). A penetrable prop would have to be authored deliberately later;
+		# penetration is never the default.
+		var actor_hit: Dictionary = _find_earliest_swept_hit(start_position, end_position, projectile.attacker_id, weapon.hit_radius)
+		var breakable_hit: Dictionary = _find_earliest_breakable_hit(start_position, end_position, weapon.hit_radius)
+		var breakable_first: bool = not breakable_hit.is_empty() and (actor_hit.is_empty() or float(breakable_hit["t"]) < float(actor_hit["t"]))
+		if breakable_first:
+			# Stamped with the projectile id so presentation retires the tracer through the same
+			# uniform rule every other terminal event uses.
+			for event in _resolve_hit_on_breakable(projectile.attacker_id, int(breakable_hit["breakable_id"]), float(weapon.damage)):
+				events.append(_stamp_projectile(event, projectile_id))
+			expired_ids.append(projectile_id)
+			continue
+		if not actor_hit.is_empty():
+			events.append_array(_resolve_hit_on_target(projectile.attacker_id, int(actor_hit["target_id"]), weapon, projectile.direction, projectile.weapon_id, "", projectile_id))
 			expired_ids.append(projectile_id)
 			continue
 
@@ -2075,7 +2367,10 @@ func _advance_projectiles(dt: float) -> Array[Event]:
 ## melee's sorted-target-id determinism rule). Returns -1 for no hit. Ally-filtering
 ## (_is_valid_target) means an allied actor is never even a candidate here — a shot
 ## passes straight through one with no expiry, no mutual bullet shields between allies.
-func _find_earliest_swept_hit(start: Vector3, end: Vector3, attacker_id: int, hit_radius: float) -> int:
+## Returns {"target_id": int, "t": float}, or {} for no hit. The parametric t is returned
+## (M2 floor grammar) because a shot may also meet a BREAKABLE on the same segment, and
+## "whichever is struck first" cannot be decided from ids alone.
+func _find_earliest_swept_hit(start: Vector3, end: Vector3, attacker_id: int, hit_radius: float) -> Dictionary:
 	var travel: Vector3 = end - start
 	var travel_length_sq: float = travel.length_squared()
 
@@ -2109,7 +2404,7 @@ func _find_earliest_swept_hit(start: Vector3, end: Vector3, attacker_id: int, hi
 			best_t = t
 			best_target_id = target_id
 
-	return best_target_id
+	return {} if best_target_id == -1 else {"target_id": best_target_id, "t": best_t}
 
 
 ## P16 shield bump — displaces every living HOSTILE already inside contact range plus
@@ -2430,15 +2725,18 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 	if tick_count < int(_flinched_until_tick.get(actor_id, -1)):
 		return []
 
-	# DORMANT ROSTER (ruled): a combat room's enemies do not perceive the player through an
-	# open doorway. Crossing into the room activates the encounter, and THAT wakes them --
-	# which is precisely why this slice needs no line-of-sight or visibility propagation.
+	# DORMANT ROSTER (ruled): a triggered encounter roster does not perceive the player at all
+	# until an AUTHORED effect activates the site -- which is precisely why this slice needs no
+	# line-of-sight or visibility propagation.
+	#
+	# AMBIENT sites register no state entry, so their rosters fall straight through this guard
+	# and engage by ordinary detection. That is ambient in one line, with no special case.
 	#
 	# Gated on ENCOUNTER STATE rather than on _ai_state, deliberately: debug_force_aggro
 	# writes _ai_state directly at setup, and a state-based guard would let a debug hook
 	# silently repeal a design law it only claims to skip detection gating for.
-	if _actor_room.has(actor_id):
-		if String(_encounter_state.get(int(_actor_room[actor_id]), "")) == "dormant":
+	if _actor_encounter.has(actor_id):
+		if String(_encounter_state.get(int(_actor_encounter[actor_id]), "")) == "dormant":
 			return []
 
 	var tuning: Dictionary = _ai_tuning[actor_id]

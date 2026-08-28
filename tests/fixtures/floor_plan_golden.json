@@ -1,175 +1,434 @@
 {
+	"authored_layout": true,
+	"breakables": [
+		{
+			"breakable_id": 0,
+			"conceals_interactable_id": 0,
+			"durability": 1.0,
+			"position": {
+				"x": -12.0,
+				"y": 0.0,
+				"z": -24.0
+			},
+			"radius": 0.9
+		}
+	],
 	"connections": [
 		{
 			"aperture": {
 				"d": 9.0,
 				"w": 5.0,
 				"x": -2.5,
-				"z": -20.5
+				"z": -13.5
 			},
 			"connection_id": 0,
-			"gated": false,
-			"room_ids": [
+			"has_barrier": true,
+			"patch_ids": [
 				0,
 				1
-			]
+			],
+			"starts_open": true
 		},
 		{
 			"aperture": {
-				"d": 9.0,
+				"d": 5.0,
 				"w": 5.0,
 				"x": -2.5,
-				"z": -40.5
+				"z": -37.5
 			},
 			"connection_id": 1,
-			"gated": true,
-			"room_ids": [
-				1,
-				2
-			]
+			"has_barrier": true,
+			"patch_ids": [
+				4,
+				5
+			],
+			"starts_open": false
 		},
 		{
 			"aperture": {
 				"d": 9.0,
 				"w": 5.0,
 				"x": -2.5,
-				"z": -67.5
+				"z": -49.5
 			},
 			"connection_id": 2,
-			"gated": true,
-			"room_ids": [
-				2,
-				3
-			]
+			"has_barrier": true,
+			"patch_ids": [
+				5,
+				6
+			],
+			"starts_open": false
+		},
+		{
+			"aperture": {
+				"d": 5.0,
+				"w": 5.0,
+				"x": -2.5,
+				"z": -71.5
+			},
+			"connection_id": 3,
+			"has_barrier": true,
+			"patch_ids": [
+				6,
+				7
+			],
+			"starts_open": false
+		},
+		{
+			"aperture": {
+				"d": 7.0,
+				"w": 5.0,
+				"x": -2.5,
+				"z": -93.5
+			},
+			"connection_id": 4,
+			"has_barrier": true,
+			"patch_ids": [
+				8,
+				9
+			],
+			"starts_open": false
 		}
 	],
 	"depth": 1,
-	"end_marker": {
-		"x": 0.0,
-		"y": 0.0,
-		"z": -75.0
-	},
-	"entry_point": {
-		"x": 0.0,
-		"y": 0.0,
-		"z": -6.5
-	},
-	"floor_seed": 9187797864493275191,
-	"rooms": [
+	"encounters": [
 		{
-			"kind": "entry",
-			"rect": {
-				"d": 13.0,
-				"w": 18.0,
-				"x": -9.0,
-				"z": -13.0
+			"confines_player": true,
+			"encounter_id": 0,
+			"region": {
+				"d": 32.0,
+				"w": 30.0,
+				"x": -15.0,
+				"z": -68.0
 			},
-			"room_id": 0,
-			"spawns": []
-		},
-		{
-			"kind": "traversal",
-			"rect": {
-				"d": 14.0,
-				"w": 15.0,
-				"x": -7.5,
-				"z": -33.0
-			},
-			"room_id": 1,
-			"spawns": []
-		},
-		{
-			"kind": "combat",
-			"rect": {
-				"d": 21.0,
-				"w": 32.0,
-				"x": -16.0,
-				"z": -60.0
-			},
-			"room_id": 2,
-			"spawns": [
+			"role": "mandatory",
+			"roster": [
 				{
 					"enemy_key": "fang",
 					"position": {
-						"x": 7.1516,
+						"x": -8.0,
 						"y": 0.0,
-						"z": -54.618
-					}
-				},
-				{
-					"enemy_key": "fang",
-					"position": {
-						"x": -0.4776,
-						"y": 0.0,
-						"z": -53.0529
+						"z": -60.0
 					}
 				},
 				{
 					"enemy_key": "ooze",
 					"position": {
-						"x": 4.0216,
+						"x": 9.0,
 						"y": 0.0,
-						"z": -56.7506
+						"z": -58.0
+					}
+				},
+				{
+					"enemy_key": "watcher",
+					"position": {
+						"x": 0.0,
+						"y": 0.0,
+						"z": -63.0
 					}
 				}
-			]
+			],
+			"spawn_at_floor_load": false
 		},
 		{
-			"kind": "traversal",
-			"rect": {
-				"d": 12.0,
-				"w": 16.0,
-				"x": -8.0,
-				"z": -78.0
+			"confines_player": false,
+			"encounter_id": 1,
+			"region": {
+				"d": 16.0,
+				"w": 8.0,
+				"x": 8.0,
+				"z": -30.0
 			},
-			"room_id": 3,
-			"spawns": []
+			"role": "ambient",
+			"roster": [
+				{
+					"enemy_key": "ooze",
+					"position": {
+						"x": 12.0,
+						"y": 0.0,
+						"z": -22.0
+					}
+				}
+			],
+			"spawn_at_floor_load": true
+		}
+	],
+	"end_marker": {
+		"x": 0.0,
+		"y": 0.0,
+		"z": -95.0
+	},
+	"entry_point": {
+		"x": 0.0,
+		"y": 0.0,
+		"z": -3.0
+	},
+	"floor_seed": 9187797864493275191,
+	"interactables": [
+		{
+			"interactable_id": 0,
+			"kind": "switch",
+			"position": {
+				"x": -12.0,
+				"y": 0.0,
+				"z": -24.0
+			},
+			"starts_hidden": true,
+			"use_radius": 2.0
+		},
+		{
+			"interactable_id": 1,
+			"kind": "party_button",
+			"position": {
+				"x": 0.0,
+				"y": 0.0,
+				"z": -39.0
+			},
+			"starts_hidden": false,
+			"use_radius": 2.0
+		},
+		{
+			"interactable_id": 2,
+			"kind": "switch",
+			"position": {
+				"x": 0.0,
+				"y": 0.0,
+				"z": -80.0
+			},
+			"starts_hidden": false,
+			"use_radius": 2.0
+		}
+	],
+	"patches": [
+		{
+			"elevation": 0.0,
+			"patch_id": 0,
+			"rect": {
+				"d": 6.0,
+				"w": 14.0,
+				"x": -7.0,
+				"z": -6.0
+			},
+			"surface": "stone"
+		},
+		{
+			"elevation": 0.0,
+			"patch_id": 1,
+			"rect": {
+				"d": 4.0,
+				"w": 32.0,
+				"x": -16.0,
+				"z": -16.0
+			},
+			"surface": "stone"
+		},
+		{
+			"elevation": 0.0,
+			"patch_id": 2,
+			"rect": {
+				"d": 16.0,
+				"w": 8.0,
+				"x": -16.0,
+				"z": -30.0
+			},
+			"surface": "stone"
+		},
+		{
+			"elevation": 0.0,
+			"patch_id": 3,
+			"rect": {
+				"d": 16.0,
+				"w": 8.0,
+				"x": 8.0,
+				"z": -30.0
+			},
+			"surface": "stone"
+		},
+		{
+			"elevation": 0.0,
+			"patch_id": 4,
+			"rect": {
+				"d": 6.0,
+				"w": 32.0,
+				"x": -16.0,
+				"z": -34.0
+			},
+			"surface": "stone"
+		},
+		{
+			"elevation": 0.0,
+			"patch_id": 5,
+			"rect": {
+				"d": 6.0,
+				"w": 12.0,
+				"x": -6.0,
+				"z": -42.0
+			},
+			"surface": "stone"
+		},
+		{
+			"elevation": 0.0,
+			"patch_id": 6,
+			"rect": {
+				"d": 20.0,
+				"w": 30.0,
+				"x": -15.0,
+				"z": -68.0
+			},
+			"surface": "arena"
+		},
+		{
+			"elevation": 1.0,
+			"patch_id": 7,
+			"rect": {
+				"d": 6.0,
+				"w": 8.0,
+				"x": -4.0,
+				"z": -76.0
+			},
+			"surface": "ramp"
+		},
+		{
+			"elevation": 2.0,
+			"patch_id": 8,
+			"rect": {
+				"d": 14.0,
+				"w": 24.0,
+				"x": -12.0,
+				"z": -88.0
+			},
+			"surface": "high"
+		},
+		{
+			"elevation": 2.0,
+			"patch_id": 9,
+			"rect": {
+				"d": 6.0,
+				"w": 12.0,
+				"x": -6.0,
+				"z": -98.0
+			},
+			"surface": "high"
 		}
 	],
 	"run_seed": 20260828,
 	"stratum_id": "archive",
-	"walkable_rects": [
+	"triggers": [
 		{
-			"d": 13.0,
-			"w": 18.0,
-			"x": -9.0,
-			"z": -13.0
+			"effects": [
+				{
+					"kind": "block_connection",
+					"target_id": 0
+				}
+			],
+			"kind": "region_entered",
+			"once": true,
+			"region": {
+				"d": 4.0,
+				"w": 32.0,
+				"x": -16.0,
+				"z": -16.0
+			},
+			"source_id": -1,
+			"trigger_id": 0
 		},
 		{
-			"d": 14.0,
-			"w": 15.0,
-			"x": -7.5,
-			"z": -33.0
+			"effects": [
+				{
+					"kind": "reveal_interactable",
+					"target_id": 0
+				}
+			],
+			"kind": "breakable_destroyed",
+			"once": true,
+			"region": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"source_id": 0,
+			"trigger_id": 1
 		},
 		{
-			"d": 21.0,
-			"w": 32.0,
-			"x": -16.0,
-			"z": -60.0
+			"effects": [
+				{
+					"kind": "open_connection",
+					"target_id": 1
+				}
+			],
+			"kind": "interacted",
+			"once": true,
+			"region": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"source_id": 0,
+			"trigger_id": 2
 		},
 		{
-			"d": 12.0,
-			"w": 16.0,
-			"x": -8.0,
-			"z": -78.0
+			"effects": [
+				{
+					"kind": "block_connection",
+					"target_id": 1
+				},
+				{
+					"kind": "open_connection",
+					"target_id": 2
+				},
+				{
+					"kind": "activate_encounter",
+					"target_id": 0
+				}
+			],
+			"kind": "interacted",
+			"once": true,
+			"region": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"source_id": 1,
+			"trigger_id": 3
 		},
 		{
-			"d": 9.0,
-			"w": 5.0,
-			"x": -2.5,
-			"z": -20.5
+			"effects": [
+				{
+					"kind": "open_connection",
+					"target_id": 3
+				}
+			],
+			"kind": "encounter_cleared",
+			"once": true,
+			"region": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"source_id": 0,
+			"trigger_id": 4
 		},
 		{
-			"d": 9.0,
-			"w": 5.0,
-			"x": -2.5,
-			"z": -40.5
-		},
-		{
-			"d": 9.0,
-			"w": 5.0,
-			"x": -2.5,
-			"z": -67.5
+			"effects": [
+				{
+					"kind": "open_connection",
+					"target_id": 4
+				}
+			],
+			"kind": "interacted",
+			"once": true,
+			"region": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"source_id": 2,
+			"trigger_id": 5
 		}
 	]
 }

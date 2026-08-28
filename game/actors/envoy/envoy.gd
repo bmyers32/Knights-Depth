@@ -79,6 +79,12 @@ func build_commands(tick: int) -> Array[Command]:
 	# intent so the sim's rising-edge detection (SimWorld._apply_block) never depends
 	# on a missed edge-triggered press.
 	commands.append(Command.new(tick, actor_id, "block", {"held": Input.is_action_pressed("block")}))
+
+	# INTERACT (M2 floor grammar). The Command carries NO target: presentation does not get to
+	# decide what was operated. The sim picks the nearest available interactable in range and
+	# may refuse -- a client asks, the server answers (GAME-RULES §4.2).
+	if Input.is_action_just_pressed("interact"):
+		commands.append(Command.new(tick, actor_id, "interact", {}))
 	if Input.is_action_just_pressed("switch_weapon"):
 		# No weapon_id in params — this only ever advances the sim-owned loadout
 		# array (SimWorld.set_weapon_loadout), it never names a weapon (Prime

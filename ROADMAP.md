@@ -44,6 +44,63 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## M2 FLOOR GRAMMAR — HAND-AUTHORED PROTOTYPE BUILT. **AWAITING HUMAN PASS.**
+
+Suite 552 -> 581. Boots clean. No procedural assembly; no throwable; no minimap/elevator.
+
+### What shipped
+Four independent layers, none parenting another — `FloorPlan` now carries
+`WalkablePatch[]` · `TraversalConnection[]` + `FloorTrigger[]` · `EncounterSite[]` ·
+`InteractablePlan[]` + `BreakablePlan[]`. Rooms are gone as an abstraction; a patch is
+geometry with no semantics, and **encounter region != physical room**.
+
+One authored floor implements the whole grammar:
+START → one-way commitment → hall wrapping a **void** → forward route **visible but
+blocked** → branch (west solves, east is inhabited) → **break the crate** → reveals a
+switch → switch opens the route → **PARTY BUTTON** (rear seals + forward opens + roster
+ARRIVES + fight begins, one record) → clear → ramp opens → raised ground → ordinary switch
+→ endpoint.
+
+### Laws as built
+- **The gate does not know why it opened.** `test_any_controller_opens_a_connection_the_same_way`
+  drives a region trigger, an interactable and an encounter-clear into the SAME effect.
+- **Atomic multi-effect.** The party button is three effects in one trigger record, applied
+  in one tick and never observable half-fired.
+- **Activation is authored.** There is no "entered the region ⇒ fight" rule in the sim at
+  all; `test_no_encounter_activates_merely_because_a_region_was_entered` makes the falsified
+  rule unrepresentable.
+- **Territory is unconditional** — including AMBIENT, which means no ceremony and no lock,
+  never whole-floor roaming. Proved for knockback, not just locomotion.
+- **One-way commitment is not new legality math** — an ordinary connection plus a one-shot
+  region trigger that blocks it. Bounds stay positional, so all eight displacement seams are
+  untouched.
+- **Elevation is presentation only.** The sim stays flat; the driver lifts transforms.
+  `test_the_envoy_is_lifted_onto_high_ground_without_the_sim_knowing` pins both halves.
+
+### The breakable seam (audit verdict honoured)
+Props live in `_breakables`, absent from `_families`/`_health`/`_combat_radius`, so they
+enter none of the six combatant scans BY CONSTRUCTION. They share the melee cone and the
+projectile Minkowski sweep — detection only — and fork at resolution.
+`tests/test_breakable_props.gd` asserts every "must not": no i-frames, no knockback, no
+status/spread, no pressure/flinch, no lunge or bump blocking, no burrow occupancy, and
+**enemies never attack scenery**. Projectiles terminate on props (cover), with a
+destroy-the-cover control proving it measured cover rather than a broken path.
+
+### Deliberate re-baseline
+`floor_plan_golden.json` re-recorded for the new schema — reason and date logged in
+`tools/record_floor_plan_golden.gd`, hand-inspected before commit. No M1 behaviour baseline
+was touched.
+
+### Recorded, not fixed
+- **Seed honesty.** `generate(seed, depth)` keeps its signature but resolves an authored
+  layout: **seeds do not vary geometry**, the plan says `authored_layout = true`, the HUD
+  prints "authored layout", and a test asserts two seeds give identical geometry.
+- **`_walk_to` in tests has no pathfinding** (straight-line steering, like a player holding a
+  direction), so tests route through intermediate points. A direct walk failing because the
+  void is in the way is the void working.
+- **`ArchivePrototypeLayout` is data-as-code.** It migrates to a resource when a SECOND
+  authored floor exists (§1.4), not sooner.
+
 ## M2 FLOOR GRAMMAR — DIRECTION SET 2026-08-28 (pre-code; model under review)
 
 The floor is NOT `rooms + doors + combat rooms`. It is **a continuous, stateful traversal
@@ -129,6 +186,45 @@ Requirements: >=1 branch · >=1 route visible before reachable · >=1 irregular/
 1 explicit triggered encounter · **encounter must NOT start merely because the player entered
 its physical area** · 1 post-clear continuation · >=1 ramp/elevation presentation change ·
 simple endpoint.
+
+### BREAKABLE INHERITANCE AUDIT (run against `d0b5f49` BEFORE any code) — VERDICT: FORK
+
+Question: does `register_combatant` fork cleanly before the reaction layer? **It does not.**
+A prop registered as a combatant enters `_families`, which is iterated by SIX scans:
+
+| site | function | inherited |
+|---|---|---|
+| 1626 | `_resolve_melee_swing` | **WANTED** — melee finds it |
+| 2084 | `_find_earliest_swept_hit` | **WANTED** — projectiles find it |
+| 2130 | `_apply_shield_bump` | WRONG — a prop would be bump-slid |
+| 2766 | `_burrow_point_is_occupied` | WRONG — unauthored burrow blocker |
+| 3092 | `_find_earliest_lunge_contact` | WRONG — lunge clamps against it |
+| 3183 | `_advance_contact_spread` | WRONG — Burn spreads to/through it |
+
+And `_resolve_hit_on_target` would additionally confer: i-frames · block/parry · damage-matrix
+multiplier · pressure recording · flinch routing · knockback (+ bounds clamp) · windup cancel ·
+status proc and application · `_clear_clamps_targeting`. Worse, `_is_valid_target` returns
+`allegiance(target) != allegiance(attacker)`, so a `&"world"` prop would be **a valid target
+for enemies** — they would attack the scenery.
+
+Four of six scans wrong, ten reactions wrong, plus enemy targeting: the convenience path would
+require scattered combatant exceptions, which is exactly what the ruling forbids.
+
+**VERDICT — dedicated damageable-prop seam, sharing DETECTION only.** Props live in their own
+`_breakables` registry and are in `_families`/`_health`/`_combat_radius` **never**, so they
+enter zero of the six scans by construction rather than by exception. The two scans that SHOULD
+see them already have the right shape: each builds a candidate list and then applies geometry,
+so breakable ids join the candidate list and the pipeline **forks at resolution** —
+`_resolve_hit_on_breakable` instead of `_resolve_hit_on_target`. The melee cone test and the
+projectile Minkowski sweep are reused as-is; neither is duplicated.
+
+**v1 semantics, exactly:** weapon hit -> direct durability loss -> destroyed -> optionally
+reveal/enable a contained interactable. Nothing else.
+
+**PROJECTILE RULING (v1):** a projectile that hits a breakable registers the hit, applies
+breakable damage, and TERMINATES on it. Breakables are therefore lightweight physical cover for
+projectile traversal. A penetrable prop would have to be explicitly authored later; penetration
+is never the default. The audit verifies this behaviour explicitly by test.
 
 ### STATE-SCOPE OBLIGATION
 Every new authoritative floor state gets an explicit STATE_SCOPES classification and scanner

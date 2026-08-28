@@ -109,10 +109,9 @@ var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 ## different enemies indistinguishable in one run's event log. Starts at 1 because the Envoy
 ## holds 0 (envoy.gd) and is the only actor that outlives a floor.
 var _next_actor_id: int = 1
-## room_id -> Array[int] of gated connection_ids, so an encounter Event can raise or drop
-## exactly the barriers around the room it names. Presentation mirroring an authoritative
-## fact -- it never decides that a room is sealed.
-var _room_gates: Dictionary = {}
+## No room -> gate map any more: a connection_changed Event names its own connection_id, so
+## presentation never has to infer which barriers an encounter owns. That inference existed
+## only because rooms parented gates -- which is exactly the abstraction that failed.
 var _debug_equipped_index: int = 0
 var _debug_tab_held_prev: bool = false
 var _debug_burrow_held_prev: bool = false
@@ -233,26 +232,17 @@ func _cache_gun_visuals(weapon_ids: Array[StringName]) -> void:
 func _load_floor() -> void:
 	var plan: FloorPlan = DepthGenerator.generate(run_seed, depth)
 	print("floor loaded: ", {
-		"run_seed": run_seed, "depth": depth, "floor_seed": plan.floor_seed,
-		"stratum": plan.stratum_id, "rooms": plan.rooms.size(),
-		"connections": plan.connections.size(), "spawns": plan.all_spawns().size(),
+		"run_seed": run_seed, "depth": depth, "authored_layout": plan.authored_layout,
+		"patches": plan.patches.size(), "connections": plan.connections.size(),
+		"triggers": plan.triggers.size(), "encounters": plan.encounters.size(),
+		"interactables": plan.interactables.size(), "breakables": plan.breakables.size(),
 	})
 
 	sim.load_floor(plan.make_bounds(), plan.entry_point)
-	# Rooms are registered BEFORE any actor, because assign_actor_room validates an actor
-	# against the room it claims to stand in.
-	_room_gates.clear()
-	for room in plan.rooms:
-		sim.register_room(room.room_id, room.kind, room.rect)
-		_room_gates[room.room_id] = []
-	for connection in plan.connections:
-		if not connection.gated:
-			continue
-		for room_id in [connection.room_ids.x, connection.room_ids.y]:
-			if _room_gates.has(room_id):
-				_room_gates[room_id].append(connection.connection_id)
-	# Presentation state keyed by the departing floor's actors dies with them. The sim has
-	# already dropped its side; these are the mirrors.
+	_unpack_floor(plan)
+
+	# Presentation state keyed to the departing floor dies with it. The sim has already dropped
+	# its side; these are the mirrors.
 	_enemies.clear()
 	_windup_cues.clear()
 	for projectile_id: int in _projectile_tracers.keys():
@@ -260,30 +250,24 @@ func _load_floor() -> void:
 	envoy.teleport_from_sim(plan.entry_point)
 	_camera.set_target(envoy)
 	_camera.set_floor_extent(_floor_extent_of(plan))
-	_camera.snap_to_target()  # arrive framed, never sweeping across the floor to catch up
+	_camera.snap_to_target()
 
 	var spawned: Array[Dictionary] = _floor_builder.build(plan, _next_actor_id)
+	_floor_builder.build_walls(plan)
 	_next_actor_id += spawned.size()  # ids are never reused within a run
 	for record in spawned:
 		var actor: Node3D = record["node"]
 		var actor_id: int = record["actor_id"]
-		# Sim registration goes through the shared ContentRegistrar so headless
-		# fixtures exercise the SAME path this driver does (see that class's doc).
 		var actions: Dictionary = ContentRegistrar.register_enemy_body(sim, actor_id, record["enemy_key"], record["position"])
 		if actions.is_empty():
-			# The sim refused this placement (out of bounds) and said so loudly. The
-			# generator's contract says this cannot happen, so reaching here is a real
-			# defect -- drop the orphaned node rather than render an actor the sim has
-			# never heard of.
 			_floor_builder.remove_child(actor)
 			actor.queue_free()
 			continue
 		ContentRegistrar.register_enemy_ai(sim, actor_id, record["enemy_key"], record["position"])
-		# ROOM OWNERSHIP IS PERMANENT and unconditional (ruled): this enemy is confined to the
-		# room that generated it for its whole life, whatever the encounter state. Refused
-		# loudly by the sim if the generator ever emits a spawn outside its own room.
-		sim.assign_actor_room(actor_id, int(record["room_id"]))
-		# Dev validation target -- setup-time only, both loud no-ops at their defaults.
+		# TERRITORY IS PERMANENT and unconditional (ruled): this enemy belongs to the encounter
+		# site that authored it for its whole life, whatever the activation state. Refused loudly
+		# by the sim if a layout ever places a spawn outside its own site.
+		sim.assign_actor_encounter(actor_id, int(record["encounter_id"]))
 		if debug_validation_target_health > 0.0:
 			sim.debug_override_health(actor_id, debug_validation_target_health)
 		if debug_flinch_threshold_override > 0.0:
@@ -292,14 +276,15 @@ func _load_floor() -> void:
 			sim.debug_set_ai_active(actor_id)
 
 		_enemies[actor_id] = actor
+		# Registered but not yet PRESENT: a deferred roster is invisible and untargetable until
+		# its site activates. The sim already marked it combat-absent; this is the mirror.
+		if sim.debug_is_combat_absent(actor_id):
+			actor.set_combat_present(false)
 		for action_id: StringName in actions:
 			var action: NaturalWeaponStats = actions[action_id]
 			_action_telegraphs[String(action_id)] = {
 				"color": action.telegraph_color,
 				"duration_seconds": action.windup_ticks / Engine.physics_ticks_per_second,
-				# P29 item 2: the authored window, as offsets from windup start. Resolved
-				# here at setup from CONTENT -- the telegraph Event names its action_id, so
-				# presentation derives the whole phase timeline without a new Event.
 				"vulnerable_start": action.vulnerable_start_tick,
 				"vulnerable_end": action.vulnerable_end_tick,
 				"windup_ticks": action.windup_ticks,
@@ -313,12 +298,40 @@ func _load_floor() -> void:
 	_update_seed_label(plan)
 
 
+## Unpacks the four floor LAYERS into the sim. The driver does the unpacking so sim/ never
+## imports gen/ -- the same boundary ContentRegistrar draws for Resources.
+##
+## ORDER MATTERS: patches before connections (bounds rebuild from both), encounters before any
+## actor (assign_actor_encounter validates against a registered territory), triggers last
+## because they only ever NAME the things above.
+func _unpack_floor(plan: FloorPlan) -> void:
+	sim.register_patches(plan.patch_rects())
+	for connection in plan.connections:
+		sim.register_connection(connection.connection_id, connection.aperture, connection.starts_open)
+	for encounter in plan.encounters:
+		sim.register_encounter(encounter.encounter_id, encounter.region, encounter.role, encounter.confines_player, encounter.spawn_at_floor_load)
+	for interactable in plan.interactables:
+		sim.register_interactable(interactable.interactable_id, interactable.position, interactable.use_radius, interactable.starts_hidden)
+	for breakable in plan.breakables:
+		sim.register_breakable(breakable.breakable_id, breakable.position, breakable.radius, breakable.durability)
+	for trigger in plan.triggers:
+		sim.register_trigger(trigger.trigger_id, trigger.kind, trigger.region, trigger.source_id, trigger.once, trigger.effects)
+
+
+## Visual ground lift for an actor. Sim positions are FLAT -- combat lives on one plane -- so
+## presentation raises them onto whatever the visible ground is doing. Elevation never travels
+## back the other way.
+func _grounded(position: Vector3) -> Vector3:
+	return Vector3(position.x, _floor_builder.elevation_at(position), position.z)
+
+
 ## Union AABB of everything walkable, for the camera's edge clamp. Derived from the plan, so
 ## the camera can never disagree with the floor about where the floor is.
 func _floor_extent_of(plan: FloorPlan) -> Rect2:
 	var extent: Rect2 = Rect2()
-	for index in plan.walkable_rects.size():
-		extent = plan.walkable_rects[index] if index == 0 else extent.merge(plan.walkable_rects[index])
+	var rects: Array[Rect2] = plan.all_rects()
+	for index in rects.size():
+		extent = rects[index] if index == 0 else extent.merge(rects[index])
 	return extent
 
 
@@ -326,7 +339,10 @@ func _floor_extent_of(plan: FloorPlan) -> Rect2:
 ## unavailable in exactly the shipped build a playtest runs, which is the build whose floor
 ## someone will want to reproduce.
 func _update_seed_label(plan: FloorPlan) -> void:
-	_seed_label.text = "seed %d · depth %d · %s" % [plan.run_seed, plan.depth, plan.stratum_id]
+	# SEED HONESTY: while the layout is authored, SAY SO. A seed printed beside a fixed floor
+	# would advertise procedural variety that does not exist yet.
+	var provenance: String = "authored layout" if plan.authored_layout else "generated"
+	_seed_label.text = "seed %d · depth %d · %s · %s" % [plan.run_seed, plan.depth, plan.stratum_id, provenance]
 
 
 func _physics_process(delta: float) -> void:
@@ -360,10 +376,10 @@ func _physics_process(delta: float) -> void:
 		_process_debug_burrow_trigger()
 		commands = envoy.build_commands(sim.tick_count)
 	var events: Array[Event] = sim.tick(commands, delta)
-	envoy.sync_from_sim(sim.entities[envoy.actor_id])
+	envoy.sync_from_sim(_grounded(sim.entities[envoy.actor_id]))
 	for actor_id: int in _enemies.keys():
 		var actor: Node3D = _enemies[actor_id]
-		actor.sync_from_sim(sim.entities.get(actor_id, actor.position))
+		actor.sync_from_sim(_grounded(sim.entities.get(actor_id, actor.position)))
 	_report_events(events)
 	_advance_windup_cues()
 	if debug_show_attack_state:
@@ -587,14 +603,37 @@ func _report_events(events: Array[Event]) -> void:
 			# ENCOUNTERS. Presentation mirrors the sim's authoritative seal; it never decides one.
 			# The barriers are a PICTURE of room confinement -- deleting them would leave a locked
 			# encounter just as inescapable, only invisible.
+			# FLOOR STATE. Every one of these mirrors an authoritative sim fact; presentation
+			# decides none of them. A gate is a PICTURE of the sim having removed an aperture
+			# from the walkable union -- delete this block and the route stays blocked.
+			"connection_changed":
+				print("connection changed: ", event.payload)
+				_floor_builder.set_gate_closed(int(event.payload["connection_id"]), not bool(event.payload["open"]))
+			"floor_trigger_fired":
+				print("TRIGGER FIRED: ", event.payload)
+			"interactable_used":
+				print("INTERACTED: ", event.payload)
+			"interactable_revealed":
+				print("REVEALED: ", event.payload)
+				_floor_builder.set_interactable_visible(int(event.payload["interactable_id"]), true)
+			"interact_rejected":
+				print("interact rejected: ", event.payload)
+			"breakable_hit":
+				print("breakable hit: ", event.payload)
+			"breakable_destroyed":
+				print("BREAKABLE DESTROYED: ", event.payload)
+				_floor_builder.remove_breakable(int(event.payload["breakable_id"]))
 			"encounter_activated":
 				print("ENCOUNTER ACTIVATED: ", event.payload)
-				for connection_id: int in _room_gates.get(event.payload.get("room_id"), []):
-					_floor_builder.set_gate_closed(connection_id, true)
+				# A deferred roster ARRIVES here. Mirrored through the same two calls burrow
+				# emergence uses -- teleport FIRST, so physics interpolation cannot draw them
+				# flying in from wherever the node happened to be parked.
+				for arrived_id: int in event.payload.get("actor_ids", []):
+					if _enemies.has(arrived_id):
+						_enemies[arrived_id].teleport_from_sim(_grounded(sim.entities[arrived_id]))
+						_enemies[arrived_id].set_combat_present(true)
 			"encounter_cleared":
 				print("ENCOUNTER CLEARED: ", event.payload)
-				for connection_id: int in _room_gates.get(event.payload.get("room_id"), []):
-					_floor_builder.set_gate_closed(connection_id, false)
 			"burrow_committed":
 				print("burrow committed: ", event.payload)
 			"burrow_submerged":

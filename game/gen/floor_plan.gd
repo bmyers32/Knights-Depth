@@ -3,136 +3,190 @@ extends RefCounted
 ## One floor's complete deterministic description (CLAUDE.md Core Interfaces:
 ## DepthGenerator.generate(seed, depth) -> FloorPlan).
 ##
-## THE SINGLE SOURCE for that floor. Sim reads bounds, rooms, rosters and the entry point;
-## presentation reads the same rooms and connections to build geometry and instantiate
-## actors. There is deliberately no second authored roster or collision layout in arena.tscn
-## -- two descriptions of one floor is exactly the "never let two disagree silently" failure
-## AGENTS.md Truth Homes exists to prevent.
+## FOUR INDEPENDENT LAYERS, none parenting another (see FloorLayers). The multi-room slice
+## falsified rooms-plus-doors as the parent abstraction, so geometry, progression, encounters
+## and interactions are now siblings that merely share coordinates.
 ##
 ## TWO VIEWS, ONE TRUTH:
-##   rooms + connections  the authoring/gameplay view (roles, ownership, encounters)
-##   walkable_rects       the flattened legality view the sim clamps against, DERIVED from
-##                        the two above by rebuild_walkable_rects()
+##   patches + connections   the authoring view
+##   open_walkable_rects()   the legality view the sim clamps against, DERIVED -- and derived
+##                           per connection STATE, which is what makes a blocked gate real
 ##
 ## Plain data, RefCounted, no Node/Resource deps: headless-runnable by law (CLAUDE.md
 ## Structure) and serializable, which is what lets a server hand a joining client a floor in
 ## M3 (§4.1: floor layout is server-authoritative).
+##
+## SEED HONESTY. `run_seed` is canonical reproduction metadata and nothing more right now: the
+## prototype floor is HAND-AUTHORED, so different seeds do NOT currently produce different
+## spatial layouts. Procedural assembly is deferred until the grammar itself passes, and no
+## UI or diagnostic may advertise variety that does not exist.
 
-## The run's seed, carried so a plan can always name its own provenance -- a bug report is
-## seed + command log (§1.3), and a FloorPlan that can't say which run produced it breaks
-## that contract.
 var run_seed: int = 0
-## The per-floor seed actually fed to the generator's RNG, derived from (run_seed, depth).
 var floor_seed: int = 0
 var depth: int = 0
 var stratum_id: StringName = &""
+## True while the layout is authored rather than assembled. Read by the driver so the on-screen
+## seed line can say so plainly instead of implying procedural variety.
+var authored_layout: bool = true
 
-var rooms: Array[RoomPlan] = []
-var connections: Array[ConnectionPlan] = []
+# --- SPATIAL -------------------------------------------------------------------------
+var patches: Array[WalkablePatch] = []
+# --- PROGRESSION ---------------------------------------------------------------------
+var connections: Array[TraversalConnection] = []
+var triggers: Array[FloorTrigger] = []
+# --- ENCOUNTER -----------------------------------------------------------------------
+var encounters: Array[EncounterSite] = []
+# --- WORLD INTERACTION ---------------------------------------------------------------
+var interactables: Array[InteractablePlan] = []
+var breakables: Array[BreakablePlan] = []
 
-## DERIVED union of every room rect and every aperture rect. Never authored directly.
-var walkable_rects: Array[Rect2] = []
-## Where the Envoy stands on arrival, inside the ENTRY room.
+## Where the Envoy arrives.
 var entry_point: Vector3 = Vector3.ZERO
-## Deterministic terminal endpoint, inside the last room. Its ONLY job is to make the test
-## grammar visible -- ENTRY -> TRAVERSAL -> COMBAT -> CLEAR -> TRAVERSAL -> FLOOR END. It is
-## not an elevator, carries no transition logic, and triggers no run-end UI.
+## Deterministic terminal endpoint. NOT an elevator, no transition logic, no run-end UI --
+## it exists so the traversal grammar has a visible end.
 var end_marker: Vector3 = Vector3.ZERO
 
 
-## Recomputes the flattened legality view from rooms + connections. Called by the generator
-## once the topology is final; keeping it a function rather than inlining it is what lets a
-## test assert that the derived form actually matches its source.
-func rebuild_walkable_rects() -> void:
+## The legality view, for a given set of open connections. A BLOCKED connection contributes
+## nothing, which removes the passage beyond the threshold while each patch's own rect still
+## covers its half of the aperture -- so blocking never shrinks a space or snaps an actor off
+## a doorway.
+func open_walkable_rects(open_connection_ids: Dictionary) -> Array[Rect2]:
 	var rects: Array[Rect2] = []
-	for room in rooms:
-		rects.append(room.rect)
+	for patch in patches:
+		rects.append(patch.rect)
+	for connection in connections:
+		if open_connection_ids.get(connection.connection_id, false):
+			rects.append(connection.aperture)
+	return rects
+
+
+## Every rect regardless of connection state -- used for the camera's extent and for
+## presentation, which draws corridors whether or not they are currently passable.
+func all_rects() -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	for patch in patches:
+		rects.append(patch.rect)
 	for connection in connections:
 		rects.append(connection.aperture)
-	walkable_rects = rects
+	return rects
 
 
-## The bounds object the sim installs. Built here rather than by the driver so there is one
-## rects -> WalkableBounds conversion in the project.
+## Just the ground, without any aperture. This is what the sim registers as the permanent
+## spatial layer; connections are registered separately because their contribution comes and
+## goes with their state.
+func patch_rects() -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	for patch in patches:
+		rects.append(patch.rect)
+	return rects
+
+
+## The floor as it stands at load, before any trigger has fired. The sim rebuilds this itself
+## the moment patches and connections are registered; this exists so load_floor always receives
+## a real region rather than null.
 func make_bounds() -> WalkableBounds:
-	return WalkableBounds.new(walkable_rects)
+	var open_ids: Dictionary = {}
+	for connection in connections:
+		open_ids[connection.connection_id] = connection.starts_open
+	return WalkableBounds.new(open_walkable_rects(open_ids))
 
 
-func room_by_id(room_id: int) -> RoomPlan:
-	for room in rooms:
-		if room.room_id == room_id:
-			return room
+func patch_by_id(patch_id: int) -> WalkablePatch:
+	for patch in patches:
+		if patch.patch_id == patch_id:
+			return patch
 	return null
 
 
-func rooms_of_kind(kind: StringName) -> Array[RoomPlan]:
-	var matching: Array[RoomPlan] = []
-	for room in rooms:
-		if room.kind == kind:
-			matching.append(room)
+func encounter_by_id(encounter_id: int) -> EncounterSite:
+	for encounter in encounters:
+		if encounter.encounter_id == encounter_id:
+			return encounter
+	return null
+
+
+func encounters_of_role(role: StringName) -> Array[EncounterSite]:
+	var matching: Array[EncounterSite] = []
+	for encounter in encounters:
+		if encounter.role == role:
+			matching.append(encounter)
 	return matching
 
 
-## Every spawn on the floor, flattened, each tagged with the room that OWNS it. Ownership
-## rides with the record because confinement is unconditional -- an actor without a room is
-## an actor with no legal region, so the driver must never lose the association.
+## Every spawn on the floor, flattened, each tagged with the site that OWNS it. Ownership rides
+## with the record because confinement is unconditional -- an actor without a site has no legal
+## region, so the driver must never lose the association.
 func all_spawns() -> Array[Dictionary]:
 	var flattened: Array[Dictionary] = []
-	for room in rooms:
-		for spawn in room.spawns:
+	for encounter in encounters:
+		for spawn in encounter.roster:
 			flattened.append({
 				"enemy_key": spawn["enemy_key"],
 				"position": spawn["position"],
-				"room_id": room.room_id,
+				"encounter_id": encounter.encounter_id,
 			})
 	return flattened
 
 
-## Canonical serialization for the golden-seed fixture (GAME-RULES §5 M2: "same seed ->
-## byte-identical FloorPlan").
-##
-## Floats are snapped to 4 decimals deliberately. The generator's raw determinism is proved
-## separately and exactly by test_depth_generator.gd (generate twice, compare in memory);
-## THIS serialization guards against BEHAVIOURAL DRIFT across sessions, and a fixture that
-## also encoded float print-formatting would fail on an engine patch bump for a reason that
-## has nothing to do with generation changing. 4 decimals is far finer than any drift a real
-## generator change could produce.
+## Canonical serialization for the golden fixture (GAME-RULES §5 M2: same seed -> byte-identical
+## FloorPlan). Floats snap to 4 decimals: raw determinism is proved separately in memory by
+## test_depth_generator.gd, so this only has to catch BEHAVIOURAL drift, and encoding float
+## print-formatting would make the fixture fail on an engine patch bump for a reason unrelated
+## to generation changing.
 func to_dict() -> Dictionary:
-	var room_dicts: Array = []
-	for room in rooms:
-		var spawn_dicts: Array = []
-		for spawn in room.spawns:
-			spawn_dicts.append({
-				"enemy_key": String(spawn["enemy_key"]),
-				"position": _point(spawn["position"]),
-			})
-		room_dicts.append({
-			"room_id": room.room_id,
-			"kind": String(room.kind),
-			"rect": _rect(room.rect),
-			"spawns": spawn_dicts,
+	var patch_dicts: Array = []
+	for patch in patches:
+		patch_dicts.append({
+			"patch_id": patch.patch_id, "rect": _rect(patch.rect),
+			"elevation": _snap(patch.elevation), "surface": String(patch.surface),
 		})
 	var connection_dicts: Array = []
 	for connection in connections:
 		connection_dicts.append({
 			"connection_id": connection.connection_id,
-			"room_ids": [connection.room_ids.x, connection.room_ids.y],
+			"patch_ids": [connection.patch_ids.x, connection.patch_ids.y],
 			"aperture": _rect(connection.aperture),
-			"gated": connection.gated,
+			"starts_open": connection.starts_open, "has_barrier": connection.has_barrier,
 		})
-	var rect_dicts: Array = []
-	for rect in walkable_rects:
-		rect_dicts.append(_rect(rect))
+	var trigger_dicts: Array = []
+	for trigger in triggers:
+		trigger_dicts.append({
+			"trigger_id": trigger.trigger_id, "kind": String(trigger.kind),
+			"region": _rect(trigger.region), "source_id": trigger.source_id,
+			"once": trigger.once, "effects": trigger.effects.map(func(e): return {"kind": String(e["kind"]), "target_id": e["target_id"]}),
+		})
+	var encounter_dicts: Array = []
+	for encounter in encounters:
+		var roster: Array = []
+		for spawn in encounter.roster:
+			roster.append({"enemy_key": String(spawn["enemy_key"]), "position": _point(spawn["position"])})
+		encounter_dicts.append({
+			"encounter_id": encounter.encounter_id, "region": _rect(encounter.region),
+			"role": String(encounter.role), "confines_player": encounter.confines_player,
+			"spawn_at_floor_load": encounter.spawn_at_floor_load, "roster": roster,
+		})
+	var interactable_dicts: Array = []
+	for interactable in interactables:
+		interactable_dicts.append({
+			"interactable_id": interactable.interactable_id, "position": _point(interactable.position),
+			"use_radius": _snap(interactable.use_radius), "kind": String(interactable.kind),
+			"starts_hidden": interactable.starts_hidden,
+		})
+	var breakable_dicts: Array = []
+	for breakable in breakables:
+		breakable_dicts.append({
+			"breakable_id": breakable.breakable_id, "position": _point(breakable.position),
+			"radius": _snap(breakable.radius), "durability": _snap(breakable.durability),
+			"conceals_interactable_id": breakable.conceals_interactable_id,
+		})
 	return {
-		"run_seed": run_seed,
-		"floor_seed": floor_seed,
-		"depth": depth,
-		"stratum_id": String(stratum_id),
-		"rooms": room_dicts,
-		"connections": connection_dicts,
-		"walkable_rects": rect_dicts,
-		"entry_point": _point(entry_point),
-		"end_marker": _point(end_marker),
+		"run_seed": run_seed, "floor_seed": floor_seed, "depth": depth,
+		"stratum_id": String(stratum_id), "authored_layout": authored_layout,
+		"patches": patch_dicts, "connections": connection_dicts, "triggers": trigger_dicts,
+		"encounters": encounter_dicts, "interactables": interactable_dicts,
+		"breakables": breakable_dicts,
+		"entry_point": _point(entry_point), "end_marker": _point(end_marker),
 	}
 
 

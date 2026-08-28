@@ -6,6 +6,11 @@ extends SceneTree
 ##
 ## RE-BASELINE LOG (append a dated line for every regeneration):
 ##   2026-08-28  FIRST RECORDING. Single rectangular chamber (M2 Slice 1).
+##   2026-08-28  RE-BASELINED for the FLOOR-GRAMMAR pivot. The multi-room schema was falsified
+##               by play ("it is still giving 4 boxes"); a floor is now four independent layers
+##               (patches / connections+triggers / encounters / interactables+breakables) and
+##               the old fixture describes a shape nothing can produce. Schema migration, not a
+##               drift-hiding re-record. Hand-inspected before commit.
 ##   2026-08-28  RE-BASELINED for the multi-room slice. The FloorPlan schema itself changed --
 ##               a floor became RoomPlan[] + ConnectionPlan[] with a derived walkable union,
 ##               and spawns moved from the plan onto their owning room. The old fixture
@@ -54,8 +59,17 @@ func _init() -> void:
 	print("recorded floor plan -> %s" % OUTPUT_PATH)
 	print("  seed %d depth %d -> floor_seed %d" % [GOLDEN_SEED, GOLDEN_DEPTH, serialized["floor_seed"]])
 	print("  entry %s -> end %s" % [serialized["entry_point"], serialized["end_marker"]])
-	for room in serialized["rooms"]:
-		print("  room %d %-10s %s  spawns=%d" % [room["room_id"], room["kind"], room["rect"], room["spawns"].size()])
+	print("  authored_layout=%s" % serialized["authored_layout"])
+	for patch in serialized["patches"]:
+		print("  patch %d %-8s elev=%.1f %s" % [patch["patch_id"], patch["surface"], patch["elevation"], patch["rect"]])
 	for connection in serialized["connections"]:
-		print("  connection %d %s gated=%s %s" % [connection["connection_id"], connection["room_ids"], connection["gated"], connection["aperture"]])
+		print("  connection %d %s open=%s %s" % [connection["connection_id"], connection["patch_ids"], connection["starts_open"], connection["aperture"]])
+	for trigger in serialized["triggers"]:
+		print("  trigger %d %-22s source=%d effects=%s" % [trigger["trigger_id"], trigger["kind"], trigger["source_id"], trigger["effects"]])
+	for encounter in serialized["encounters"]:
+		print("  encounter %d %-10s confines=%s spawn_at_load=%s roster=%d" % [encounter["encounter_id"], encounter["role"], encounter["confines_player"], encounter["spawn_at_floor_load"], encounter["roster"].size()])
+	for interactable in serialized["interactables"]:
+		print("  interactable %d %-14s hidden=%s %s" % [interactable["interactable_id"], interactable["kind"], interactable["starts_hidden"], interactable["position"]])
+	for breakable in serialized["breakables"]:
+		print("  breakable %d conceals=%d %s" % [breakable["breakable_id"], breakable["conceals_interactable_id"], breakable["position"]])
 	quit(0)

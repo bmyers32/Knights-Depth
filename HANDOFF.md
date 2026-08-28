@@ -1,82 +1,60 @@
 # HANDOFF
 Milestone: **2 — Procedural depths. IN PROGRESS.** First M2 gate work has landed.
 
-**M2 Slice 1 (`e7bea74`) PASS. M2 MULTI-ROOM SLICE (`5cff467`) — SPLIT VERDICT: MECHANICS
-PASS / FLOOR GRAMMAR FALSIFIED.** Suite **552/552**. No code written since; the next step is
-a DATA MODEL REVIEW, not implementation.
+**M2 multi-room slice CLOSED (`5cff467`): mechanics PASS / grammar FALSIFIED (`d0b5f49`).
+M2 FLOOR-GRAMMAR PROTOTYPE BUILT — AWAITING HUMAN PASS.** Suite **581/581**. Boots clean.
 Public M1 build: https://bmyers32.itch.io/knight-depths
 
 ## Where things stand
-Playtest closed against `5cff46747f68f2693fefa0ad1c92b9c4771dbf54` (provenance verified:
-clean tree, no later commits, reflog unmoved, no file newer than the commit).
+A floor is now **a continuous, stateful traversal space whose available routes change in
+response to player actions** — four independent layers, none parenting another:
+`WalkablePatch[]` · `TraversalConnection[]` + `FloorTrigger[]` · `EncounterSite[]` ·
+`InteractablePlan[]` + `BreakablePlan[]`. **Encounter region != physical room.**
 
-**Breon: "It's still giving 4 boxes."** Bounds/connections readable, placement fair, combat
-solid and unaffected, the explicit button-then-encounter sequence solid — but it works as a
-battle-arena structure, not as an exploration floor, and lacks the spatial/depth feeling of
-the live references.
+One hand-authored floor implements the whole grammar:
+START → one-way commitment → hall wrapping a **void** → route **visible but blocked** →
+branch (west solves, east is inhabited) → **break the crate** → reveals a switch → opens the
+route → **PARTY BUTTON** (rear seals + forward opens + roster arrives + fight begins, one
+atomic record) → clear → ramp → raised ground → switch → endpoint.
 
-**PASS, validated, DO NOT re-test from zero and DO NOT erase:** connected walkability ·
-confinement/lock · trigger -> spawn -> lock · clear -> reopen -> continue · follow-camera
-viability · **and the positive datum: the explicit "hit this button, start the encounter"
-sequence "was solid"** — the seed of the authored-activation direction.
+## Next action — THE HUMAN PASS
+Press play. **WASD** to move, **E** to interact, mouse to attack, **R** to restart.
+Route: walk in → west arm → break the crate → E on the switch → follow the opened route →
+E on the orange button → fight → ramp → E on the last switch → the gold pillar.
 
-**FALSIFIED:** "FloorPlan = sequential rectangular rooms connected by doors" as the PRIMARY
-exploration-floor abstraction. The error is the parent abstraction, not the mechanics.
-Bigger/more/varied rectangles are explicitly rejected as the fix.
-
-## Next action — DATA MODEL REVIEW, then hand-authored prototype
-A floor is **a continuous, stateful traversal space whose available routes change in response
-to player actions.** Four INDEPENDENT concepts (a room parents none of them):
-SPATIAL · PROGRESSION · ENCOUNTER · WORLD INTERACTION. **Encounter region != physical room.**
-
-Full direction, laws, fences and the target prototype floor are in ROADMAP
-"M2 FLOOR GRAMMAR — DIRECTION SET 2026-08-28". **No implementation until the model is
-reviewed.**
-
-### FROZEN HUMAN CRITERION (verbatim — do not paraphrase when judging)
+### FROZEN CRITERION (verbatim — the verdict is rendered against this exact sentence)
 > "The floor passes only if it feels like traversing and interacting with a place — seeing
 > somewhere before you can reach it, finding what opens the way — rather than moving between
 > generated arenas."
 
-### Binding laws for the next slice
-- **The gate does not need to understand why it opened.** Controller / state / effect stay
-  separate (BRAIN candidate, banked).
-- **One interactable may atomically cause many floor-state changes** (party button: seal rear
-  + open forward + spawn roster + begin encounter). Do NOT distribute that sequence across
-  gate, spawn and presentation code.
-- **Encounter activation is AUTHORED.** `entered the area => combat` is rejected.
-- **Depth comes from space, not vertical combat** — silhouettes, voids, ramps (presentation),
-  occlusion, folded topology. Only if it still feels flat afterwards is height machinery
-  justified.
-- **Minimal breakable approved** (reveals a concealed interactable) — no economy, no loot,
-  no destructible framework. **Throwable DEFERRED**: it is a new gameplay capability, not
-  floor plumbing; do not smuggle it in as level design. Principle banked: *if progression
-  requires a capability, the floor must guarantee access to it.*
-- **Hand-authored first + SEED HONESTY.** `generate(seed, depth)` keeps its signature but
-  resolves an authored layout; seeds do NOT vary geometry yet and UI must not imply they do.
+**FLAG:** sealed-encounter difficulty is still unjudged (a 30 HP Envoy dies to the roster in
+~40 s of continuous engagement, and sealing removes retreat). Roster size is the first knob.
+Not retuned blind — combat values are fenced and this is a human call.
 
 ## Open items / live fences
-- **NUMERIC FENCE (M1, unchanged).** `close_frustration_ticks = 90` (PROVISIONAL, fallback 60)
-  · Survey package (`hit_radius` 0.20 / speed 7.0 / windup 34 / vulnerable 23-34) ·
+- **NUMERIC FENCE (M1, unchanged).** `close_frustration_ticks = 90` · Survey package ·
   `engagement_delay_ticks = 10` · wand `flinch_capability = none` · all M1 HP/flinch values.
   `vulnerable_start_tick` is explicitly FROZEN.
-- **M2 PROVISIONAL values** (StratumConfig): spawn counts 3-5 · spawn distance/separation ·
-  corridor/aperture sizes. **Combat-room sizes (24-34 x 20-26) are VALIDATED BY PLAY.**
+- **SEED HONESTY.** `generate(seed, depth)` keeps its signature but resolves an AUTHORED
+  layout: seeds do NOT vary geometry, the plan carries `authored_layout = true`, the HUD says
+  "authored layout", and a test asserts two seeds give identical geometry. When procedural
+  assembly returns, that notice must come off with it.
 - **Aperture overlap MUST stay > 0.** Abutting rects share zero area, turning every threshold
   into a discontinuity and re-opening the gate/snap problem the overlap solves.
-- **Sealed-encounter difficulty is UNJUDGED.** Sealing removes retreat; a 30 HP Envoy dies to
-  a 4-Fang sealed room in ~40 s. Spawn counts are the first knob. Never retuned blind.
-- **PROJECTILE-VS-WORLD COLLISION: deferred by explicit fence** (ROADMAP P20). Body
-  displacement obeys bounds; projectiles do not. Trigger: first non-convex chamber or interior
-  geometry.
-- **P20 body-blocking still open.** Actor-vs-actor overlap is unsolved; the generator works
-  around it with `min_spawn_separation`.
-- **Burrow emergence is bounded by room ownership.** Candidates sit around the PLAYER, so a
-  burrow triggered while the Envoy is elsewhere fail-safe-kills the Fang. Correct, unreachable
-  in real play, and why burrow tests call `_place_envoy_in_room_of`.
-- **Golden fixture was RE-BASELINED 2026-08-28** for the room schema — logged with its reason
-  in `tools/record_floor_plan_golden.gd`. It is not a drift-hiding re-record; never do one.
-- **ROADMAP prune DUE at M2 close** — Index over cap. P16/P28/P29 tombstone candidates.
+- **`ArchivePrototypeLayout` is data-as-code** and migrates to a resource only when a SECOND
+  authored floor exists (§1.4 rule of two).
+- **THROWABLE DEFERRED**, with the mutually-exclusive switch-door puzzle, as one unit. It is a
+  new gameplay capability, not floor plumbing. Design law banked: *if progression requires a
+  capability, the floor must guarantee access to that capability.*
+- **Breakables are NOT combatants** and must never become them — see the inheritance audit in
+  ROADMAP and `tests/test_breakable_props.gd`. Projectiles TERMINATE on props (cover);
+  penetration would have to be authored deliberately.
+- **PROJECTILE-VS-WORLD (walls) still deferred** (ROADMAP P20). Body displacement obeys
+  bounds; projectiles only stop on breakables.
+- **P20 body-blocking still open.** Actor-vs-actor overlap is unsolved.
+- **Still out:** procedural assembly · branching topology · minimap · elevator · drop economy ·
+  treasure/shop/puzzle taxonomy · vertical combat · presentation polish.
+- **ROADMAP prune DUE at M2 close** — Index over cap.
 - Carried from M1: three §3 rules want a human edit · **P14** title · P16 BUMP pass-through
   (P20) · 5.10 chain-flinch feel.
 
@@ -90,8 +68,13 @@ reviewed.**
   the Envoy had already died during the walk-in, and a dead player produces no AI at all. Use
   a FIXED window; confirm the mechanism fired before believing a zero.
 - **`Rect2.has_point` is EXCLUSIVE on the far edge; `WalkableBounds.is_inside` is INCLUSIVE.**
-  A clamped actor rests ON the boundary, so `has_point` reports it as escaped. Use an
-  inclusive check in tests.
+  A clamped actor rests ON the boundary, so `has_point` reports it as escaped.
+- **Integration tests must drive the SHIPPED weapon the shipped way.** A phase-less "attack"
+  Command is not a swing at all for a combo weapon — the crate test silently did nothing until
+  it sent pressed/released.
+- **A splice needs BOTH anchors verified.** Replacing a region of sim_world.gd with an end
+  anchor 2500 lines too far deleted `tick()` and the whole combat pipeline. `git checkout` +
+  redo was faster than repair; check the end anchor's line number before splicing.
 - **Presentation is test-exempt, so it is the blind spot.** `test_presentation_contracts.gd`
   pins method surfaces + drives real verbs through the real arena. Generated rosters are found
   via `_enemy_of_family(arena, family)` on a searched seed, never a hardcoded one.

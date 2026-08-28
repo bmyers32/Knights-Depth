@@ -1,29 +1,25 @@
 class_name FloorBuilder
 extends Node3D
-## Presentation for one generated floor: builds the visible rooms, corridors, gates and
-## terminal marker from a FloorPlan, and instantiates that floor's actor scenes from the same
-## plan's room-local spawn records.
+## Presentation for one generated floor: builds the visible ground, walls, gates, props and
+## endpoint from a FloorPlan, and instantiates that floor's actor scenes from the same plan.
 ##
 ## READS the plan, never authors one. There is deliberately no second roster or collision
-## layout anywhere in arena.tscn — the plan is the single description of a floor, and two
-## descriptions that can silently disagree is the failure AGENTS.md Truth Homes exists to
-## prevent.
+## layout anywhere in arena.tscn — two descriptions of one floor that can silently disagree is
+## the failure AGENTS.md Truth Homes exists to prevent.
 ##
-## The geometry here is VISUAL ONLY. Walkable legality is SimWorld's (game/sim/
-## walkable_bounds.gd, GAME-RULES §4.6): giving these meshes collision bodies would create a
-## second authority over where an actor may stand, which is the exact inversion Prime
-## Directive 1 forbids. Nothing in the project needs them to collide — the Envoy's mouse aim
-## raycasts the "aimable_targets" layer and falls back to a mathematical ground Plane, never
-## to floor geometry.
+## GEOMETRY HERE IS VISUAL ONLY. Walkable legality is SimWorld's (game/sim/walkable_bounds.gd,
+## GAME-RULES §4.6): giving these meshes collision bodies would create a second authority over
+## where an actor may stand, the exact inversion Prime Directive 1 forbids. Nothing needs them
+## to collide — the Envoy's mouse aim raycasts the "aimable_targets" layer and falls back to a
+## mathematical ground Plane, never to floor geometry.
 ##
-## A GATE IS A PICTURE OF A RULE, NOT THE RULE. `set_gate_closed` only shows or hides a
-## barrier mesh; the mechanical seal is per-actor room confinement in the sim
-## (SimWorld._legal_bounds_for). If this node were deleted entirely, a locked encounter would
-## still be inescapable — it would just be invisible.
+## A GATE IS A PICTURE OF A RULE, NOT THE RULE. `set_gate_closed` shows or hides a barrier; the
+## seal itself is the sim removing that aperture from the walkable union. Delete this node and
+## a blocked route stays blocked — it would just be invisible.
+##
+## ELEVATION IS ALSO ONLY A PICTURE. Combat stays on one plane, so the sim never sees height;
+## this raises the mesh and `elevation_at()` lets the driver lift an actor's transform to match.
 
-## enemy_key -> scene, mirroring ContentDB's explicit-registry style rather than guessing a
-## path from the key. Presentation is test-exempt by law, which is why the method surface here
-## is pinned by tests/test_presentation_contracts.gd.
 const ENEMY_SCENES: Dictionary = {
 	&"fang": preload("res://game/actors/enemies/fang/fang.tscn"),
 	&"ooze": preload("res://game/actors/enemies/ooze/ooze.tscn"),
@@ -31,36 +27,45 @@ const ENEMY_SCENES: Dictionary = {
 }
 
 const _FLOOR_THICKNESS: float = 0.2
-const _WALL_HEIGHT: float = 2.0
-const _WALL_THICKNESS: float = 0.5
-const _GATE_HEIGHT: float = 2.4
-## Room kinds get distinct floor tints so "which kind of space am I in" is legible without a
-## minimap. Connective space reads darker; the combat room reads as the place that matters.
-const _KIND_COLORS: Dictionary = {
-	&"entry": Color(0.20, 0.24, 0.30),
-	&"traversal": Color(0.18, 0.19, 0.23),
-	&"combat": Color(0.26, 0.22, 0.24),
-}
-const _CORRIDOR_COLOR: Color = Color(0.16, 0.17, 0.20)
-const _WALL_COLOR: Color = Color(0.38, 0.36, 0.44)
-const _GATE_OPEN_COLOR: Color = Color(0.35, 0.55, 0.45)
-const _GATE_CLOSED_COLOR: Color = Color(0.75, 0.30, 0.28)
-const _MARKER_COLOR: Color = Color(0.85, 0.78, 0.42)
+const _WALL_HEIGHT: float = 2.2
+const _WALL_THICKNESS: float = 0.6
+const _GATE_HEIGHT: float = 2.6
 
-## connection_id -> the barrier mesh, so a gate can be shown/hidden on an Event.
-var _gates: Dictionary = {}
+const _SURFACE_COLORS: Dictionary = {
+	&"stone": Color(0.19, 0.20, 0.24),
+	&"arena": Color(0.26, 0.22, 0.24),
+	&"ramp": Color(0.24, 0.25, 0.21),
+	&"high": Color(0.22, 0.26, 0.30),
+}
+const _CORRIDOR_COLOR: Color = Color(0.15, 0.16, 0.19)
+const _WALL_COLOR: Color = Color(0.36, 0.35, 0.42)
+const _GATE_CLOSED_COLOR: Color = Color(0.78, 0.28, 0.26)
+const _MARKER_COLOR: Color = Color(0.88, 0.80, 0.42)
+const _BREAKABLE_COLOR: Color = Color(0.52, 0.40, 0.24)
+const _SWITCH_COLOR: Color = Color(0.40, 0.72, 0.88)
+const _PARTY_BUTTON_COLOR: Color = Color(0.92, 0.62, 0.24)
+
+var _gates: Dictionary = {}          # connection_id -> barrier mesh
+var _interactables: Dictionary = {}  # interactable_id -> mesh
+var _breakables: Dictionary = {}     # breakable_id -> mesh
+## rect -> elevation, so an actor's transform can be lifted onto raised ground.
+var _elevation_rects: Array = []
 
 
 ## Clears the previous floor and builds this one. Returns one record per spawned actor:
-## {"actor_id": int, "enemy_key": StringName, "room_id": int, "node": Node3D, "position": Vector3}.
-## The DRIVER registers those with the sim through the ordinary ContentRegistrar path — this
-## builder never touches SimWorld.
+## {"actor_id", "enemy_key", "encounter_id", "node", "position"}. The DRIVER registers those
+## with the sim through the ordinary ContentRegistrar path — this builder never touches SimWorld.
 func build(plan: FloorPlan, first_actor_id: int) -> Array[Dictionary]:
 	clear_floor()
-	for room in plan.rooms:
-		_build_room(room, _gap_at(plan, room.room_id, true), _gap_at(plan, room.room_id, false))
+	for patch in plan.patches:
+		_build_patch(patch)
+		_elevation_rects.append({"rect": patch.rect, "elevation": patch.elevation})
 	for connection in plan.connections:
-		_build_connection(connection)
+		_build_connection(connection, plan)
+	for breakable in plan.breakables:
+		_build_breakable(breakable)
+	for interactable in plan.interactables:
+		_build_interactable(interactable)
 	_build_end_marker(plan.end_marker)
 
 	var spawned: Array[Dictionary] = []
@@ -75,120 +80,173 @@ func build(plan: FloorPlan, first_actor_id: int) -> Array[Dictionary]:
 		node.position = spawn["position"]
 		add_child(node)
 		spawned.append({
-			"actor_id": next_actor_id,
-			"enemy_key": enemy_key,
-			"room_id": spawn["room_id"],
-			"node": node,
-			"position": spawn["position"],
+			"actor_id": next_actor_id, "enemy_key": enemy_key,
+			"encounter_id": spawn["encounter_id"], "node": node, "position": spawn["position"],
 		})
 		next_actor_id += 1
 	return spawned
 
 
-## Removed from the tree IMMEDIATELY, not just queue_free()d: a floor transition rebuilds
-## within the same frame, and a queued-but-still-parented actor would be visible alongside the
-## new roster for a frame and would still answer get_children().
+## Removed from the tree IMMEDIATELY, not merely queue_free()d: a floor rebuild happens within
+## one frame, and a queued-but-still-parented actor would be drawn alongside the new roster and
+## would still answer get_children().
 func clear_floor() -> void:
 	_gates.clear()
+	_interactables.clear()
+	_breakables.clear()
+	_elevation_rects.clear()
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
 
 
-## Mirrors the sim's authoritative encounter state. Presentation never decides that a gate is
-## shut — it is told.
+## Visual ground height under a world position, for lifting an actor onto raised patches.
+## Returns the HIGHEST matching patch so a ramp overlapping high ground reads as continuous.
+func elevation_at(position: Vector3) -> float:
+	var best: float = 0.0
+	for entry in _elevation_rects:
+		var rect: Rect2 = entry["rect"]
+		if position.x >= rect.position.x and position.x <= rect.end.x \
+				and position.z >= rect.position.y and position.z <= rect.end.y:
+			best = max(best, float(entry["elevation"]))
+	return best
+
+
+## Mirrors the sim's authoritative connection state. Presentation never decides a route is shut.
 func set_gate_closed(connection_id: int, closed: bool) -> void:
-	if not _gates.has(connection_id):
+	if _gates.has(connection_id):
+		_gates[connection_id].visible = closed
+
+
+func set_interactable_visible(interactable_id: int, shown: bool) -> void:
+	if _interactables.has(interactable_id):
+		_interactables[interactable_id].visible = shown
+
+
+func remove_breakable(breakable_id: int) -> void:
+	if not _breakables.has(breakable_id):
 		return
-	var gate: MeshInstance3D = _gates[connection_id]
-	gate.visible = closed
-	gate.material_override.albedo_color = _GATE_CLOSED_COLOR if closed else _GATE_OPEN_COLOR
+	var mesh: Node3D = _breakables[breakable_id]
+	_breakables.erase(breakable_id)
+	remove_child(mesh)
+	mesh.queue_free()
 
 
-## Aperture width at one end of a room, read from the PLAN rather than assumed. A number that
-## appears in two places is a defect (§1.2): the opening's width is authored once in
-## StratumConfig and reaches here only through the connection that used it. A room with no
-## connection on that side gets 0.0 and is walled solid, which is what makes the chain's two
-## dead ends read as dead ends.
-func _gap_at(plan: FloorPlan, room_id: int, at_min_z: bool) -> float:
-	for connection in plan.connections:
-		# The connection stores (near, far) = (+Z room, -Z room), so a room is opened at its
-		# -Z edge when it is the NEAR side, and at its +Z edge when it is the FAR side.
-		if at_min_z and connection.room_ids.x == room_id:
-			return connection.aperture.size.x
-		if not at_min_z and connection.room_ids.y == room_id:
-			return connection.aperture.size.x
-	return 0.0
+# --- geometry --------------------------------------------------------------------------
 
-
-func _build_room(room: RoomPlan, gap_at_min_z: float, gap_at_max_z: float) -> void:
-	var rect: Rect2 = room.rect
-	var centre := Vector3(rect.position.x + rect.size.x * 0.5, 0.0, rect.position.y + rect.size.y * 0.5)
+## Ground plus a perimeter wall on every edge NOT shared with another patch or an aperture.
+## Computed rather than authored: an irregular silhouette made of overlapping patches has no
+## fixed notion of which side is "outside", and hand-listing walls per patch would drift from
+## the geometry the sim actually clamps against the moment a patch moved.
+func _build_patch(patch: WalkablePatch) -> void:
+	var rect: Rect2 = patch.rect
+	var lift := Vector3(0.0, patch.elevation, 0.0)
+	var centre := Vector3(rect.position.x + rect.size.x * 0.5, 0.0, rect.position.y + rect.size.y * 0.5) + lift
 	_add_box(
 		Vector3(rect.size.x, _FLOOR_THICKNESS, rect.size.y),
 		centre + Vector3(0.0, -_FLOOR_THICKNESS * 0.5, 0.0),
-		_KIND_COLORS.get(room.kind, _CORRIDOR_COLOR),
+		_SURFACE_COLORS.get(patch.surface, _CORRIDOR_COLOR),
 	)
-	# The side walls run the room's full depth. The +Z/-Z walls are deliberately NOT built
-	# here: an aperture punches through them, and a wall with a hole in it is two walls. They
-	# are built by _build_connection, which knows where the hole is.
-	var half_wall: float = _WALL_THICKNESS * 0.5
-	var wall_y: float = _WALL_HEIGHT * 0.5
-	_add_box(Vector3(_WALL_THICKNESS, _WALL_HEIGHT, rect.size.y), Vector3(rect.position.x - half_wall, wall_y, centre.z), _WALL_COLOR)
-	_add_box(Vector3(_WALL_THICKNESS, _WALL_HEIGHT, rect.size.y), Vector3(rect.end.x + half_wall, wall_y, centre.z), _WALL_COLOR)
-	_end_wall(rect, rect.position.y, gap_at_min_z)
-	_end_wall(rect, rect.end.y, gap_at_max_z)
 
 
-## One end wall, split symmetrically around a centred opening. gap = 0.0 walls it solid.
-func _end_wall(rect: Rect2, z: float, gap: float) -> void:
-	var wall_y: float = _WALL_HEIGHT * 0.5
-	var side: float = (rect.size.x - gap) * 0.5
-	if side <= 0.0:
-		return
-	var left_centre: float = rect.position.x + side * 0.5
-	var right_centre: float = rect.end.x - side * 0.5
-	_add_box(Vector3(side, _WALL_HEIGHT, _WALL_THICKNESS), Vector3(left_centre, wall_y, z), _WALL_COLOR)
-	_add_box(Vector3(side, _WALL_HEIGHT, _WALL_THICKNESS), Vector3(right_centre, wall_y, z), _WALL_COLOR)
+## Walls are built LAST, from the union, so they trace the floor's real silhouette. Each patch
+## edge is sampled in short spans; a span with no other walkable ground beyond it gets a wall.
+## Sampling rather than exact rectangle subtraction on purpose: the union is small, the result
+## is identical at this resolution, and the alternative is a clipping library for scenery.
+func build_walls(plan: FloorPlan) -> void:
+	var rects: Array[Rect2] = plan.all_rects()
+	for patch in plan.patches:
+		_walls_for(patch.rect, patch.elevation, rects)
+	for connection in plan.connections:
+		_walls_for(connection.aperture, 0.0, rects)
 
 
-func _build_connection(connection: ConnectionPlan) -> void:
+func _walls_for(rect: Rect2, elevation: float, all_rects: Array[Rect2]) -> void:
+	var step: float = 1.0
+	var y: float = elevation + _WALL_HEIGHT * 0.5
+	var x: float = rect.position.x
+	while x < rect.end.x - 0.001:
+		var span: float = minf(step, rect.end.x - x)
+		var mid_x: float = x + span * 0.5
+		if not _is_walkable(all_rects, Vector2(mid_x, rect.position.y - 0.5)):
+			_add_box(Vector3(span, _WALL_HEIGHT, _WALL_THICKNESS), Vector3(mid_x, y, rect.position.y - _WALL_THICKNESS * 0.5), _WALL_COLOR)
+		if not _is_walkable(all_rects, Vector2(mid_x, rect.end.y + 0.5)):
+			_add_box(Vector3(span, _WALL_HEIGHT, _WALL_THICKNESS), Vector3(mid_x, y, rect.end.y + _WALL_THICKNESS * 0.5), _WALL_COLOR)
+		x += span
+	var z: float = rect.position.y
+	while z < rect.end.y - 0.001:
+		var span: float = minf(step, rect.end.y - z)
+		var mid_z: float = z + span * 0.5
+		if not _is_walkable(all_rects, Vector2(rect.position.x - 0.5, mid_z)):
+			_add_box(Vector3(_WALL_THICKNESS, _WALL_HEIGHT, span), Vector3(rect.position.x - _WALL_THICKNESS * 0.5, y, mid_z), _WALL_COLOR)
+		if not _is_walkable(all_rects, Vector2(rect.end.x + 0.5, mid_z)):
+			_add_box(Vector3(_WALL_THICKNESS, _WALL_HEIGHT, span), Vector3(rect.end.x + _WALL_THICKNESS * 0.5, y, mid_z), _WALL_COLOR)
+		z += span
+
+
+func _is_walkable(rects: Array[Rect2], point: Vector2) -> bool:
+	for rect in rects:
+		if point.x >= rect.position.x and point.x <= rect.end.x \
+				and point.y >= rect.position.y and point.y <= rect.end.y:
+			return true
+	return false
+
+
+func _build_connection(connection: TraversalConnection, plan: FloorPlan) -> void:
 	var rect: Rect2 = connection.aperture
 	var centre := Vector3(rect.position.x + rect.size.x * 0.5, 0.0, rect.position.y + rect.size.y * 0.5)
+	# Corridors take the lower of the two patches they join, so a ramp reads as climbing INTO
+	# high ground rather than as a step the player cannot see.
+	var elevation: float = minf(_patch_elevation(plan, connection.patch_ids.x), _patch_elevation(plan, connection.patch_ids.y))
 	_add_box(
 		Vector3(rect.size.x, _FLOOR_THICKNESS, rect.size.y),
-		centre + Vector3(0.0, -_FLOOR_THICKNESS * 0.5, 0.0),
+		centre + Vector3(0.0, elevation - _FLOOR_THICKNESS * 0.5, 0.0),
 		_CORRIDOR_COLOR,
 	)
-	# Corridor side walls, spanning only the gap between the two rooms.
-	var half_wall: float = _WALL_THICKNESS * 0.5
-	var wall_y: float = _WALL_HEIGHT * 0.5
-	_add_box(Vector3(_WALL_THICKNESS, _WALL_HEIGHT, rect.size.y), Vector3(rect.position.x - half_wall, wall_y, centre.z), _WALL_COLOR)
-	_add_box(Vector3(_WALL_THICKNESS, _WALL_HEIGHT, rect.size.y), Vector3(rect.end.x + half_wall, wall_y, centre.z), _WALL_COLOR)
-
-	if not connection.gated:
+	_elevation_rects.append({"rect": rect, "elevation": elevation})
+	if not connection.has_barrier:
 		return
-	# The barrier sits at the corridor's midpoint, which is OUTSIDE both room rects. That is
-	# the honest place for it: the sealed region is the room, and everything past the
-	# threshold is what becomes unreachable.
 	var gate := _add_box(
 		Vector3(rect.size.x, _GATE_HEIGHT, _WALL_THICKNESS),
-		Vector3(centre.x, _GATE_HEIGHT * 0.5, centre.z),
-		_GATE_OPEN_COLOR,
+		Vector3(centre.x, elevation + _GATE_HEIGHT * 0.5, centre.z),
+		_GATE_CLOSED_COLOR,
 	)
-	gate.visible = false
+	gate.visible = not connection.starts_open
 	_gates[connection.connection_id] = gate
 
 
+func _patch_elevation(plan: FloorPlan, patch_id: int) -> float:
+	var patch: WalkablePatch = plan.patch_by_id(patch_id)
+	return 0.0 if patch == null else patch.elevation
+
+
+func _build_breakable(breakable: BreakablePlan) -> void:
+	var size: float = breakable.radius * 1.6
+	var mesh := _add_box(Vector3(size, size, size), breakable.position + Vector3(0.0, size * 0.5, 0.0), _BREAKABLE_COLOR)
+	_breakables[breakable.breakable_id] = mesh
+
+
+## A hidden interactable is built but not shown -- revealing it is a visibility flip driven by
+## a sim Event, never a spawn, so presentation can never disagree about whether it exists.
+func _build_interactable(interactable: InteractablePlan) -> void:
+	var is_button: bool = interactable.kind == &"party_button"
+	var size := Vector3(1.4, 0.5, 1.4) if is_button else Vector3(0.6, 1.4, 0.6)
+	var colour: Color = _PARTY_BUTTON_COLOR if is_button else _SWITCH_COLOR
+	var mesh := _add_box(size, interactable.position + Vector3(0.0, size.y * 0.5, 0.0), colour)
+	mesh.material_override.emission_enabled = true
+	mesh.material_override.emission = colour
+	mesh.material_override.emission_energy_multiplier = 0.5
+	mesh.visible = not interactable.starts_hidden
+	_interactables[interactable.interactable_id] = mesh
+
+
 ## The terminal marker (ruled): a deterministic visual endpoint whose only job is to make the
-## test grammar visible — ENTRY -> TRAVERSAL -> COMBAT -> CLEAR -> TRAVERSAL -> FLOOR END.
-## Not an elevator, no transition logic, no run-end UI. Reaching it proves that progression
-## continued after the locked encounter.
+## grammar's end visible. Not an elevator, no transition logic, no run-end UI.
 func _build_end_marker(position: Vector3) -> void:
-	var pillar := _add_box(Vector3(1.6, 3.0, 1.6), position + Vector3(0.0, 1.5, 0.0), _MARKER_COLOR)
+	var pillar := _add_box(Vector3(1.6, 3.2, 1.6), position + Vector3(0.0, elevation_at(position) + 1.6, 0.0), _MARKER_COLOR)
 	pillar.material_override.emission_enabled = true
 	pillar.material_override.emission = _MARKER_COLOR
-	pillar.material_override.emission_energy_multiplier = 0.6
+	pillar.material_override.emission_energy_multiplier = 0.7
 
 
 func _add_box(size: Vector3, centre: Vector3, color: Color) -> MeshInstance3D:
