@@ -148,7 +148,11 @@ var _ai_repertoire: Dictionary = {}
 ## so a long melee exchange followed by being pushed out starts the clock at the moment it
 ## left, never at the moment it first arrived.
 var _ai_last_in_close_band: Dictionary = {}   # actor_id -> tick (literal proximity fact)
-var _ai_last_survey_commit: Dictionary = {}   # actor_id -> tick (literal commitment fact)
+var _ai_last_frustration_commit: Dictionary = {}  # actor_id -> tick (literal commitment fact)
+## Renamed from _ai_last_survey_commit (P17 selector, behaviour-preserving): the fact is the
+## consumption of a close-frustration EPISODE, which is family-neutral. Watcher spends it by
+## committing a Survey; Fang spends it by committing a Burrow. The primitive is NOT broadened --
+## it still means exactly "this actor already spent this failed-close episode", nothing more.
 ## The resolved close band itself, derived once at registration (the repertoire entry with
 ## the lowest min_range that does NOT itself require close frustration). Stored so the
 ## per-tick proximity test reuses band_contains() against the AUTHORED band rather than
@@ -531,7 +535,7 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 	for action in resolved:
 		if bool(action.requires_close_frustration) and not _ai_close_band.has(actor_id):
 			push_warning("register_ai [actor %d]: '%s' requires close frustration but the repertoire has no ungated close action -- it could never become selectable" % [actor_id, action.id])
-	_register_burrow(actor_id, burrow_jump_distance, burrow_jump_step_distance, burrow_underground_ticks, burrow_emergence_radius, burrow_emergence_retry_ticks, burrow_reacquisition_ticks, burrow_cooldown_ticks)
+	_register_burrow(actor_id, burrow_jump_distance, burrow_jump_step_distance, burrow_underground_ticks, burrow_emergence_radius, burrow_emergence_retry_ticks, burrow_reacquisition_ticks, burrow_cooldown_ticks, close_frustration_ticks)
 	# Equip the LOWEST-BAND action so _equipped_weapon is never empty for an AI actor.
 	# Chosen from authored band values, not from array position — element 0 is not
 	# privileged. Commitment overwrites this at every windup start, so the initial pick
@@ -2133,6 +2137,17 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 	if tick_count >= _next_fire_tick.get(actor_id, 0) and selected_action_id != "":
 		return _decide_attack_commands(actor_id, selected_action_id, player_id, events)
 
+	# BURROW SELECTOR -- deliberately AFTER the attack check above. If a valid attack is
+	# available, frontal engagement is succeeding and burrow must not replace it; the mechanic
+	# exists for the case where the Fang cannot establish pressure at all.
+	if _should_burrow(actor_id):
+		events.append(Event.new(tick_count, "burrow_committed", {
+			"actor_id": actor_id, "source": "selector",
+			"frustration_elapsed": tick_count - int(_ai_last_in_close_band.get(actor_id, tick_count)),
+		}))
+		_begin_burrow_jump(actor_id, player_id)
+		return []
+
 	if distance_to_player < tuning.minimum_attack_distance:
 		return [Command.new(tick_count, actor_id, "move", {"direction": -to_player.normalized()})]
 
@@ -2144,7 +2159,7 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 
 ## BURROW registration. ABSENCE IS OFF: a record exists only when content authors a usable
 ## burrow, so every other family and every hand-registered test enemy is untouched.
-func _register_burrow(actor_id: int, jump_distance: float, jump_step_distance: float, underground_ticks: int, emergence_radius: float, emergence_retry_ticks: int, reacquisition_ticks: int, cooldown_ticks: int) -> void:
+func _register_burrow(actor_id: int, jump_distance: float, jump_step_distance: float, underground_ticks: int, emergence_radius: float, emergence_retry_ticks: int, reacquisition_ticks: int, cooldown_ticks: int, close_frustration_ticks: int) -> void:
 	_ai_burrow.erase(actor_id)
 	if is_zero_approx(jump_distance) and is_zero_approx(jump_step_distance) and underground_ticks <= 0:
 		return  # not authored at all
@@ -2153,6 +2168,8 @@ func _register_burrow(actor_id: int, jump_distance: float, jump_step_distance: f
 		return
 	if emergence_retry_ticks <= 0:
 		push_warning("register_ai [actor %d]: burrow authored with no emergence retry window -- a single blocked tick would kill the actor by fail-safe" % actor_id)
+	if close_frustration_ticks <= 0:
+		push_warning("register_ai [actor %d]: burrow authored with close_frustration_ticks 0 -- the SELECTOR is therefore off for this actor (a zero patience means no selector, never instant frustration). The action remains reachable by the dev trigger." % actor_id)
 	_ai_burrow[actor_id] = {
 		"jump_distance": jump_distance,
 		"jump_step_distance": jump_step_distance,
@@ -2161,6 +2178,66 @@ func _register_burrow(actor_id: int, jump_distance: float, jump_step_distance: f
 		"emergence_retry_ticks": emergence_retry_ticks,
 		"reacquisition_ticks": reacquisition_ticks,
 		"cooldown_ticks": cooldown_ticks,
+	}
+
+
+## THE BURROW SELECTOR (P17 final leg). Three derived conditions, no stored selection state.
+##
+## SIGNAL RULING: close-range frustration, and specifically NOT a health threshold (which says
+## nothing about whether frontal engagement is working) or a post-flinch trigger (which would
+## select around punishment rather than around inability to establish pressure).
+##
+## Why this signal survives the scurry autopsy: it measures the FANG'S OWN ACHIEVEMENT -- "did I
+## reach close range" -- rather than the player's velocity. Scurry's detector measured RADIAL
+## SEPARATION and was blind to diagonal kiting (radial speed 2.83 against Fang's 3.00 reads as
+## the Fang successfully closing) and to circling (radial speed 0.00). This one is sensitive to
+## every shape that actually denies engagement, and correctly stays quiet while the player
+## circles in contact, because there engagement IS working.
+##
+## SHARED PRIMITIVE, NOT A FRAMEWORK (rule-of-two ruling): Watcher and Fang consume the same
+## authoritative observation -- _close_frustration_satisfied / _refresh_close_proximity -- while
+## their selection POLICIES stay family-specific. The primitive was renamed to be family-neutral
+## and deliberately NOT broadened.
+func _should_burrow(actor_id: int) -> bool:
+	if not _ai_burrow.has(actor_id) or _burrow.has(actor_id):
+		return false
+	# Cooldown is an INDEPENDENT FLOOR, not the pacer. Under consumption-at-commitment the
+	# episode is the primary limiter, so this may prove mostly inert -- which is exactly why
+	# burrow_cooldown_ticks stays PROVISIONAL until ordinary play reports otherwise.
+	if tick_count < int(_next_burrow_tick.get(actor_id, 0)):
+		return false
+	# A ZERO PATIENCE IS NOT "INSTANTLY FRUSTRATED" -- it means this family authors no selector.
+	# _close_frustration_satisfied compares elapsed >= required, so a required of 0 is satisfied
+	# on literally every tick, and a burrow-authoring actor with no authored patience would
+	# commit one at its first opportunity forever. Absence is OFF, the same rule the rest of this
+	# file follows; the inert 0 that Ooze and Watcher carry must stay inert.
+	if int(_ai_tuning.get(actor_id, {}).get("close_frustration_ticks", 0)) <= 0:
+		return false
+	return _close_frustration_satisfied(actor_id)
+
+
+## Read-only selector snapshot (AGENTS.md Invariable #2, and the scurry lesson made concrete:
+## its detector was falsified by an autopsy that should have run before play). Reports every
+## condition's LIVE value against its threshold, so a log answers "why did it not burrow"
+## without re-deriving anything by hand.
+func debug_describe_burrow_selection(actor_id: int, player_id: int) -> Dictionary:
+	if not _ai_burrow.has(actor_id):
+		return {"actor_id": actor_id, "authored": false}
+	var required: int = int(_ai_tuning.get(actor_id, {}).get("close_frustration_ticks", 0))
+	var last_close: int = int(_ai_last_in_close_band.get(actor_id, tick_count))
+	var to_player: Vector3 = entities.get(player_id, Vector3.ZERO) - entities.get(actor_id, Vector3.ZERO)
+	to_player.y = 0.0
+	var spent: bool = _ai_last_frustration_commit.has(actor_id) and int(_ai_last_frustration_commit[actor_id]) > last_close
+	return {
+		"actor_id": actor_id,
+		"authored": true,
+		"distance": to_player.length(),
+		"frustration_elapsed": tick_count - last_close,
+		"frustration_required": required,
+		"episode_spent": spent,
+		"cooldown_remaining": maxi(0, int(_next_burrow_tick.get(actor_id, 0)) - tick_count),
+		"would_select": _should_burrow(actor_id),
+		"phase": String(_burrow[actor_id].phase) if _burrow.has(actor_id) else "idle",
 	}
 
 
@@ -2180,6 +2257,12 @@ func debug_trigger_burrow(actor_id: int, player_id: int) -> bool:
 	return true
 
 
+## The selector's own commitment event is emitted at its gate; this exists so the DEBUG path is
+## equally observable rather than quietly different.
+func debug_burrow_commit_event(actor_id: int) -> Event:
+	return Event.new(tick_count, "burrow_committed", {"actor_id": actor_id, "source": "debug", "frustration_elapsed": -1})
+
+
 ## JUMP: a large backward disengage, away from the player at commitment. Self-propelled, so it
 ## is abortable (see _abort_burrow_jump) -- unlike the P16 bump, which is imposed on its target
 ## and completes through a flinch.
@@ -2187,6 +2270,18 @@ func _begin_burrow_jump(actor_id: int, player_id: int) -> void:
 	var config: Dictionary = _ai_burrow[actor_id]
 	var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
 	var away: Vector3 = _normalize_horizontal(position - entities.get(player_id, Vector3.ZERO), _facings.get(actor_id, Vector3(0.0, 0.0, -1.0)))
+	# CONSUMPTION AT COMMITMENT (ruled), identical to the Watcher's Survey and stamped in the ONE
+	# place both the selector and the debug trigger pass through, so the two entry points can
+	# never disagree about episode state.
+	#
+	# Consumption is DERIVED, never stored as a flag: `commit_tick <= last_close` means this
+	# episode's burrow is unspent. So the Fang must genuinely RE-ENTER its close band before
+	# another becomes available -- and because Fang's band is [0, 1.65] while emergence lands at
+	# 2.0, EMERGENCE ITSELF DOES NOT CLEAR THE EPISODE. It must still close the last 0.35 units.
+	# That is what makes "one burrow per unresolved close-frustration episode" structural rather
+	# than tuned: a player who keeps retreating never lets the band be re-entered, so the episode
+	# stays spent and no burrow spam is possible during that unresolved pursuit.
+	_ai_last_frustration_commit[actor_id] = tick_count
 	_burrow[actor_id] = {
 		"phase": "jump",
 		"direction": away,
@@ -2421,9 +2516,9 @@ func _close_frustration_satisfied(actor_id: int) -> bool:
 		return false
 	# has(), not a sentinel: any numeric "never committed" default can compare GREATER than
 	# a legitimately smaller last_close and read as consumed. Absence is the honest test.
-	if not _ai_last_survey_commit.has(actor_id):
+	if not _ai_last_frustration_commit.has(actor_id):
 		return true
-	return int(_ai_last_survey_commit[actor_id]) <= last_close
+	return int(_ai_last_frustration_commit[actor_id]) <= last_close
 
 
 ## THE band-eligibility predicate — half-open [min, max) unless terminal, then [min, max].
@@ -2519,7 +2614,7 @@ func _decide_attack_commands(actor_id: int, selected_action_id: String, player_i
 			# LITERAL COMMITMENT FACT -- stamped at COMMIT, which is what makes an
 			# interrupted survey still consume the episode with no un-stamp path.
 			if bool(action.requires_close_frustration):
-				_ai_last_survey_commit[actor_id] = tick_count
+				_ai_last_frustration_commit[actor_id] = tick_count
 			break
 	_ai_attack_start_tick[actor_id] = tick_count
 	_ai_attack_fire_tick[actor_id] = tick_count + windup_ticks

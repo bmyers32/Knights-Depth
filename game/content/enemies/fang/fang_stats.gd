@@ -102,10 +102,19 @@ extends Resource
 ## the re-playtest can attribute any felt difference to the Watcher alone.
 @export var engagement_delay_ticks: int = 0
 
-## Close-frustration patience: see WatcherStats.close_frustration_ticks. 0 here because
-## this family authors no action requiring it -- the field is actor-level, so it exists on
-## every family, but it is inert without a consumer action.
-@export var close_frustration_ticks: int = 0
+## Close-frustration patience -- ACTIVE since the P17 burrow selector (2026-08-28). Ticks the
+## family must fail to reach its own close band ([0, 1.65], derived from fang_bite) before the
+## burrow becomes selectable.
+##
+## The SHARED factual primitive with the Watcher, whose Survey uses the same observation; the
+## selection POLICIES stay family-specific (rule-of-two ruling: consolidate the fact, not the
+## framework). 90 matching WatcherStats is a coincidence of scale, not coupling -- the two may
+## diverge freely.
+##
+## 90 ticks / 3.0 s is a FIRST SELECTOR HYPOTHESIS, not a validated value: under diagonal kiting
+## this family nets only 0.17 u/s of closure, so three seconds of failing to reach 1.65 is an
+## unambiguous "I cannot establish pressure" signal. Validated only by ordinary-play evidence.
+@export var close_frustration_ticks: int = 90
 
 
 ## ---------------------------------------------------------------------------------

@@ -534,6 +534,94 @@ func test_no_attack_state_survives_the_trip() -> void:
 		"submerge cancels the committed windup -- it must never fire from underground or resume on emergence")
 
 
+# ===================================================================================
+# E. SELECTOR — ordinary AI chooses the validated action
+# ===================================================================================
+
+const PATIENCE := 20
+
+
+func _register_selecting_fang(position: Vector3, patience: int = PATIENCE) -> void:
+	sim.add_entity(ENEMY_ID, position, 3.0)
+	sim.register_combatant(ENEMY_ID, 5000.0, &"fang", 0, 0.6, &"enemy")
+	sim.register_weapon(WEAPON_ID, 6.0, &"force", 1.65, 90.0, 0.0, 24)
+	sim.register_ai(
+		ENEMY_ID, CombatTestHelpers.single_action_repertoire(WEAPON_ID, 1.65, 12),
+		position, 1.65, 0.0, 60.0, 200.0, 0, patience,
+		JUMP_DISTANCE, JUMP_STEP, UNDERGROUND, RADIUS, RETRY, REACQUISITION, COOLDOWN)
+
+
+func _retreat() -> Command:
+	var away: Vector3 = sim.entities[PLAYER_ID] - sim.entities[ENEMY_ID]
+	away.y = 0.0
+	return Command.new(sim.tick_count, PLAYER_ID, "move", {"direction": away.normalized()})
+
+
+func test_the_selector_commits_a_burrow_once_frustration_matures() -> void:
+	_register_player(Vector3.ZERO)
+	_register_selecting_fang(Vector3(0, 0, -6.0))
+	var committed: Array = []
+	for i in 300:
+		committed.append_array(_of(sim.tick([_retreat()], DT), "burrow_committed"))
+		if committed.size() > 0:
+			break
+	assert_eq(committed.size(), 1, "ordinary AI selects the burrow when it cannot establish pressure")
+	assert_eq(String(committed[0].payload.source), "selector", "and the event records WHY it happened")
+	assert_gte(int(committed[0].payload.frustration_elapsed), PATIENCE, "with the matured episode as its reason")
+
+
+## A ZERO PATIENCE MEANS NO SELECTOR, never instant frustration. Without this an authored burrow
+## with no authored patience would commit on its first eligible tick forever.
+func test_zero_patience_disables_the_selector_entirely() -> void:
+	_register_player(Vector3.ZERO)
+	_register_selecting_fang(Vector3(0, 0, -6.0), 0)
+	var committed: Array = []
+	for i in 300:
+		committed.append_array(_of(sim.tick([_retreat()], DT), "burrow_committed"))
+	assert_eq(committed.size(), 0, "no authored patience means the selector is OFF")
+
+
+## Gate ordering: if a valid attack is available, frontal engagement is succeeding and burrow
+## must not replace it.
+func test_an_available_attack_always_beats_the_burrow() -> void:
+	_register_player(Vector3.ZERO)
+	_register_selecting_fang(Vector3(0, 0, -1.2))  # already inside the close band
+	var events: Array[Event] = _tick(200)
+	assert_eq(_of(events, "burrow_committed").size(), 0, "a Fang that can bite never burrows instead")
+	assert_gt(_of(events, "attack_telegraph").size(), 0, "sanity: it was in fact attacking")
+
+
+## CONSUMPTION AT COMMITMENT. Emergence lands at 2.0 while the close band is [0, 1.65], so the
+## Fang must still close the last 0.35 units before another burrow is possible -- which is what
+## makes "one burrow per unresolved close-frustration episode" structural.
+func test_one_burrow_per_unresolved_episode() -> void:
+	_register_player(Vector3.ZERO)
+	_register_selecting_fang(Vector3(0, 0, -6.0))
+	var committed: Array = []
+	for i in 900:
+		committed.append_array(_of(sim.tick([_retreat()], DT), "burrow_committed"))
+	assert_eq(committed.size(), 1,
+		"a player who never lets the close band be re-entered gets exactly ONE burrow, not a stream")
+
+
+func test_re_entering_the_close_band_permits_a_later_burrow() -> void:
+	_register_player(Vector3.ZERO)
+	_register_selecting_fang(Vector3(0, 0, -6.0))
+	for i in 300:
+		sim.tick([_retreat()], DT)
+		if sim._burrow.has(ENEMY_ID) or sim._ai_last_frustration_commit.has(ENEMY_ID):
+			break
+	assert_true(sim._ai_last_frustration_commit.has(ENEMY_ID), "sanity: the first episode was spent")
+	# Genuine close-band re-entry clears the episode.
+	sim.entities[PLAYER_ID] = sim.entities[ENEMY_ID]
+	sim._burrow.erase(ENEMY_ID)
+	sim._combat_absent.erase(ENEMY_ID)
+	sim._next_burrow_tick[ENEMY_ID] = 0
+	sim.tick([], DT)
+	assert_false(bool(sim.debug_describe_burrow_selection(ENEMY_ID, PLAYER_ID).episode_spent),
+		"re-entering the close band clears the spent episode, so frustration may build again")
+
+
 func test_identical_runs_produce_identical_burrows() -> void:
 	var runs: Array = []
 	for run in 2:

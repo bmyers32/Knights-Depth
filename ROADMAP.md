@@ -26,7 +26,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P14 | Title decision | PROPOSED | Replace working title from lexicon families; zero urgency |
 | P15 | Dodge (own input + i-frame trigger) | PROPOSED | Second §3 i-frame source; must reuse the hit-i-frame timer, never a new mechanism |
 | P16 | Shield bump + perfect parry | **TREAT (M1 close)** | SPLIT into two separable mechanics: bump = spacing utility (no timing); parry = mastery layer |
-| P17 | Per-family engagement identities | **BURROW ACTION VALIDATED / SELECTOR PROPOSED** | Weave, scurry, cutoff falsified. BURROW passed Stage 1 AND Stage 2 — action validated, six values frozen. P17 REMAINS OPEN: production Fang still needs a selector. Proposal filed, awaiting review, no code |
+| P17 | Per-family engagement identities | **BURROW SELECTOR IMPLEMENTED / ORDINARY-PLAY PENDING** | Weave, scurry, cutoff falsified; BURROW passed Stage 1 and Stage 2. Selector on close-range frustration, shared fact consolidated without broadening, detector proof 14/14 pre-play. Awaiting the ordinary-AI verdict |
 | P18 | Idle wander + return-to-post + room territory | PROPOSED | Post-disengage idle behavior layer; needs its own RNG stream; M2 |
 | P19 | Per-family mass/knockback factor | PROPOSED | Weight scales pipeline knockback only; binds to family, never to state (§6.8) |
 | P20 | Sim movement collision/bounds | PROPOSED | No wall/body-blocking exists anywhere; lunge (manual-pass) inherits and exposes it |
@@ -1003,6 +1003,78 @@ frontal approach is not working** — the player should be able to feel why it h
 never appears in ordinary play · or makes the Fang feel evasive rather than predatory.
 `burrow_cooldown_ticks` is the tuning lever for frequency, and is the ONLY burrow value still
 open.
+
+### SELECTOR — IMPLEMENTED (2026-08-28). P17's final leg.
+
+**Signal:** close-range frustration. Health-threshold and post-flinch forks rejected for v1 —
+the first does not measure failed engagement, the second selects around punishment rather than
+around inability to establish pressure.
+
+**Gate:** `_decide_single_ai_command`, in the pursue branch, AFTER the ordinary attack check. If
+a valid attack exists, frontal engagement is succeeding and burrow must not replace it.
+
+**Rule-of-two ruling applied:** the exact shared FACT was consolidated — close-range frustration
+/ failure to achieve close engagement — and nothing more. `_ai_last_survey_commit` →
+`_ai_last_frustration_commit` as a behaviour-preserving rename; `_close_frustration_satisfied`
+and `_refresh_close_proximity` remain the shared primitive; `requires_close_frustration` stays
+action-authored on `NaturalWeaponStats`; burrow is not a repertoire action, so Fang's selector
+consults the predicate directly. **The primitive was NOT broadened.** Watcher's suite is the
+pin: the only test touched was a single identifier reference, with its assertion, setup and
+expected outcome untouched.
+
+**Episode semantics, as ruled:** nothing increments — frustration is `tick_count −
+_ai_last_in_close_band`, a timestamp going stale · reset by re-entering the close band or by
+aggro acquisition (`_acquire_aggro` writes it, which is why disengage→re-acquire starts clean) ·
+success is POSITIONAL presence inside the band, nothing else · ordinary attacks do not affect it
+and the refresh precedes the mid-windup return so a biting Fang keeps refreshing · **burrow
+consumes the episode at commitment, identically to Survey** · cooldown is an independent floor.
+
+**One burrow per unresolved close-frustration episode** — not "once per pursuit". Fang's band is
+[0, 1.65] and emergence lands at 2.0, so **emergence does not itself clear the episode**; the
+Fang must still close the last 0.35 units. Player stays → Fang closes → episode resets →
+frustration may accumulate normally. Player keeps retreating → band never re-entered → episode
+stays spent → no burrow spam during that unresolved pursuit. Anti-repetition is structural, not
+tuned.
+
+**DEFECT FOUND AND FIXED during implementation:** `close_frustration_ticks = 0` was satisfied on
+every tick, so any burrow-authoring actor with no authored patience would have committed one at
+its first opportunity forever. **A zero patience now means NO SELECTOR**, never instant
+frustration — absence is off, the rule the rest of the file follows. Warned at registration.
+
+**Values:** `close_frustration_ticks = 90` (3.0 s) is a FIRST SELECTOR HYPOTHESIS, not
+validated. Matching the Watcher is a coincidence of scale, not coupling.
+`burrow_cooldown_ticks = 240` remains PROVISIONAL and may prove mostly inert, since the episode
+is the primary limiter. **Neither is tuned before ordinary-play evidence.**
+
+**PRE-REGISTERED DETECTOR PROOF — 14/14 on shipped content** (`tools/prove_burrow_selector.gd`),
+run before human play as the scurry autopsy should have been:
+fires under diagonal kiting (tick 90) · fires under sustained standoff (tick 90) · fires under
+straight-line retreat at ordinary move speed (tick 90) · does NOT fire during ordinary
+successful close engagement · resets on disengage→re-acquire (80 → 2 elapsed) · consumption
+blocks repeat until genuine close-band re-entry, with the snapshot reporting WHY · cooldown
+suppresses an otherwise-valid rebuilt episode.
+
+**GEOMETRY NAMED HONESTLY.** The wall-hug case was replaced: the arena has no walls, so the
+low-closure-rate case is straight-line retreat, where the gap is governed purely by the speed
+differential (Envoy 4.0 vs Fang 3.0 = −1.00 u/s). And "sustained standoff" as first written was
+not a standoff at all — a stationary player at range is SUCCESSFUL engagement, since the Fang
+simply walks up. A genuine standoff is a HELD GAP, realised by speed-matching the player so the
+separation never closes.
+
+**Observability:** `burrow_committed` carries source (selector vs debug) and the frustration
+elapsed at commitment, so an ordinary session log says WHY. `debug_describe_burrow_selection`
+reports every condition's live value against its threshold.
+
+### PRE-REGISTERED ORDINARY-PLAY CRITERION (frozen verbatim)
+
+> **"Does Fang choose the validated burrow at moments that make its predator identity stronger
+> without becoming repetitive, arbitrary, or an escape from engagements that were already
+> working?"**
+
+**Verdict is Breon's alone**, rendered against that exact sentence, on the committed ordinary-AI
+candidate. **Burrow frequency is instrumented and reported as a FINDING, not judged against a
+preselected target.** No further burrow ACTION tuning unless selector play produces contrary
+evidence.
 
 ### FENCES
 The validated action stays frozen · no selector implementation before proposal approval · no

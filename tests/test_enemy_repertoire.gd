@@ -660,7 +660,12 @@ func test_band_edge_flicker_never_matures_frustration_or_corrupts_the_episode() 
 		_place_player(s, 1.95 if i % 2 == 0 else 2.05)
 		surveys += _count_surveys(_tick(s, 1))
 	assert_eq(surveys, 0, "flickering at the edge counts as being close -- frustration must never mature")
-	assert_false(s._ai_last_survey_commit.has(ENEMY_ID),
+	# Field renamed to _ai_last_frustration_commit (P17 selector) as a behaviour-preserving
+	# refactor: the fact is the consumption of a close-frustration EPISODE, which Watcher spends
+	# by committing a Survey and Fang spends by committing a Burrow. IDENTIFIER ONLY -- this
+	# assertion, its setup and its expected outcome are untouched, which is what makes the
+	# Watcher suite the pin proving P29 semantics did not move.
+	assert_false(s._ai_last_frustration_commit.has(ENEMY_ID),
 		"and with no Survey ever committed, no episode may have been marked spent")
 
 

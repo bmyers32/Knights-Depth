@@ -91,6 +91,10 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ##
 ## A Stage-1 session therefore runs with this TRUE and is explicitly NOT the formal gate state.
 @export var debug_burrow_trigger: bool = false
+## P17 selector snapshot: each condition's live value against its threshold -- frustration
+## elapsed vs required, whether the episode is already spent, cooldown remaining, and whether
+## the selector would fire this tick. Pure observability, default off.
+@export var debug_show_burrow_selection: bool = false
 
 var sim := SimWorld.new()
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
@@ -282,6 +286,12 @@ func _physics_process(delta: float) -> void:
 			var flinch_state: Dictionary = sim.debug_describe_flinch_state(actor_id)
 			if not flinch_state.is_empty():
 				print("flinch state [", actor_id, "]: ", flinch_state)
+	if debug_show_burrow_selection:
+		for actor_id: int in _enemies.keys():
+			var selection: Dictionary = sim.debug_describe_burrow_selection(actor_id, envoy.actor_id)
+			if bool(selection.get("authored", false)):
+				print("burrow selection: ", selection)
+
 	if debug_show_action_selection:
 		for actor_id: int in _enemies.keys():
 			var selection: Dictionary = sim.debug_describe_action_selection(actor_id, envoy.actor_id)
@@ -481,6 +491,12 @@ func _report_events(events: Array[Event]) -> void:
 			# P17 burrow. Presentation mirrors the sim's authoritative participation fact; it never
 			# decides it. Both kinds are printed rather than passed -- disappearing and reappearing
 			# are exactly the beats a playtest needs to correlate against what it saw.
+			# WHY a burrow happened, not just that it did: source (selector vs debug) and the
+			# frustration elapsed at commitment. The scurry's detector was falsified by an autopsy
+			# that should have run before play -- this makes the selector's reasoning readable
+			# from an ordinary session log.
+			"burrow_committed":
+				print("burrow committed: ", event.payload)
 			"burrow_submerged":
 				print("burrow submerged: ", event.payload)
 				var submerged_id: int = event.payload.get("actor_id")
