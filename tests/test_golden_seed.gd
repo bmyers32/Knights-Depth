@@ -91,6 +91,7 @@ func test_the_committed_fixture_describes_a_sane_floor() -> void:
 	assert_true(by_kind.has("breakable_destroyed"), "a concealment reveal")
 	assert_true(by_kind.has("interacted"), "player-operated switches")
 	assert_true(by_kind.has("encounter_cleared"), "and progression past the fight")
+	assert_true(by_kind.has("party_plate"), "the commitment beat is a plate you stand on, not an E press")
 
 	# THE PARTY BUTTON: its whole consequence in ONE record.
 	var multi: int = 0
@@ -99,7 +100,11 @@ func test_the_committed_fixture_describes_a_sane_floor() -> void:
 			multi += 1
 	assert_gt(multi, 0, "one interactable must own a multi-effect sequence atomically")
 
-	# NO fight may start merely by entering a region -- the rule play falsified.
+	# NO fight may start merely by entering a region -- the rule play falsified. A PARTY PLATE is
+	# deliberately exempt and deliberately a DIFFERENT KIND: the falsified rule was geometry
+	# implying combat ("you walked into the room, so fight"), while a plate is an authored object
+	# you must deliberately stand on, with the whole party. Occupancy is the input either way;
+	# what changed is that one is implied by a room and the other is authored as a thing.
 	for trigger in triggers:
 		if String(trigger["kind"]) != "region_entered":
 			continue
@@ -114,8 +119,10 @@ func test_the_committed_fixture_describes_a_sane_floor() -> void:
 		for spawn in encounter["roster"]:
 			var position := Vector2(float(spawn["position"]["x"]), float(spawn["position"]["z"]))
 			assert_true(_walkable(fixture, position), "spawn at %s is off the floor" % position)
-			assert_true(_rect(encounter["region"]).has_point(position),
-				"spawn at %s is outside the site that owns it" % position)
+			var owned: bool = false
+			for region in encounter["regions"]:
+				owned = owned or _rect(region).has_point(position)
+			assert_true(owned, "spawn at %s is outside the site that owns it" % position)
 	assert_true(roles.has("mandatory"), "one authored lock-in fight")
 	assert_true(roles.has("ambient"), "and one inhabited territory")
 

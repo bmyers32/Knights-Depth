@@ -152,7 +152,9 @@ func _ready() -> void:
 	sim.seed_combat_rng(run_seed)
 	print("run seed: ", run_seed)
 
-	sim.add_entity(envoy.actor_id, envoy.position, envoy.stats.move_speed)
+	# The body radius rides along because placement legality is body-aware (ruled): it is the
+	# same stats.combat_radius registered as the combatant body on the next line.
+	sim.add_entity(envoy.actor_id, envoy.position, envoy.stats.move_speed, Vector3(0.0, 0.0, -1.0), envoy.stats.combat_radius)
 	sim.register_combatant(envoy.actor_id, envoy.stats.max_health, envoy.stats.family, 0, envoy.stats.combat_radius, &"player")
 	# The ONE actor that survives a floor transition. Everything else on a floor belongs to
 	# that floor (SimWorld.STATE_SCOPES).
@@ -309,7 +311,7 @@ func _unpack_floor(plan: FloorPlan) -> void:
 	for connection in plan.connections:
 		sim.register_connection(connection.connection_id, connection.aperture, connection.starts_open)
 	for encounter in plan.encounters:
-		sim.register_encounter(encounter.encounter_id, encounter.region, encounter.role, encounter.confines_player, encounter.spawn_at_floor_load)
+		sim.register_encounter(encounter.encounter_id, encounter.regions, encounter.role, encounter.confines_player, encounter.spawn_at_floor_load)
 	for interactable in plan.interactables:
 		sim.register_interactable(interactable.interactable_id, interactable.position, interactable.use_radius, interactable.starts_hidden)
 	for breakable in plan.breakables:

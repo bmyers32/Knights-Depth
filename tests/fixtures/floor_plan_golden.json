@@ -95,12 +95,14 @@
 		{
 			"confines_player": true,
 			"encounter_id": 0,
-			"region": {
-				"d": 32.0,
-				"w": 30.0,
-				"x": -15.0,
-				"z": -68.0
-			},
+			"regions": [
+				{
+					"d": 32.0,
+					"w": 30.0,
+					"x": -15.0,
+					"z": -68.0
+				}
+			],
 			"role": "mandatory",
 			"roster": [
 				{
@@ -133,12 +135,26 @@
 		{
 			"confines_player": false,
 			"encounter_id": 1,
-			"region": {
-				"d": 16.0,
-				"w": 8.0,
-				"x": 8.0,
-				"z": -30.0
-			},
+			"regions": [
+				{
+					"d": 16.0,
+					"w": 8.0,
+					"x": 8.0,
+					"z": -30.0
+				},
+				{
+					"d": 4.0,
+					"w": 32.0,
+					"x": -16.0,
+					"z": -16.0
+				},
+				{
+					"d": 6.0,
+					"w": 32.0,
+					"x": -16.0,
+					"z": -34.0
+				}
+			],
 			"role": "ambient",
 			"roster": [
 				{
@@ -175,32 +191,11 @@
 			},
 			"starts_hidden": true,
 			"use_radius": 2.0
-		},
-		{
-			"interactable_id": 1,
-			"kind": "party_button",
-			"position": {
-				"x": 0.0,
-				"y": 0.0,
-				"z": -39.0
-			},
-			"starts_hidden": false,
-			"use_radius": 2.0
-		},
-		{
-			"interactable_id": 2,
-			"kind": "switch",
-			"position": {
-				"x": 0.0,
-				"y": 0.0,
-				"z": -80.0
-			},
-			"starts_hidden": false,
-			"use_radius": 2.0
 		}
 	],
 	"patches": [
 		{
+			"boundary_style": "wall",
 			"elevation": 0.0,
 			"patch_id": 0,
 			"rect": {
@@ -212,6 +207,7 @@
 			"surface": "stone"
 		},
 		{
+			"boundary_style": "wall",
 			"elevation": 0.0,
 			"patch_id": 1,
 			"rect": {
@@ -223,6 +219,7 @@
 			"surface": "stone"
 		},
 		{
+			"boundary_style": "wall",
 			"elevation": 0.0,
 			"patch_id": 2,
 			"rect": {
@@ -234,6 +231,7 @@
 			"surface": "stone"
 		},
 		{
+			"boundary_style": "wall",
 			"elevation": 0.0,
 			"patch_id": 3,
 			"rect": {
@@ -245,6 +243,7 @@
 			"surface": "stone"
 		},
 		{
+			"boundary_style": "wall",
 			"elevation": 0.0,
 			"patch_id": 4,
 			"rect": {
@@ -256,6 +255,7 @@
 			"surface": "stone"
 		},
 		{
+			"boundary_style": "wall",
 			"elevation": 0.0,
 			"patch_id": 5,
 			"rect": {
@@ -267,6 +267,7 @@
 			"surface": "stone"
 		},
 		{
+			"boundary_style": "wall",
 			"elevation": 0.0,
 			"patch_id": 6,
 			"rect": {
@@ -278,6 +279,7 @@
 			"surface": "arena"
 		},
 		{
+			"boundary_style": "wall",
 			"elevation": 1.0,
 			"patch_id": 7,
 			"rect": {
@@ -289,6 +291,7 @@
 			"surface": "ramp"
 		},
 		{
+			"boundary_style": "ledge",
 			"elevation": 2.0,
 			"patch_id": 8,
 			"rect": {
@@ -300,6 +303,7 @@
 			"surface": "high"
 		},
 		{
+			"boundary_style": "ledge",
 			"elevation": 2.0,
 			"patch_id": 9,
 			"rect": {
@@ -383,15 +387,15 @@
 					"target_id": 0
 				}
 			],
-			"kind": "interacted",
+			"kind": "party_plate",
 			"once": true,
 			"region": {
-				"d": 0.0,
-				"w": 0.0,
-				"x": 0.0,
-				"z": 0.0
+				"d": 4.0,
+				"w": 4.0,
+				"x": -2.0,
+				"z": -41.0
 			},
-			"source_id": 1,
+			"source_id": -1,
 			"trigger_id": 3
 		},
 		{
@@ -399,6 +403,10 @@
 				{
 					"kind": "open_connection",
 					"target_id": 3
+				},
+				{
+					"kind": "open_connection",
+					"target_id": 4
 				}
 			],
 			"kind": "encounter_cleared",
@@ -411,24 +419,6 @@
 			},
 			"source_id": 0,
 			"trigger_id": 4
-		},
-		{
-			"effects": [
-				{
-					"kind": "open_connection",
-					"target_id": 4
-				}
-			],
-			"kind": "interacted",
-			"once": true,
-			"region": {
-				"d": 0.0,
-				"w": 0.0,
-				"x": 0.0,
-				"z": 0.0
-			},
-			"source_id": 2,
-			"trigger_id": 5
 		}
 	]
 }

@@ -118,7 +118,15 @@ func _instantiate_arena_containing(family: StringName) -> Node3D:
 ## correctly kills the Fang underground -- a real interaction, not a defect, but not the
 ## scenario these lifecycle tests are about.
 func _place_envoy_in_room_of(arena: Node3D, actor_id: int) -> void:
-	var rect: Rect2 = arena.sim._encounters[int(arena.sim._actor_encounter[actor_id])]["region"]
+	# Territory is a UNION of regions now, so pick the one the actor actually stands in rather
+	# than assuming a site owns exactly one rect.
+	var actor_position: Vector3 = arena.sim.entities[actor_id]
+	var regions: Array = arena.sim._encounters[int(arena.sim._actor_encounter[actor_id])]["regions"]
+	var rect: Rect2 = regions[0]
+	for candidate: Rect2 in regions:
+		if WalkableBounds.contains(candidate, actor_position.x, actor_position.z):
+			rect = candidate
+			break
 	var centre: Vector2 = rect.get_center()
 	arena.sim.entities[arena.envoy.actor_id] = Vector3(centre.x, 0.0, centre.y)
 	# A deferred roster is combat-ABSENT and hidden until summoned; these lifecycle tests need

@@ -87,7 +87,10 @@ static func register_enemy_body(sim: SimWorld, actor_id: int, enemy_key: StringN
 	# this actor's registration is abandoned with it. Registering health/AI for an actor
 	# that has no position would leave a combatant that exists but cannot be located --
 	# strictly worse to diagnose than one enemy simply missing from the floor.
-	if not sim.add_entity(actor_id, position, stats.move_speed):
+	# BODY-AWARE placement: the spawn must fit, not merely fall inside. Passed explicitly because
+	# registration order is add_entity THEN register_combatant, so the sim does not know this
+	# actor's body yet -- it is the same stats.combat_radius registered two lines below.
+	if not sim.add_entity(actor_id, position, stats.move_speed, Vector3(0.0, 0.0, -1.0), stats.combat_radius):
 		return {}
 	sim.register_combatant(actor_id, stats.max_health, stats.family, stats.iframe_ticks_on_hit, stats.combat_radius, &"enemy")
 	# Registering a flinch profile is what makes an actor part of the reaction layer

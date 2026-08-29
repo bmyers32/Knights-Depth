@@ -43,7 +43,8 @@ const _GATE_CLOSED_COLOR: Color = Color(0.78, 0.28, 0.26)
 const _MARKER_COLOR: Color = Color(0.88, 0.80, 0.42)
 const _BREAKABLE_COLOR: Color = Color(0.52, 0.40, 0.24)
 const _SWITCH_COLOR: Color = Color(0.40, 0.72, 0.88)
-const _PARTY_BUTTON_COLOR: Color = Color(0.92, 0.62, 0.24)
+const _PLATE_COLOR: Color = Color(0.92, 0.62, 0.24)
+const _PLATE_THICKNESS: float = 0.12
 
 var _gates: Dictionary = {}          # connection_id -> barrier mesh
 var _interactables: Dictionary = {}  # interactable_id -> mesh
@@ -66,6 +67,12 @@ func build(plan: FloorPlan, first_actor_id: int) -> Array[Dictionary]:
 		_build_breakable(breakable)
 	for interactable in plan.interactables:
 		_build_interactable(interactable)
+	# A PLATE IS A PICTURE OF A TRIGGER, exactly as a gate is a picture of a rule: the sim fires
+	# on occupancy whether or not this mesh exists. It is drawn from the trigger itself so the
+	# thing you stand on and the thing that fires can never be authored in two places.
+	for trigger in plan.triggers:
+		if trigger.kind == FloorLayers.TRIGGER_PARTY_PLATE:
+			_build_plate(trigger.region)
 	_build_end_marker(plan.end_marker)
 
 	var spawned: Array[Dictionary] = []
@@ -153,9 +160,16 @@ func _build_patch(patch: WalkablePatch) -> void:
 ## edge is sampled in short spans; a span with no other walkable ground beyond it gets a wall.
 ## Sampling rather than exact rectangle subtraction on purpose: the union is small, the result
 ## is identical at this resolution, and the alternative is a clipping library for scenery.
+## NOT EVERY WALKABILITY EDGE IS A WALL (human finding, 2026-08-29). A `ledge` patch renders no
+## vertical boundary at all: you can see over the drop, and the sim still refuses to let anyone
+## off it, because legality was never these meshes' job in the first place. This is a rendering
+## distinction only -- there is no second movement-legality system here, and adding one would be
+## the exact inversion Prime Directive 1 forbids.
 func build_walls(plan: FloorPlan) -> void:
 	var rects: Array[Rect2] = plan.all_rects()
 	for patch in plan.patches:
+		if patch.boundary_style == &"ledge":
+			continue
 		_walls_for(patch.rect, patch.elevation, rects)
 	for connection in plan.connections:
 		_walls_for(connection.aperture, 0.0, rects)
@@ -229,15 +243,28 @@ func _build_breakable(breakable: BreakablePlan) -> void:
 ## A hidden interactable is built but not shown -- revealing it is a visibility flip driven by
 ## a sim Event, never a spawn, so presentation can never disagree about whether it exists.
 func _build_interactable(interactable: InteractablePlan) -> void:
-	var is_button: bool = interactable.kind == &"party_button"
-	var size := Vector3(1.4, 0.5, 1.4) if is_button else Vector3(0.6, 1.4, 0.6)
-	var colour: Color = _PARTY_BUTTON_COLOR if is_button else _SWITCH_COLOR
+	var size := Vector3(0.6, 1.4, 0.6)
+	var colour: Color = _SWITCH_COLOR
 	var mesh := _add_box(size, interactable.position + Vector3(0.0, size.y * 0.5, 0.0), colour)
 	mesh.material_override.emission_enabled = true
 	mesh.material_override.emission = colour
 	mesh.material_override.emission_energy_multiplier = 0.5
 	mesh.visible = not interactable.starts_hidden
 	_interactables[interactable.interactable_id] = mesh
+
+
+## The floor plate the party stands on. Flush with the ground and lit, so it reads as somewhere
+## to STAND rather than something to press.
+func _build_plate(region: Rect2) -> void:
+	var centre := Vector3(region.position.x + region.size.x * 0.5, 0.0, region.position.y + region.size.y * 0.5)
+	var plate := _add_box(
+		Vector3(region.size.x, _PLATE_THICKNESS, region.size.y),
+		centre + Vector3(0.0, _PLATE_THICKNESS * 0.5, 0.0),
+		_PLATE_COLOR,
+	)
+	plate.material_override.emission_enabled = true
+	plate.material_override.emission = _PLATE_COLOR
+	plate.material_override.emission_energy_multiplier = 0.5
 
 
 ## The terminal marker (ruled): a deterministic visual endpoint whose only job is to make the

@@ -44,6 +44,82 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## M2 FLOOR GRAMMAR — RULED CORRECTIONS BUILT 2026-08-29. Suite 582 -> 603.
+
+Breon's rulings on the human-play findings above, as built. **The frozen floor-grammar verdict
+remains UNRENDERED** — none of this stamps it.
+
+### RULING 1 — BODY EXTENT IS PART OF AUTHORITATIVE LEGALITY
+`WalkableBounds.fits(point, radius)` is now the legality predicate: a position is legal only
+when the actor's body footprint lies inside the walkable UNION. `combat_radius` is the radius,
+because it is already the sim's one physical-body notion (Burn contact-spread, projectile
+sweep) — legality reads the same number rather than inventing a second footprint.
+
+**THE UNION IS TESTED AS A UNION.** Shrinking each rect by the radius independently is the
+obvious implementation and would have broken the floor: an actor in a doorway straddles a patch
+and an aperture and fits NEITHER alone. `fits` subtracts the whole union from the body's
+bounding box and asks whether any uncovered remainder actually reaches the body, so
+connectivity survives by construction. Two tests fail immediately if anyone "optimises" that
+into a per-rect shrink.
+
+Radius 0 degrades to the old point predicate exactly, which is why the pre-M2 suite was
+untouched. Body extent entered at the two funnels (`_clamp_to_bounds`, `_point_is_legal_for`),
+so **all eight displacement seams inherited it with no call-site change**.
+
+VERIFIED: straight edge · tangency (a body may rest against a wall) · overlapping-aperture
+traversal · concave corner · 25-unit knockback · three different authored radii · bodiless
+backward-compat · both placement consumers, each with its own refusal mode —
+**registration** refuses LOUDLY and abandons the actor (a content defect must be seen);
+**burrow emergence** refuses SILENTLY and rotates to its next candidate (retrying is its
+authored behaviour). Plus the amendment: two bodies pinned against one wall still QUALIFY as
+contact, so body-aware resting positions did not silently break Burn spread or the lunge clamp.
+
+**Authored clearance validator** (narrow, complements the law rather than replacing it): every
+roster member must fit inside its own territory, and no aperture may be narrower than the
+widest body the floor spawns. No route model and no pathfinding was invented to check it.
+
+### RULING 2 — OCCUPANCY IS NOT BODY LEGALITY
+Two different questions, kept apart: bounds ask "does this body FIT here", triggers ask "is this
+actor STANDING here". Occupancy uses the anchor position and one shared INCLUSIVE helper
+(`WalkableBounds.contains`), so `Rect2.has_point`'s exclusive far edge — the documented trap —
+cannot re-enter through a hand-rolled test. A body merely grazing a plate does not stand on it.
+
+**PARTY PLATE.** Occupancy-driven, never an E press. Condition: every living member of the
+active expedition standing on the region at once — derived from `_run_persistent_actors`, NOT
+an authored count and NOT "whoever is in the room", so a subset can never commit the party.
+Solo resolves to one Envoy with no special case, and M3 changes the roster's membership without
+touching the condition. Fires on the FALSE -> TRUE edge only. The atomic effect list is
+unchanged: seal rear, open forward, activate roster, in one tick.
+Small step triggers keep using `TRIGGER_REGION`, which already existed — no new machinery.
+
+### RULING 3 — AMBIENT TERRITORY IS A UNION, NOT ONE PATCH
+Confinement kept; the accidental "territory == exactly one WalkablePatch" assumption dropped.
+`EncounterSite.regions` is a union, and the east Ooze now inhabits **the east arm plus both hall
+strips**. The WEST ARM is pointedly excluded: the branch that solves the floor stays a place you
+can work in, which is what makes the branch mean anything. Still confined, still flowing through
+`_legal_bounds_for`, still no roaming and no pathfinding.
+
+### WALLS / LEDGES
+`WalkablePatch.boundary_style` = `wall` | `ledge`, read only by FloorBuilder. A ledge renders no
+vertical boundary; the sim bounds the actor anyway, because legality was never the meshes' job.
+The raised platform and endpoint are ledges. No polish beyond proving the distinction holds.
+
+### FINAL MEANINGLESS E — REMOVED
+`I_END_SWITCH` and its trigger are gone. The last connection opens from its REAL prerequisite,
+the encounter clear, alongside the ramp. **The floor's only remaining interactable is the hidden
+switch you have to search for** — the one E that was ever earned. No puzzle was invented to
+preserve the press.
+
+### Deliberate golden re-baseline
+Two schema fields changed (`boundary_style`, `regions`) and two authored beats changed by
+ruling, so the old fixture describes a floor nothing can produce. Reason + date logged in
+`tools/record_floor_plan_golden.gd`, hand-inspected before commit. No M1 behaviour baseline was
+touched.
+
+### Still out, unchanged
+Procedural assembly · branching topology · minimap · elevator · drop economy · throwable ·
+general pathfinding · whole-floor roaming · combat tuning.
+
 ## M2 FLOOR GRAMMAR — **PLAYED END TO END 2026-08-29 (build `9f97834`). FINDINGS RECORDED; VERDICT NOT RENDERED.**
 
 The authored prototype was played start to endpoint on the committed build, unmodified.

@@ -34,6 +34,12 @@ const EFFECT_REVEAL_INTERACTABLE: StringName = &"reveal_interactable"
 ## rejected. A trigger volume is still possible -- as an explicitly authored TRIGGER_REGION
 ## whose effects happen to include an activation -- but it can never be implied by geometry.
 const TRIGGER_REGION: StringName = &"region_entered"
+## PARTY PLATE (ruled 2026-08-29, after human play: "this is a coordination trigger, not an E
+## interactable"). Occupancy-driven like TRIGGER_REGION, but the condition is EVERY living
+## member of the active expedition standing on the region at once -- never a subset, and never
+## an authored count that could disagree with the party. Solo M2 resolves to one Envoy.
+## Both occupancy kinds fire on the FALSE -> TRUE edge, so standing still never re-fires them.
+const TRIGGER_PARTY_PLATE: StringName = &"party_plate"
 const TRIGGER_INTERACTED: StringName = &"interacted"
 const TRIGGER_BREAKABLE_DESTROYED: StringName = &"breakable_destroyed"
 const TRIGGER_ENCOUNTER_CLEARED: StringName = &"encounter_cleared"

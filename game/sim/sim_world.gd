@@ -259,6 +259,7 @@ var _connections: Dictionary = {}        # connection_id -> {aperture}
 var _connection_open: Dictionary = {}    # connection_id -> bool  (THE gate state)
 var _triggers: Dictionary = {}           # trigger_id -> {kind, region, source_id, once, effects}
 var _triggers_fired: Dictionary = {}     # trigger_id -> true
+var _trigger_condition_met: Dictionary = {}  # trigger_id -> bool, last tick's occupancy state (edge detection)
 var _interactables: Dictionary = {}      # interactable_id -> {position, use_radius, state}
 var _breakables: Dictionary = {}         # breakable_id -> {position, radius, durability}
 var _encounters: Dictionary = {}         # encounter_id -> {region, role, confines_player}
@@ -390,6 +391,7 @@ const STATE_SCOPES: Dictionary = {
 	"_connection_open": SCOPE_FLOOR,
 	"_triggers": SCOPE_FLOOR,
 	"_triggers_fired": SCOPE_FLOOR,
+	"_trigger_condition_met": SCOPE_FLOOR,
 	"_interactables": SCOPE_FLOOR,
 	"_breakables": SCOPE_FLOOR,
 	"_encounters": SCOPE_FLOOR,
@@ -463,19 +465,32 @@ func _legal_bounds_for(actor_id: int) -> WalkableBounds:
 	return _bounds
 
 
+## THE AUTHORITATIVE BODY EXTENT for movement legality (ruled 2026-08-29). combat_radius is
+## already the sim's one physical-body notion -- Burn's contact-spread and the projectile
+## Minkowski sweep both resolve against it -- so legality reads the SAME number rather than
+## introducing a second, silently divergent footprint. An actor with no registered body
+## (0.0) keeps point legality exactly, which is what leaves the pre-M2 suite untouched.
+func _body_radius_for(actor_id: int) -> float:
+	return _combat_radius.get(actor_id, 0.0)
+
+
 ## Displacement seam (see WalkableBounds.clamp_step). Every authoritative write to entities[]
 ## that MOVES an already-placed actor routes through here; the audit of those sites lives in
 ## tests/test_floor_bounds.gd, which drives each one at a wall AND at a sealed gate.
+##
+## Body extent enters HERE, at the funnel, which is why making legality body-aware touched no
+## call site: all eight displacement seams already asked this one function where they may go.
 func _clamp_to_bounds(actor_id: int, from: Vector3, to: Vector3) -> Vector3:
 	var region: WalkableBounds = _legal_bounds_for(actor_id)
-	return to if region == null else region.clamp_step(from, to)
+	return to if region == null else region.clamp_step(from, to, _body_radius_for(actor_id))
 
 
-## PLACEMENT seam counterpart -- same per-actor region as the clamp, so a burrowing Fang can
-## never surface outside the territory that owns it.
+## PLACEMENT seam counterpart -- same per-actor region AND same body extent as the clamp, so a
+## burrowing Fang can never surface outside the territory that owns it, and can never surface
+## somewhere its body does not fit.
 func _point_is_legal_for(actor_id: int, point: Vector3) -> bool:
 	var region: WalkableBounds = _legal_bounds_for(actor_id)
-	return true if region == null else region.is_inside(point)
+	return true if region == null else region.fits(point, _body_radius_for(actor_id))
 
 
 # --- FLOOR REGISTRATION (the driver unpacks a FloorPlan; sim never imports gen/) ---------
@@ -515,9 +530,15 @@ func register_breakable(breakable_id: int, position: Vector3, radius: float, dur
 	_breakables[breakable_id] = {"position": position, "radius": radius, "durability": durability}
 
 
-func register_encounter(encounter_id: int, region: Rect2, role: StringName, confines_player: bool, spawn_at_floor_load: bool = true) -> void:
+## TERRITORY IS A UNION OF REGIONS, never one rect (ruled 2026-08-29). Confinement itself was
+## validated and is kept; what human play falsified was the accidental assumption that a
+## territory equals exactly one WalkablePatch, which read as an ambient enemy "stuck on the
+## corner" the moment its quarry stepped across a patch seam it was authored to inhabit.
+## Widening a territory is now an AUTHORING act, not a repeal of confinement -- and emphatically
+## not floor-wide roaming, which stays out along with any pathfinding.
+func register_encounter(encounter_id: int, regions: Array[Rect2], role: StringName, confines_player: bool, spawn_at_floor_load: bool = true) -> void:
 	_encounters[encounter_id] = {
-		"region": region, "role": role, "confines_player": confines_player,
+		"regions": regions, "role": role, "confines_player": confines_player,
 		"spawn_at_floor_load": spawn_at_floor_load,
 	}
 	_encounter_roster[encounter_id] = []
@@ -538,8 +559,11 @@ func assign_actor_encounter(actor_id: int, encounter_id: int) -> bool:
 		push_error("SimWorld.assign_actor_encounter: unknown encounter %d" % encounter_id)
 		return false
 	var territory: WalkableBounds = _encounter_bounds[encounter_id]
-	if not territory.is_inside(entities.get(actor_id, Vector3.ZERO)):
-		push_error("SimWorld.assign_actor_encounter: actor %d at %s is outside encounter %d" % [actor_id, entities.get(actor_id, Vector3.ZERO), encounter_id])
+	# BODY-AWARE, like every other placement check: a roster member whose body does not fit
+	# inside its own territory would spend its life clamped against the boundary, which is
+	# exactly the "the enemy is stuck" presentation this refusal exists to prevent.
+	if not territory.fits(entities.get(actor_id, Vector3.ZERO), _body_radius_for(actor_id)):
+		push_error("SimWorld.assign_actor_encounter: actor %d at %s is outside encounter %d, or its body does not fit inside it" % [actor_id, entities.get(actor_id, Vector3.ZERO), encounter_id])
 		return false
 	_actor_encounter[actor_id] = encounter_id
 	var roster: Array = _encounter_roster[encounter_id]
@@ -569,12 +593,13 @@ func _rebuild_regions() -> void:
 			open_rects.append(_connections[connection_id]["aperture"])
 	_bounds = WalkableBounds.new(open_rects)
 	for encounter_id in _encounters:
-		var region: Rect2 = _encounters[encounter_id]["region"]
+		var regions: Array = _encounters[encounter_id]["regions"]
 		var clipped: Array[Rect2] = []
-		for rect in open_rects:
-			var shared: Rect2 = rect.intersection(region)
-			if shared.get_area() > 0.0:
-				clipped.append(shared)
+		for region: Rect2 in regions:
+			for rect in open_rects:
+				var shared: Rect2 = rect.intersection(region)
+				if shared.get_area() > 0.0:
+					clipped.append(shared)
 		_encounter_bounds[encounter_id] = WalkableBounds.new(clipped)
 
 
@@ -604,18 +629,51 @@ func _advance_floor_state() -> Array[Event]:
 	trigger_ids.sort()  # autonomous-phase law: deterministic order, never Dictionary order
 	for trigger_id: int in trigger_ids:
 		var trigger: Dictionary = _triggers[trigger_id]
-		if trigger["kind"] != &"region_entered" or _triggers_fired.has(trigger_id):
+		var kind: StringName = trigger["kind"]
+		if kind != &"region_entered" and kind != &"party_plate":
 			continue
-		var region: Rect2 = trigger["region"]
-		for actor_id: int in _run_persistent_actors:
-			if _health.get(actor_id, 0.0) <= 0.0:
-				continue
-			var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
-			if region.has_point(Vector2(position.x, position.z)):
-				events.append_array(_fire_trigger(trigger_id))
-				break
+		var met: bool = _occupancy_condition_met(trigger)
+		# EDGE-TRIGGERED, FALSE -> TRUE. A plate everyone is still standing on must not re-fire
+		# every tick; it fires when the condition BECOMES true and stays quiet until it lapses.
+		# Tracked for one-shot triggers too, so the two notions never disagree.
+		var was_met: bool = bool(_trigger_condition_met.get(trigger_id, false))
+		_trigger_condition_met[trigger_id] = met
+		if not met or was_met or _triggers_fired.has(trigger_id):
+			continue
+		events.append_array(_fire_trigger(trigger_id))
 	events.append_array(_advance_encounters())
 	return events
+
+
+## OCCUPANCY IS AN ANCHOR QUESTION, NOT A BODY QUESTION (ruled). "Is this actor standing on
+## this plate" is deliberately NOT the legality predicate: a body merely grazing the edge of a
+## plate is not standing on it, and merging the two would let a wide actor operate a plate it
+## has not stepped onto. Both consumers route through WalkableBounds.contains, the one shared
+## INCLUSIVE helper, so Rect2.has_point's exclusive far edge can never re-enter here.
+##
+##   region_entered  ANY living party member on the region
+##   party_plate     EVERY living party member on the region, simultaneously
+##
+## THE PARTY PLATE'S DENOMINATOR IS THE EXPEDITION, NOT THE ROOM. It is deliberately derived
+## from _run_persistent_actors -- the active party roster -- rather than from an authored count
+## or from "whoever is nearby", because a count would let a subset start the encounter while a
+## teammate is still outside. Solo M2 resolves to exactly one Envoy with no special case, and
+## M3 replaces the roster's membership without touching this condition.
+func _occupancy_condition_met(trigger: Dictionary) -> bool:
+	var region: Rect2 = trigger["region"]
+	var party_plate: bool = trigger["kind"] == &"party_plate"
+	var living: int = 0
+	for actor_id: int in _run_persistent_actors:
+		if _health.get(actor_id, 0.0) <= 0.0:
+			continue
+		living += 1
+		var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
+		var standing: bool = WalkableBounds.contains(region, position.x, position.z)
+		if standing and not party_plate:
+			return true
+		if not standing and party_plate:
+			return false
+	return party_plate and living > 0
 
 
 ## Applies one trigger's effects ATOMICALLY -- the whole ordered list lands within this call, so
@@ -845,9 +903,18 @@ func seed_combat_rng(seed: int) -> void:
 ## Returns bool rather than push_error alone so the failure is observable to a test and to
 ## the caller (ContentRegistrar aborts the rest of that actor's registration on false,
 ## instead of leaving a combatant with no position).
-func add_entity(actor_id: int, position: Vector3, move_speed: float, facing: Vector3 = Vector3(0.0, 0.0, -1.0)) -> bool:
-	if _bounds != null and not _bounds.is_inside(position):
-		push_error("SimWorld.add_entity: actor %d placed outside walkable bounds at %s — refusing to register (placement never silently clamps)" % [actor_id, position])
+## REGISTRATION PLACEMENT SEAM -- one of the two body-aware placement consumers (the other is
+## burrow emergence, _legal_emergence_candidates). The two REFUSE DIFFERENTLY on purpose:
+## registration refuses LOUDLY and abandons the actor, because a spawn its body cannot occupy
+## is a content defect that must be seen; emergence silently rotates to its next candidate,
+## because retrying is its authored behaviour.
+##
+## body_radius is passed rather than read from _combat_radius because registration order is
+## add_entity THEN register_combatant -- the body is not known to the sim yet at this call.
+## Callers hand the same stats.combat_radius they are about to register (content_registrar).
+func add_entity(actor_id: int, position: Vector3, move_speed: float, facing: Vector3 = Vector3(0.0, 0.0, -1.0), body_radius: float = 0.0) -> bool:
+	if _bounds != null and not _bounds.fits(position, body_radius):
+		push_error("SimWorld.add_entity: actor %d placed outside walkable bounds at %s (body radius %.2f) — refusing to register (placement never silently clamps)" % [actor_id, position, body_radius])
 		return false
 	entities[actor_id] = position
 	_move_speeds[actor_id] = move_speed

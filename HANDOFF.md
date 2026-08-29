@@ -1,8 +1,8 @@
 # HANDOFF
 Milestone: **2 — Procedural depths. IN PROGRESS.** First M2 gate work has landed.
 
-**M2 multi-room slice CLOSED (`5cff467`): mechanics PASS / grammar FALSIFIED (`d0b5f49`).
-M2 FLOOR-GRAMMAR PROTOTYPE BUILT — AWAITING HUMAN PASS.** Suite **581/581**. Boots clean.
+**M2 floor grammar PLAYED 2026-08-29 (`9f97834`) — findings recorded, VERDICT NOT RENDERED.
+Ruled corrections BUILT; awaiting the RE-PLAY.** Suite **603/603**. Boots clean.
 Public M1 build: https://bmyers32.itch.io/knight-depths
 
 ## Where things stand
@@ -17,17 +17,19 @@ branch (west solves, east is inhabited) → **break the crate** → reveals a sw
 route → **PARTY BUTTON** (rear seals + forward opens + roster arrives + fight begins, one
 atomic record) → clear → ramp → raised ground → switch → endpoint.
 
-## Next action — THE HUMAN PASS
+## Next action — RE-PLAY THE CORRECTED FLOOR
 Press play. **WASD** to move, **E** to interact, mouse to attack, **R** to restart.
-Route: walk in → west arm → break the crate → E on the switch → follow the opened route →
-E on the orange button → fight → ramp → E on the last switch → the gold pillar.
+Route: walk in → west arm → break the crate → **E on the switch** (the only E left) → follow
+the opened route → **STAND ON THE ORANGE PLATE** → fight → clear opens the whole way out →
+ramp → high ground (open ledges, no walls) → the gold pillar.
+Judge the SAME frozen sentence. Difficulty is still a SEPARATE finding from grammar.
 
 ### FROZEN CRITERION (verbatim — the verdict is rendered against this exact sentence)
 > "The floor passes only if it feels like traversing and interacting with a place — seeing
 > somewhere before you can reach it, finding what opens the way — rather than moving between
 > generated arenas."
 
-**FLAG:** sealed-encounter difficulty is still unjudged (a 30 HP Envoy dies to the roster in
+**FLAG:** sealed-encounter difficulty remains UNJUDGED and independent of the grammar verdict (a 30 HP Envoy dies to the roster in
 ~40 s of continuous engagement, and sealing removes retreat). Roster size is the first knob.
 Not retuned blind — combat values are fenced and this is a human call.
 
@@ -39,6 +41,11 @@ Not retuned blind — combat values are fenced and this is a human call.
   layout: seeds do NOT vary geometry, the plan carries `authored_layout = true`, the HUD says
   "authored layout", and a test asserts two seeds give identical geometry. When procedural
   assembly returns, that notice must come off with it.
+- **BODY-AWARE LEGALITY (2026-08-29).** `fits(point, radius)` tests the body against the
+  walkable UNION. NEVER reimplement it as a per-rect shrink — a body in a doorway fits neither
+  rect alone, and two tests in `test_body_bounds.gd` exist to catch exactly that.
+- **Occupancy != legality.** Triggers use the anchor + `WalkableBounds.contains` (INCLUSIVE);
+  bounds use `fits`. Never merge them.
 - **Aperture overlap MUST stay > 0.** Abutting rects share zero area, turning every threshold
   into a discontinuity and re-opening the gate/snap problem the overlap solves.
 - **`ArchivePrototypeLayout` is data-as-code** and migrates to a resource only when a SECOND

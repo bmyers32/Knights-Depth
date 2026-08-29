@@ -140,6 +140,7 @@ func to_dict() -> Dictionary:
 		patch_dicts.append({
 			"patch_id": patch.patch_id, "rect": _rect(patch.rect),
 			"elevation": _snap(patch.elevation), "surface": String(patch.surface),
+			"boundary_style": String(patch.boundary_style),
 		})
 	var connection_dicts: Array = []
 	for connection in connections:
@@ -161,8 +162,11 @@ func to_dict() -> Dictionary:
 		var roster: Array = []
 		for spawn in encounter.roster:
 			roster.append({"enemy_key": String(spawn["enemy_key"]), "position": _point(spawn["position"])})
+		var region_dicts: Array = []
+		for region: Rect2 in encounter.regions:
+			region_dicts.append(_rect(region))
 		encounter_dicts.append({
-			"encounter_id": encounter.encounter_id, "region": _rect(encounter.region),
+			"encounter_id": encounter.encounter_id, "regions": region_dicts,
 			"role": String(encounter.role), "confines_player": encounter.confines_player,
 			"spawn_at_floor_load": encounter.spawn_at_floor_load, "roster": roster,
 		})

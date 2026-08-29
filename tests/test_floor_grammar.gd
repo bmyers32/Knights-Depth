@@ -74,7 +74,79 @@ func test_a_blocked_connection_is_a_real_wall_not_a_picture() -> void:
 	sim.register_connection(CONNECTION, DOOR, false)
 	_walk(Vector3(1, 0, 0), 200)
 	assert_true(_in(WEST, PLAYER), "a closed route must actually stop the Envoy, got %s" % sim.entities[PLAYER])
-	assert_almost_eq(sim.entities[PLAYER].x, WEST.end.x, 0.0001, "and stop them at its edge")
+	# The Envoy's BODY stops at the sealed edge, so its centre rests one radius short of it.
+	assert_almost_eq(sim.entities[PLAYER].x, WEST.end.x - 0.4, 0.0001, "and stop their body at its edge")
+
+
+# --- OCCUPANCY: STANDING ON SOMETHING, WHICH IS NOT THE SAME AS FITTING THERE -------------
+
+## THE ANCHOR/BODY SPLIT (ruled). Occupancy asks "is this actor STANDING here"; legality asks
+## "does this actor's BODY fit here". Merging them would let a wide actor operate a plate it
+## never stepped onto -- and would make plate size depend on who walks over it.
+func test_occupancy_is_an_anchor_question_not_a_body_question() -> void:
+	var plate := Rect2(-1.0, -1.0, 2.0, 2.0)
+	assert_true(WalkableBounds.contains(plate, 0.9, 0.0), "an anchor inside the plate is standing on it")
+	assert_false(WalkableBounds.contains(plate, 1.6, 0.0),
+		"an anchor outside it is not, however wide the body grazing it may be")
+
+
+## THE FAR-EDGE TRAP, closed. Rect2.has_point is EXCLUSIVE on the far edge while
+## WalkableBounds.is_inside is INCLUSIVE, so an actor clamped exactly onto a boundary read as
+## "escaped" to one predicate and "legal" to the other. Every occupancy consumer now routes
+## through the one shared inclusive helper.
+func test_the_shared_containment_helper_is_inclusive_on_every_edge() -> void:
+	var region := Rect2(0.0, 0.0, 4.0, 4.0)
+	assert_true(WalkableBounds.contains(region, 4.0, 4.0), "the far corner counts as inside")
+	assert_true(WalkableBounds.contains(region, 0.0, 0.0), "so does the near one")
+	assert_false(region.has_point(Vector2(4.0, 4.0)),
+		"sanity: Rect2.has_point disagrees, which is exactly why nothing may use it for occupancy")
+
+
+# --- THE PARTY PLATE ----------------------------------------------------------------------
+
+func _plate(effects: Array[Dictionary]) -> void:
+	sim.register_trigger(9, FloorLayers.TRIGGER_PARTY_PLATE, Rect2(-14.0, -2.0, 4.0, 4.0), -1, true, effects)
+
+
+## Solo resolves to one Envoy with no special case: the condition is "every living party
+## member", and a party of one is satisfied by one.
+func test_a_solo_envoy_standing_on_the_plate_fires_it() -> void:
+	sim.register_connection(CONNECTION, DOOR, false)
+	_plate([FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, CONNECTION)])
+	sim.entities[PLAYER] = Vector3(-12.0, 0.0, 0.0)
+	sim.tick([] as Array[Command], DT)
+	assert_true(bool(sim._connection_open[CONNECTION]), "standing on it is the whole activation")
+
+
+## THE DENOMINATOR IS THE EXPEDITION, NOT THE ROOM. A subset of the party must never be able to
+## commit everyone to the fight while a teammate is still outside.
+func test_a_partial_party_cannot_fire_the_plate() -> void:
+	sim.add_entity(ENEMY_B, Vector3(-12.0, 0.0, 8.0), 6.0)
+	sim.register_combatant(ENEMY_B, 500.0, &"envoy", 0, 0.4, &"player")
+	sim.mark_run_persistent(ENEMY_B)
+	sim.register_connection(CONNECTION, DOOR, false)
+	_plate([FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, CONNECTION)])
+
+	sim.entities[PLAYER] = Vector3(-12.0, 0.0, 0.0)
+	sim.tick([] as Array[Command], DT)
+	assert_false(bool(sim._connection_open[CONNECTION]), "one member standing on it is not the party")
+
+	sim.entities[ENEMY_B] = Vector3(-12.5, 0.0, 0.0)
+	sim.tick([] as Array[Command], DT)
+	assert_true(bool(sim._connection_open[CONNECTION]), "the whole party on it together is")
+
+
+## EDGE-TRIGGERED. A plate everybody is still standing on must not re-fire every tick -- which
+## is what would happen if occupancy were read as a level rather than as a transition.
+func test_the_plate_fires_on_the_edge_and_not_every_tick() -> void:
+	_plate([FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, CONNECTION)])
+	sim.entities[PLAYER] = Vector3(-12.0, 0.0, 0.0)
+	var fired: int = 0
+	for i in 30:
+		for event in sim.tick([] as Array[Command], DT):
+			if event.kind == "floor_trigger_fired":
+				fired += 1
+	assert_eq(fired, 1, "standing still fires once, not thirty times")
 
 
 ## THE LAW ITSELF: the connection is changed by an EFFECT and never learns what caused it.
@@ -98,7 +170,7 @@ func test_any_controller_opens_a_connection_the_same_way() -> void:
 				sim.register_trigger(0, FloorLayers.TRIGGER_INTERACTED, Rect2(), 0, true, effects)
 				_interact()
 			"encounter":
-				sim.register_encounter(ENCOUNTER, WEST, FloorLayers.ROLE_MANDATORY, false)
+				sim.register_encounter(ENCOUNTER, [WEST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, false)
 				sim.register_trigger(0, FloorLayers.TRIGGER_ENCOUNTER_CLEARED, Rect2(), ENCOUNTER, true, effects)
 				sim._activate_encounter(ENCOUNTER)
 				_tick(2)
@@ -122,7 +194,7 @@ func test_a_one_shot_region_trigger_commits_the_player_forward() -> void:
 ## one tick, never observed half-applied.
 func test_one_interactable_applies_every_effect_atomically() -> void:
 	sim.register_connection(1, Rect2(30.0, -2.0, 4.0, 4.0), false)
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	sim.register_interactable(0, Vector3(-12.0, 0.0, 0.0), 2.0, false)
 	sim.register_trigger(0, FloorLayers.TRIGGER_INTERACTED, Rect2(), 0, true, [
 		_effect(FloorLayers.EFFECT_BLOCK_CONNECTION, CONNECTION),
@@ -191,7 +263,7 @@ func _add_enemy(actor_id: int, position: Vector3, encounter_id: int = ENCOUNTER)
 
 ## THE FALSIFIED RULE, made unrepresentable: walking into an encounter region does nothing.
 func test_entering_an_encounter_region_does_not_start_the_fight() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	_add_enemy(ENEMY_A, Vector3(16.0, 0.0, 0.0))
 	_walk(Vector3(1, 0, 0), 200)
 	assert_true(_in(EAST, PLAYER), "sanity: the Envoy is standing in the region")
@@ -200,7 +272,7 @@ func test_entering_an_encounter_region_does_not_start_the_fight() -> void:
 
 
 func test_activation_is_an_authored_effect_and_seals_both_sides() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	_add_enemy(ENEMY_A, Vector3(16.0, 0.0, 0.0))
 	_walk(Vector3(1, 0, 0), 200)
 	sim._activate_encounter(ENCOUNTER)
@@ -214,7 +286,7 @@ func test_activation_is_an_authored_effect_and_seals_both_sides() -> void:
 
 
 func test_a_dormant_roster_never_perceives_the_player() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	_add_enemy(ENEMY_A, Vector3(6.0, 0.0, 0.0))
 	var start: Vector3 = sim.entities[ENEMY_A]
 	sim.entities[PLAYER] = Vector3(4.5, 0.0, 0.0)  # right on its doorstep
@@ -225,7 +297,7 @@ func test_a_dormant_roster_never_perceives_the_player() -> void:
 
 ## Gated on ENCOUNTER STATE, not _ai_state, so a debug hook cannot repeal a design law.
 func test_debug_force_aggro_cannot_wake_a_dormant_roster() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	_add_enemy(ENEMY_A, Vector3(6.0, 0.0, 0.0))
 	sim.debug_set_ai_active(ENEMY_A)
 	var start: Vector3 = sim.entities[ENEMY_A]
@@ -236,7 +308,7 @@ func test_debug_force_aggro_cannot_wake_a_dormant_roster() -> void:
 
 ## AMBIENT: no ceremony, no lock, engages naturally -- but still bounded by its territory.
 func test_an_ambient_roster_engages_without_ceremony_and_stays_in_its_territory() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_AMBIENT, false)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_AMBIENT, false)
 	_add_enemy(ENEMY_A, Vector3(6.0, 0.0, 0.0))
 	assert_false(sim._encounter_state.has(ENCOUNTER), "an ambient site has no dormant/active life")
 
@@ -252,7 +324,7 @@ func test_an_ambient_roster_engages_without_ceremony_and_stays_in_its_territory(
 
 
 func test_territory_binds_knockback_not_only_locomotion() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_AMBIENT, false)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_AMBIENT, false)
 	_add_enemy(ENEMY_A, Vector3(5.0, 0.0, 0.0))
 	sim.register_weapon(&"test_shove", 5.0, &"force", 4.0, 90.0, 12.0, 0)
 	sim.set_equipped_weapon(PLAYER, &"test_shove")
@@ -263,7 +335,7 @@ func test_territory_binds_knockback_not_only_locomotion() -> void:
 
 
 func test_assigning_an_actor_outside_its_site_fails_loudly() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	sim.add_entity(ENEMY_A, Vector3(-12.0, 0.0, 0.0), 3.0)
 	assert_false(sim.assign_actor_encounter(ENEMY_A, ENCOUNTER), "the refusal must reach the caller")
 	assert_false(sim._actor_encounter.has(ENEMY_A), "and bind nothing")
@@ -271,7 +343,7 @@ func test_assigning_an_actor_outside_its_site_fails_loudly() -> void:
 
 
 func test_a_site_clears_only_when_its_whole_roster_is_dead() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	_add_enemy(ENEMY_A, Vector3(8.0, 0.0, 0.0))
 	_add_enemy(ENEMY_B, Vector3(14.0, 0.0, 0.0))
 	sim._activate_encounter(ENCOUNTER)
@@ -286,7 +358,7 @@ func test_a_site_clears_only_when_its_whole_roster_is_dead() -> void:
 
 func test_clearing_a_site_fires_its_watchers() -> void:
 	sim.register_connection(1, Rect2(30.0, -2.0, 4.0, 4.0), false)
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	sim.register_trigger(0, FloorLayers.TRIGGER_ENCOUNTER_CLEARED, Rect2(), ENCOUNTER, true,
 		[_effect(FloorLayers.EFFECT_OPEN_CONNECTION, 1)])
 	_add_enemy(ENEMY_A, Vector3(8.0, 0.0, 0.0))
@@ -299,7 +371,7 @@ func test_clearing_a_site_fires_its_watchers() -> void:
 ## A deferred roster is registered up front but not PRESENT until summoned -- alive,
 ## untargetable, undrawn. Reuses burrow's participation predicate rather than a second one.
 func test_a_deferred_roster_arrives_only_on_activation() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true, false)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true, false)
 	_add_enemy(ENEMY_A, Vector3(8.0, 0.0, 0.0))
 	assert_true(sim.debug_is_combat_absent(ENEMY_A), "not present before it is summoned")
 	assert_gt(sim._health[ENEMY_A], 0.0, "but alive -- absent is not dead")
@@ -311,7 +383,7 @@ func test_a_deferred_roster_arrives_only_on_activation() -> void:
 
 ## Burrow vs floor state, kept distinct: an underground Fang is ALIVE, so it still counts.
 func test_a_burrowed_member_keeps_its_site_sealed() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	sim.add_entity(ENEMY_A, Vector3(12.0, 0.0, 0.0), 3.0)
 	sim.register_combatant(ENEMY_A, 100.0, &"fang", 0, 0.6, &"enemy")
 	sim.register_weapon(&"test_bite", 5.0, &"force", 1.5, 90.0, 0.0, 9999)
@@ -336,7 +408,7 @@ func test_a_burrowed_member_keeps_its_site_sealed() -> void:
 # --- SCOPE -------------------------------------------------------------------------------
 
 func test_all_floor_layer_state_dies_with_the_floor() -> void:
-	sim.register_encounter(ENCOUNTER, EAST, FloorLayers.ROLE_MANDATORY, true)
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	sim.register_interactable(0, Vector3(-12.0, 0.0, 0.0), 2.0, false)
 	sim.register_breakable(0, Vector3(-10.0, 0.0, 0.0), 0.8, 1.0)
 	sim.register_trigger(0, FloorLayers.TRIGGER_REGION, WEST, -1, true, [])
@@ -353,3 +425,23 @@ func test_all_floor_layer_state_dies_with_the_floor() -> void:
 		assert_eq((sim.get(state_name) as Dictionary if sim.get(state_name) is Dictionary else sim.get(state_name)).size(), 0,
 			"%s is FLOOR-scoped and must be empty after a transition" % state_name)
 	assert_false(sim.entities.has(ENEMY_A), "nor do the actors survive")
+
+
+# --- TERRITORY IS A UNION, NOT A PATCH ----------------------------------------------------
+
+## Confinement was validated and is kept; what human play falsified was the accidental
+## assumption that a territory equals exactly ONE patch, which read as an ambient enemy stuck
+## on a corner the instant its quarry crossed a seam it was authored to inhabit.
+func test_an_ambient_roster_chases_across_its_whole_authored_territory() -> void:
+	sim.add_entity(ENEMY_A, Vector3(12.0, 0.0, 0.0), 5.0)
+	sim.register_combatant(ENEMY_A, 100.0, &"ooze", 0, 0.5, &"enemy")
+	# TWO regions: the east patch it lives in, plus the doorway it is meant to defend.
+	sim.register_encounter(ENCOUNTER, [EAST, DOOR] as Array[Rect2], FloorLayers.ROLE_AMBIENT, false)
+	assert_true(sim.assign_actor_encounter(ENEMY_A, ENCOUNTER))
+
+	var territory: WalkableBounds = sim._encounter_bounds[ENCOUNTER]
+	assert_true(territory.fits(Vector3(4.5, 0.0, 0.0), 0.5), "it may stand in the patch it spawned in")
+	assert_true(territory.fits(Vector3(-2.0, 0.0, 0.0), 0.5),
+		"and it may cross the seam into the rest of its authored territory")
+	assert_false(territory.fits(Vector3(-12.0, 0.0, 0.0), 0.5),
+		"but a union is still a territory: it never becomes whole-floor roaming")

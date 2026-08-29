@@ -163,14 +163,15 @@ func test_a_one_way_commitment_exists() -> void:
 	assert_gt(commitment.region.get_area(), 0.0, "a region trigger needs a region")
 
 
-## THE OWNERSHIP LAW, structurally: one interactable causes the whole party-button sequence.
-func test_the_party_button_owns_its_whole_consequence_in_one_record() -> void:
+## THE OWNERSHIP LAW, structurally: one plate causes the whole commitment sequence.
+func test_the_party_plate_owns_its_whole_consequence_in_one_record() -> void:
 	var plan: FloorPlan = _plan()
 	var button: FloorTrigger = null
 	for trigger in plan.triggers:
-		if trigger.kind == FloorLayers.TRIGGER_INTERACTED and trigger.source_id == ArchivePrototypeLayout.I_PARTY_BUTTON:
+		if trigger.kind == FloorLayers.TRIGGER_PARTY_PLATE:
 			button = trigger
-	assert_not_null(button, "the party button must have a trigger")
+	assert_not_null(button, "the party plate must have a trigger")
+	assert_gt(button.region.get_area(), 0.0, "an occupancy trigger needs somewhere to stand")
 	var kinds: Array = []
 	for effect in button.effects:
 		kinds.append(effect["kind"])
@@ -254,7 +255,10 @@ func test_every_spawn_stands_inside_the_site_that_owns_it() -> void:
 		for spawn in encounter.roster:
 			var position: Vector3 = spawn["position"]
 			assert_true(everything.is_inside(position), "spawn at %s is off the floor" % position)
-			assert_true(encounter.region.has_point(Vector2(position.x, position.z)),
+			var owned: bool = false
+			for region: Rect2 in encounter.regions:
+				owned = owned or WalkableBounds.contains(region, position.x, position.z)
+			assert_true(owned,
 				"spawn at %s is outside encounter %d, which OWNS it" % [position, encounter.encounter_id])
 			assert_true(stratum.enemy_keys.has(spawn["enemy_key"]),
 				"'%s' is not in this stratum's declared family pool" % spawn["enemy_key"])
@@ -279,3 +283,51 @@ func test_floor_construction_stays_far_under_the_hundred_millisecond_gate() -> v
 	var per_floor_ms: float = (Time.get_ticks_usec() - started) / 1000.0 / 50.0
 	gut.p("floor construction: %.3f ms" % per_floor_ms)
 	assert_lt(per_floor_ms, 100.0, "GAME-RULES §5 M2 budget is 100 ms per floor")
+
+
+# --- AUTHORED CLEARANCE -------------------------------------------------------------------
+
+## THE CLEARANCE LAW (ruled 2026-08-29): a route intended for an encounter roster must support
+## the footprint of the LARGEST actor assigned to it. This complements body-aware legality; it
+## does not replace it. Deliberately narrow -- there is no pathfinding here and no route model,
+## so it checks the two things that ARE checkable without inventing one: every roster member
+## fits inside its own territory, and no aperture on the floor is narrower than the widest body
+## the floor spawns.
+func _largest_authored_body(plan: FloorPlan) -> float:
+	var largest: float = 0.0
+	for encounter in plan.encounters:
+		for spawn in encounter.roster:
+			var stats: Resource = ContentDB.get_resource(&"enemy", spawn["enemy_key"])
+			largest = maxf(largest, stats.combat_radius)
+	return largest
+
+
+func test_every_roster_member_fits_inside_the_territory_that_owns_it() -> void:
+	var plan: FloorPlan = _plan()
+	var open_ids: Dictionary = {}
+	for connection in plan.connections:
+		open_ids[connection.connection_id] = true
+	var floor_rects: Array[Rect2] = plan.open_walkable_rects(open_ids)
+
+	for encounter in plan.encounters:
+		var clipped: Array[Rect2] = []
+		for region: Rect2 in encounter.regions:
+			for rect in floor_rects:
+				var shared: Rect2 = rect.intersection(region)
+				if shared.get_area() > 0.0:
+					clipped.append(shared)
+		var territory := WalkableBounds.new(clipped)
+		for spawn in encounter.roster:
+			var stats: Resource = ContentDB.get_resource(&"enemy", spawn["enemy_key"])
+			assert_true(territory.fits(spawn["position"], stats.combat_radius),
+				"%s spawns at %s where its own body does not fit inside encounter %d" % [spawn["enemy_key"], spawn["position"], encounter.encounter_id])
+
+
+func test_no_aperture_is_narrower_than_the_widest_body_the_floor_spawns() -> void:
+	var plan: FloorPlan = _plan()
+	var widest: float = _largest_authored_body(plan)
+	assert_gt(widest, 0.0, "sanity: the floor spawns at least one actor with a body")
+	for connection in plan.connections:
+		var narrowest: float = minf(connection.aperture.size.x, connection.aperture.size.y)
+		assert_gt(narrowest, widest * 2.0,
+			"aperture %d is %.2f wide, which cannot pass a %.2f-diameter body" % [connection.connection_id, narrowest, widest * 2.0])

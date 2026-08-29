@@ -16,6 +16,13 @@ extends SceneTree
 ##               and spawns moved from the plan onto their owning room. The old fixture
 ##               described a shape the generator can no longer produce, so this is a schema
 ##               migration, not a drift-hiding re-record. Hand-inspected before commit.
+##   2026-08-29  RE-BASELINED after the human floor-grammar play. TWO schema fields changed
+##               (patches carry boundary_style; an encounter's territory became a UNION of
+##               regions, not one rect) and TWO authored beats changed by ruling: the party
+##               button became an occupancy PLATE, and the meaningless final switch was
+##               deleted, so the last connection now opens from the encounter clear. The old
+##               fixture describes a floor nothing can produce. Schema + authoring migration,
+##               not a drift-hiding re-record. Hand-inspected before commit.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the

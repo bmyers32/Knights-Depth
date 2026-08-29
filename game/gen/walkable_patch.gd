@@ -24,6 +24,15 @@ var elevation: float = 0.0
 ## Visual key only, same reasoning as elevation.
 var surface: StringName = &"stone"
 
+## PRESENTATION ONLY, and the point of it is what it is NOT: not every walkability edge is a
+## wall (human finding, 2026-08-29 -- "some reference-floor platforms have open/ledge edges
+## while still preventing the player from falling"). Sim legality is unchanged and unchanged in
+## purpose; an actor still cannot leave walkable ground. This only decides whether FloorBuilder
+## RENDERS that boundary as a solid wall or leaves it an open ledge you can see over.
+##   &"wall"   solid vertical boundary (default)
+##   &"ledge"  open edge -- no wall mesh, still mechanically bounded
+var boundary_style: StringName = &"wall"
+
 
 func centre() -> Vector3:
 	return Vector3(rect.position.x + rect.size.x * 0.5, 0.0, rect.position.y + rect.size.y * 0.5)

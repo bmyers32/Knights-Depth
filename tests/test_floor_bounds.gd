@@ -183,7 +183,9 @@ func test_seam_6_a_burrow_jump_cannot_carry_the_actor_through_a_wall() -> void:
 		sim.tick([] as Array[Command], DT)
 		assert_true(sim._bounds.is_inside(sim.entities[ENEMY_ID]),
 			"the burrowing Fang left the floor on tick %d at %s" % [i, sim.entities[ENEMY_ID]])
-	assert_almost_eq(sim.entities[ENEMY_ID].x, WALL, 0.0001, "the jump must be stopped by the wall")
+	# BODY-AWARE (ruled 2026-08-29): a jump stops when the Fang's BODY meets the wall, not when
+	# its centre reaches it. Resting at WALL - combat_radius is the law working, not a shortfall.
+	assert_almost_eq(sim.entities[ENEMY_ID].x, WALL - 0.6, 0.0001, "the jump must be stopped by the wall, body and all")
 
 
 # --- PLACEMENT SEAM 1/2: burrow emergence --------------------------------------------
