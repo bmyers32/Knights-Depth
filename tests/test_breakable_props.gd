@@ -11,7 +11,7 @@ extends GutTest
 ## a crate during a playtest.
 ##
 ## v1 semantics, exactly: weapon hit -> direct durability loss -> destroyed -> optionally
-## reveal a contained interactable. Nothing else.
+## enable a control it concealed. Nothing else.
 
 const PLAYER := 0
 const ENEMY := 1
@@ -64,14 +64,15 @@ func test_a_melee_swing_damages_and_destroys_a_breakable() -> void:
 
 func test_destroying_a_breakable_reveals_what_it_concealed() -> void:
 	sim.register_breakable(CRATE, Vector3(0.0, 0.0, -2.0), 0.8, 1.0)
-	sim.register_interactable(0, Vector3(0.0, 0.0, -2.0), 2.0, true)
+	sim.register_trigger(1, FloorLayers.TRIGGER_REGION, Rect2(-1.0, -3.0, 2.0, 2.0), -1, true,
+		[{"kind": FloorLayers.EFFECT_OPEN_CONNECTION, "target_id": 0}], false)
 	sim.register_trigger(0, FloorLayers.TRIGGER_BREAKABLE_DESTROYED, Rect2(), CRATE, true,
-		[{"kind": FloorLayers.EFFECT_REVEAL_INTERACTABLE, "target_id": 0}])
+		[{"kind": FloorLayers.EFFECT_ENABLE_TRIGGER, "target_id": 1}])
 	_sword(5.0)
 	var kinds: Array = _kinds(_swing())
 	assert_true(kinds.has("breakable_destroyed"))
-	assert_true(kinds.has("interactable_revealed"), "search the environment -> discover progression control")
-	assert_eq(sim._interactables[0]["state"], &"available")
+	assert_true(kinds.has("floor_trigger_enabled"), "search the environment -> discover progression control")
+	assert_true(bool(sim._trigger_enabled[1]), "the concealed control is live once the prop is gone")
 
 
 func test_a_swing_out_of_reach_or_out_of_cone_leaves_a_prop_alone() -> void:

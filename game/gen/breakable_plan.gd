@@ -21,4 +21,4 @@ var position: Vector3 = Vector3.ZERO
 var radius: float = 0.7
 var durability: float = 1.0
 ## interactable_id revealed on destruction, or -1 for a purely decorative prop.
-var conceals_interactable_id: int = -1
+var conceals_trigger_id: int = -1

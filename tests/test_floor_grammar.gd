@@ -50,10 +50,6 @@ func _tick(count: int = 1) -> Array[Event]:
 	return events
 
 
-func _interact() -> Array[Event]:
-	return sim.tick([Command.new(sim.tick_count, PLAYER, "interact", {})] as Array[Command], DT)
-
-
 func _in(rect: Rect2, actor_id: int) -> bool:
 	var p: Vector3 = sim.entities[actor_id]
 	return p.x >= rect.position.x and p.x <= rect.end.x and p.z >= rect.position.y and p.z <= rect.end.y
@@ -105,7 +101,7 @@ func test_the_shared_containment_helper_is_inclusive_on_every_edge() -> void:
 # --- THE PARTY PLATE ----------------------------------------------------------------------
 
 func _plate(effects: Array[Dictionary]) -> void:
-	sim.register_trigger(9, FloorLayers.TRIGGER_PARTY_PLATE, Rect2(-14.0, -2.0, 4.0, 4.0), -1, true, effects)
+	sim.register_trigger(9, FloorLayers.TRIGGER_GROUP_OCCUPANCY, Rect2(-14.0, -2.0, 4.0, 4.0), -1, true, effects)
 
 
 ## Solo resolves to one Envoy with no special case: the condition is "every living party
@@ -152,7 +148,7 @@ func test_the_plate_fires_on_the_edge_and_not_every_tick() -> void:
 ## THE LAW ITSELF: the connection is changed by an EFFECT and never learns what caused it.
 ## Three different controllers reach it identically.
 func test_any_controller_opens_a_connection_the_same_way() -> void:
-	for controller in ["region", "interacted", "encounter"]:
+	for controller in ["region", "group_occupancy", "breakable", "encounter"]:
 		sim = SimWorld.new()
 		sim.add_entity(PLAYER, Vector3(-12.0, 0.0, 0.0), 6.0)
 		sim.register_combatant(PLAYER, 5000.0, &"envoy", 0, 0.4, &"player")
@@ -165,10 +161,13 @@ func test_any_controller_opens_a_connection_the_same_way() -> void:
 			"region":
 				sim.register_trigger(0, FloorLayers.TRIGGER_REGION, Rect2(-14.0, -2.0, 4.0, 4.0), -1, true, effects)
 				_tick(2)
-			"interacted":
-				sim.register_interactable(0, Vector3(-12.0, 0.0, 0.0), 2.0, false)
-				sim.register_trigger(0, FloorLayers.TRIGGER_INTERACTED, Rect2(), 0, true, effects)
-				_interact()
+			"group_occupancy":
+				sim.register_trigger(0, FloorLayers.TRIGGER_GROUP_OCCUPANCY, Rect2(-14.0, -2.0, 4.0, 4.0), -1, true, effects)
+				_tick(2)
+			"breakable":
+				sim.register_breakable(0, Vector3(-12.0, 0.0, 0.0), 0.5, 1.0)
+				sim.register_trigger(0, FloorLayers.TRIGGER_BREAKABLE_DESTROYED, Rect2(), 0, true, effects)
+				sim._resolve_hit_on_breakable(PLAYER, 0, 99.0)
 			"encounter":
 				sim.register_encounter(ENCOUNTER, [WEST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, false)
 				sim.register_trigger(0, FloorLayers.TRIGGER_ENCOUNTER_CLEARED, Rect2(), ENCOUNTER, true, effects)
@@ -190,19 +189,21 @@ func test_a_one_shot_region_trigger_commits_the_player_forward() -> void:
 
 # --- ATOMIC EFFECTS ---------------------------------------------------------------------
 
-## The party-button shape: seal the rear, open the way forward, start the fight -- one record,
+## The party-plate shape: seal the rear, open the way forward, start the fight -- one record,
 ## one tick, never observed half-applied.
-func test_one_interactable_applies_every_effect_atomically() -> void:
+func test_one_controller_applies_every_effect_atomically() -> void:
 	sim.register_connection(1, Rect2(30.0, -2.0, 4.0, 4.0), false)
 	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
-	sim.register_interactable(0, Vector3(-12.0, 0.0, 0.0), 2.0, false)
-	sim.register_trigger(0, FloorLayers.TRIGGER_INTERACTED, Rect2(), 0, true, [
+	# A LIVING ROSTER, because activation and the clear check share one tick: an empty site is
+	# activated and immediately cleared, which would test the opposite of what this is about.
+	_add_enemy(ENEMY_A, Vector3(12.0, 0.0, 0.0))
+	sim.register_trigger(0, FloorLayers.TRIGGER_GROUP_OCCUPANCY, Rect2(-14.0, -2.0, 4.0, 4.0), -1, true, [
 		_effect(FloorLayers.EFFECT_BLOCK_CONNECTION, CONNECTION),
 		_effect(FloorLayers.EFFECT_OPEN_CONNECTION, 1),
 		_effect(FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, ENCOUNTER),
 	])
 
-	var events: Array[Event] = _interact()
+	var events: Array[Event] = sim.tick([] as Array[Command], DT)
 
 	assert_false(bool(sim._connection_open[CONNECTION]), "rear sealed")
 	assert_true(bool(sim._connection_open[1]), "forward opened")
@@ -215,7 +216,6 @@ func test_one_interactable_applies_every_effect_atomically() -> void:
 
 
 func test_a_once_trigger_never_fires_twice() -> void:
-	sim.register_interactable(0, Vector3(-12.0, 0.0, 0.0), 2.0, false)
 	sim.register_trigger(0, FloorLayers.TRIGGER_REGION, WEST, -1, true,
 		[_effect(FloorLayers.EFFECT_BLOCK_CONNECTION, CONNECTION)])
 	_tick(2)
@@ -226,28 +226,35 @@ func test_a_once_trigger_never_fires_twice() -> void:
 	assert_true(bool(sim._connection_open[CONNECTION]), "a spent one-shot must never fire again")
 
 
-# --- INTERACTION ------------------------------------------------------------------------
+# --- DORMANT CONTROLLERS: concealment without a press ------------------------------------
 
-func test_interacting_out_of_range_is_refused_by_the_sim() -> void:
-	sim.register_interactable(0, Vector3(18.0, 0.0, 0.0), 2.0, false)
-	var events: Array[Event] = _interact()
-	assert_eq(events[0].kind, "interact_rejected", "range is the sim's decision, not presentation's")
-	assert_eq(sim._interactables[0]["state"], &"available", "and nothing was consumed")
+## CONCEALMENT IS NOW A DISABLED TRIGGER, not a hidden interactable. The plate exists in the
+## plan from the start; breaking what hid it turns it on.
+func test_a_dormant_plate_cannot_fire_until_it_is_enabled() -> void:
+	sim.register_trigger(0, FloorLayers.TRIGGER_REGION, WEST, -1, true,
+		[_effect(FloorLayers.EFFECT_OPEN_CONNECTION, CONNECTION)], false)
+	sim.register_connection(CONNECTION, DOOR, false)
+	_tick(5)
+	assert_false(bool(sim._connection_open[CONNECTION]),
+		"a dormant controller must not fire, however long the Envoy stands on it")
+
+	var events: Array[Event] = sim._apply_floor_effect(_effect(FloorLayers.EFFECT_ENABLE_TRIGGER, 0))
+	assert_eq(events[0].kind, "floor_trigger_enabled", "enabling announces itself")
+	_tick(2)
+	assert_true(bool(sim._connection_open[CONNECTION]), "and then it fires on the occupancy it always had")
 
 
-func test_a_hidden_interactable_cannot_be_used_until_revealed() -> void:
-	sim.register_interactable(0, Vector3(-12.0, 0.0, 0.0), 2.0, true)
-	assert_eq(_interact()[0].kind, "interact_rejected", "a concealed switch is not operable")
-	sim._apply_floor_effect(_effect(FloorLayers.EFFECT_REVEAL_INTERACTABLE, 0))
-	assert_eq(sim._interactables[0]["state"], &"available")
-	var events: Array[Event] = _interact()
-	assert_eq(events[0].kind, "interactable_used", "and operable once revealed")
-
-
-func test_an_interactable_is_spent_after_use() -> void:
-	sim.register_interactable(0, Vector3(-12.0, 0.0, 0.0), 2.0, false)
-	_interact()
-	assert_eq(_interact()[0].kind, "interact_rejected", "a used switch is no longer a candidate")
+## A dormant trigger must not BANK the edge it could not act on -- otherwise revealing a plate
+## under an Envoy already standing on it would arm a transition that never happens.
+func test_a_dormant_trigger_banks_no_occupancy_edge_while_it_waits() -> void:
+	sim.register_trigger(0, FloorLayers.TRIGGER_REGION, WEST, -1, true,
+		[_effect(FloorLayers.EFFECT_OPEN_CONNECTION, CONNECTION)], false)
+	sim.register_connection(CONNECTION, DOOR, false)
+	_tick(10)  # the Envoy stands on it the whole time, disabled
+	sim._apply_floor_effect(_effect(FloorLayers.EFFECT_ENABLE_TRIGGER, 0))
+	_tick(2)
+	assert_true(bool(sim._connection_open[CONNECTION]),
+		"revealed under someone already standing there, it must still fire")
 
 
 # --- ENCOUNTERS -------------------------------------------------------------------------
@@ -409,7 +416,6 @@ func test_a_burrowed_member_keeps_its_site_sealed() -> void:
 
 func test_all_floor_layer_state_dies_with_the_floor() -> void:
 	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
-	sim.register_interactable(0, Vector3(-12.0, 0.0, 0.0), 2.0, false)
 	sim.register_breakable(0, Vector3(-10.0, 0.0, 0.0), 0.8, 1.0)
 	sim.register_trigger(0, FloorLayers.TRIGGER_REGION, WEST, -1, true, [])
 	_add_enemy(ENEMY_A, Vector3(8.0, 0.0, 0.0))
@@ -420,11 +426,53 @@ func test_all_floor_layer_state_dies_with_the_floor() -> void:
 
 	assert_eq(sim.debug_describe_floor()["active_confinement"], -1, "a new floor inherits no seal")
 	for state_name in ["_connections", "_connection_open", "_triggers", "_triggers_fired",
-			"_interactables", "_breakables", "_encounters", "_encounter_bounds",
+			"_trigger_enabled", "_breakables", "_encounters", "_encounter_bounds",
 			"_encounter_roster", "_encounter_state", "_actor_encounter", "_patch_rects"]:
 		assert_eq((sim.get(state_name) as Dictionary if sim.get(state_name) is Dictionary else sim.get(state_name)).size(), 0,
 			"%s is FLOOR-scoped and must be empty after a transition" % state_name)
 	assert_false(sim.entities.has(ENEMY_A), "nor do the actors survive")
+
+
+# --- ALL_ACTIVE_ENVOYS_OCCUPY_REGION: one condition, two consumers -----------------------
+
+## The extracted condition itself, asserted directly rather than only through its consumers.
+func test_the_group_occupancy_condition_needs_every_living_envoy() -> void:
+	var region := Rect2(-14.0, -2.0, 4.0, 4.0)
+	sim.entities[PLAYER] = Vector3(-12.0, 0.0, 0.0)
+	assert_true(sim.all_active_envoys_occupy(region), "a party of one is satisfied by one")
+
+	sim.add_entity(ENEMY_B, Vector3(18.0, 0.0, 0.0), 6.0)
+	sim.register_combatant(ENEMY_B, 500.0, &"envoy", 0, 0.4, &"player")
+	sim.mark_run_persistent(ENEMY_B)
+	assert_false(sim.all_active_envoys_occupy(region), "a subset of the party is not the party")
+
+	sim.entities[ENEMY_B] = Vector3(-12.5, 0.0, 0.0)
+	assert_true(sim.all_active_envoys_occupy(region), "everyone together satisfies it")
+
+
+## THE FLOOR EXIT, the condition's second consumer. Effects stay authored separately: the same
+## question ("is everyone here?") commits a party to a fight in one place and finishes the floor
+## in another.
+func test_the_exit_completes_the_floor_from_the_same_condition() -> void:
+	sim.register_trigger(0, FloorLayers.TRIGGER_GROUP_OCCUPANCY, WEST, -1, true,
+		[_effect(FloorLayers.EFFECT_COMPLETE_FLOOR, -1)])
+	assert_false(sim.debug_describe_floor()["floor_complete"], "sanity: not complete on arrival")
+	var kinds: Array = []
+	for event in sim.tick([] as Array[Command], DT):
+		kinds.append(event.kind)
+	assert_true(kinds.has("floor_complete"), "standing on the exit together completes the floor")
+	assert_true(sim.debug_describe_floor()["floor_complete"], "and it is an authoritative fact, not just an Event")
+
+
+func test_completing_the_floor_twice_emits_nothing_the_second_time() -> void:
+	sim.register_trigger(0, FloorLayers.TRIGGER_GROUP_OCCUPANCY, WEST, -1, false,
+		[_effect(FloorLayers.EFFECT_COMPLETE_FLOOR, -1)])
+	sim.tick([] as Array[Command], DT)
+	var kinds: Array = []
+	for i in 5:
+		for event in sim.tick([] as Array[Command], DT):
+			kinds.append(event.kind)
+	assert_false(kinds.has("floor_complete"), "a completed floor completes once")
 
 
 # --- TERRITORY IS A UNION, NOT A PATCH ----------------------------------------------------

@@ -3,7 +3,7 @@
 	"breakables": [
 		{
 			"breakable_id": 0,
-			"conceals_interactable_id": 0,
+			"conceals_trigger_id": 2,
 			"durability": 1.0,
 			"position": {
 				"x": -12.0,
@@ -137,21 +137,9 @@
 			"encounter_id": 1,
 			"regions": [
 				{
-					"d": 16.0,
+					"d": 22.0,
 					"w": 8.0,
 					"x": 8.0,
-					"z": -30.0
-				},
-				{
-					"d": 4.0,
-					"w": 32.0,
-					"x": -16.0,
-					"z": -16.0
-				},
-				{
-					"d": 6.0,
-					"w": 32.0,
-					"x": -16.0,
 					"z": -34.0
 				}
 			],
@@ -180,19 +168,6 @@
 		"z": -3.0
 	},
 	"floor_seed": 9187797864493275191,
-	"interactables": [
-		{
-			"interactable_id": 0,
-			"kind": "switch",
-			"position": {
-				"x": -12.0,
-				"y": 0.0,
-				"z": -24.0
-			},
-			"starts_hidden": true,
-			"use_radius": 2.0
-		}
-	],
 	"patches": [
 		{
 			"boundary_style": "wall",
@@ -333,14 +308,16 @@
 				"x": -16.0,
 				"z": -16.0
 			},
+			"renders_as_plate": false,
 			"source_id": -1,
+			"starts_enabled": true,
 			"trigger_id": 0
 		},
 		{
 			"effects": [
 				{
-					"kind": "reveal_interactable",
-					"target_id": 0
+					"kind": "enable_trigger",
+					"target_id": 2
 				}
 			],
 			"kind": "breakable_destroyed",
@@ -351,7 +328,9 @@
 				"x": 0.0,
 				"z": 0.0
 			},
+			"renders_as_plate": false,
 			"source_id": 0,
+			"starts_enabled": true,
 			"trigger_id": 1
 		},
 		{
@@ -361,15 +340,17 @@
 					"target_id": 1
 				}
 			],
-			"kind": "interacted",
+			"kind": "region_entered",
 			"once": true,
 			"region": {
-				"d": 0.0,
-				"w": 0.0,
-				"x": 0.0,
-				"z": 0.0
+				"d": 3.2,
+				"w": 3.2,
+				"x": -13.6,
+				"z": -25.6
 			},
-			"source_id": 0,
+			"renders_as_plate": true,
+			"source_id": -1,
+			"starts_enabled": false,
 			"trigger_id": 2
 		},
 		{
@@ -387,7 +368,7 @@
 					"target_id": 0
 				}
 			],
-			"kind": "party_plate",
+			"kind": "group_occupancy",
 			"once": true,
 			"region": {
 				"d": 4.0,
@@ -395,7 +376,9 @@
 				"x": -2.0,
 				"z": -41.0
 			},
+			"renders_as_plate": true,
 			"source_id": -1,
+			"starts_enabled": true,
 			"trigger_id": 3
 		},
 		{
@@ -417,8 +400,30 @@
 				"x": 0.0,
 				"z": 0.0
 			},
+			"renders_as_plate": false,
 			"source_id": 0,
+			"starts_enabled": true,
 			"trigger_id": 4
+		},
+		{
+			"effects": [
+				{
+					"kind": "complete_floor",
+					"target_id": -1
+				}
+			],
+			"kind": "group_occupancy",
+			"once": true,
+			"region": {
+				"d": 4.0,
+				"w": 4.0,
+				"x": -2.0,
+				"z": -97.0
+			},
+			"renders_as_plate": true,
+			"source_id": -1,
+			"starts_enabled": true,
+			"trigger_id": 5
 		}
 	]
 }

@@ -124,8 +124,8 @@ func test_at_least_one_route_is_visible_before_it_is_reachable() -> void:
 
 
 ## The blocker's answer must be SOMEWHERE ELSE. Asserted structurally: the trigger that opens
-## the first blocked route is fired by an interactable, and that interactable is concealed by a
-## breakable -- so the route cannot open by walking at it.
+## the first blocked route starts DORMANT and is enabled by destroying a breakable -- so the
+## route cannot open by walking at it, and the discovery is the search, not a keypress.
 func test_a_blocked_route_is_opened_by_something_found_elsewhere() -> void:
 	var plan: FloorPlan = _plan()
 	var opener: FloorTrigger = null
@@ -134,17 +134,19 @@ func test_a_blocked_route_is_opened_by_something_found_elsewhere() -> void:
 			if effect["kind"] == FloorLayers.EFFECT_OPEN_CONNECTION and effect["target_id"] == ArchivePrototypeLayout.C_TO_APPROACH:
 				opener = trigger
 	assert_not_null(opener, "something must open the forward route")
-	assert_eq(opener.kind, FloorLayers.TRIGGER_INTERACTED, "and it must be an act, not arrival")
+	assert_false(opener.starts_enabled, "the opener must be concealed -- otherwise there is nothing to discover")
+	assert_true(opener.renders_as_plate, "and it must be something the player can see once found")
 
-	var hidden: InteractablePlan = null
-	for interactable in plan.interactables:
-		if interactable.interactable_id == opener.source_id:
-			hidden = interactable
-	assert_not_null(hidden)
-	assert_true(hidden.starts_hidden, "the opener must be concealed -- otherwise there is nothing to discover")
+	var enabled_by: Array = []
+	for trigger in plan.triggers:
+		for effect in trigger.effects:
+			if effect["kind"] == FloorLayers.EFFECT_ENABLE_TRIGGER and effect["target_id"] == opener.trigger_id:
+				enabled_by.append(trigger)
+	assert_eq(enabled_by.size(), 1, "exactly one thing may reveal it")
+	assert_eq(enabled_by[0].kind, FloorLayers.TRIGGER_BREAKABLE_DESTROYED, "and that thing is the prop")
 	var concealed_by: Array = []
 	for breakable in plan.breakables:
-		if breakable.conceals_interactable_id == hidden.interactable_id:
+		if breakable.conceals_trigger_id == opener.trigger_id:
 			concealed_by.append(breakable)
 	assert_eq(concealed_by.size(), 1, "exactly one breakable must conceal it")
 
@@ -168,7 +170,7 @@ func test_the_party_plate_owns_its_whole_consequence_in_one_record() -> void:
 	var plan: FloorPlan = _plan()
 	var button: FloorTrigger = null
 	for trigger in plan.triggers:
-		if trigger.kind == FloorLayers.TRIGGER_PARTY_PLATE:
+		if trigger.kind == FloorLayers.TRIGGER_GROUP_OCCUPANCY and (trigger.effects as Array).size() >= 3:
 			button = trigger
 	assert_not_null(button, "the party plate must have a trigger")
 	assert_gt(button.region.get_area(), 0.0, "an occupancy trigger needs somewhere to stand")
@@ -203,9 +205,9 @@ func test_every_effect_targets_something_real() -> void:
 	var encounter_ids: Dictionary = {}
 	for encounter in plan.encounters:
 		encounter_ids[encounter.encounter_id] = true
-	var interactable_ids: Dictionary = {}
-	for interactable in plan.interactables:
-		interactable_ids[interactable.interactable_id] = true
+	var trigger_ids: Dictionary = {}
+	for trigger in plan.triggers:
+		trigger_ids[trigger.trigger_id] = true
 
 	for trigger in plan.triggers:
 		for effect in trigger.effects:
@@ -215,8 +217,10 @@ func test_every_effect_targets_something_real() -> void:
 					assert_true(connection_ids.has(target), "trigger %d targets missing connection %d" % [trigger.trigger_id, target])
 				"activate_encounter":
 					assert_true(encounter_ids.has(target), "trigger %d targets missing encounter %d" % [trigger.trigger_id, target])
-				"reveal_interactable":
-					assert_true(interactable_ids.has(target), "trigger %d targets missing interactable %d" % [trigger.trigger_id, target])
+				"enable_trigger":
+					assert_true(trigger_ids.has(target), "trigger %d targets missing trigger %d" % [trigger.trigger_id, target])
+				"complete_floor":
+					pass  # completion targets nothing; it is the floor's own terminal fact
 				_:
 					fail_test("trigger %d uses unknown effect kind '%s'" % [trigger.trigger_id, effect["kind"]])
 
@@ -331,3 +335,71 @@ func test_no_aperture_is_narrower_than_the_widest_body_the_floor_spawns() -> voi
 		var narrowest: float = minf(connection.aperture.size.x, connection.aperture.size.y)
 		assert_gt(narrowest, widest * 2.0,
 			"aperture %d is %.2f wide, which cannot pass a %.2f-diameter body" % [connection.connection_id, narrowest, widest * 2.0])
+
+
+## THE FLOOR EXIT IS A CONDITION, NOT A PILLAR. Progression is gated on the whole expedition
+## standing on the final space -- the same shared condition the party plate uses.
+func test_the_floor_ends_on_a_group_occupancy_plate() -> void:
+	var plan: FloorPlan = _plan()
+	var exit_trigger: FloorTrigger = null
+	for trigger in plan.triggers:
+		for effect in trigger.effects:
+			if effect["kind"] == FloorLayers.EFFECT_COMPLETE_FLOOR:
+				exit_trigger = trigger
+	assert_not_null(exit_trigger, "the floor must have a way to be finished")
+	assert_eq(exit_trigger.kind, FloorLayers.TRIGGER_GROUP_OCCUPANCY,
+		"and finishing it must ask the whole party, exactly as committing to the fight does")
+	assert_true(exit_trigger.renders_as_plate, "the exit is somewhere you stand, and can see")
+	assert_true(WalkableBounds.contains(exit_trigger.region, plan.end_marker.x, plan.end_marker.z),
+		"the exit plate must be where the endpoint marker actually is")
+
+
+## THE INTERACT VERB IS RETIRED. Zero-consumer vocabulary does not survive on the grounds that
+## it might be useful later (§1.4, run backwards).
+func test_no_authored_control_requires_a_press() -> void:
+	var plan: FloorPlan = _plan()
+	for trigger in plan.triggers:
+		assert_ne(String(trigger.kind), "interacted",
+			"trigger %d still wants a keypress; every control is stood on now" % trigger.trigger_id)
+
+
+## THE AMBIENT CONVEXITY CONSTRAINT (ruled 2026-08-29, after instrumenting the Ooze).
+##
+## The AI steers in straight lines and has NO obstacle routing. A territory that wraps a void
+## therefore makes pursuit rub along the corner -- confirmed by tools/diagnose_ooze_pursuit.gd,
+## which measured 80 of 80 contact-phase ticks lost to legality for 0.9 units of progress.
+##
+## The fix is an authoring constraint, not a navigation system: an ambient territory's walkable
+## union must EQUAL ITS OWN BOUNDING BOX. A solid rectangle is convex, so every straight line
+## inside it is legal and no pursuit within it can ever need to route around anything.
+## Obstacle-aware navigation is ROADMAP P33, for a floor that genuinely requires it.
+func test_ambient_territories_are_convex_so_straight_line_pursuit_never_needs_routing() -> void:
+	var plan: FloorPlan = _plan()
+	var open_ids: Dictionary = {}
+	for connection in plan.connections:
+		open_ids[connection.connection_id] = true
+	var floor_rects: Array[Rect2] = plan.open_walkable_rects(open_ids)
+
+	for encounter in plan.encounters_of_role(FloorLayers.ROLE_AMBIENT):
+		var clipped: Array[Rect2] = []
+		var bounding: Rect2 = Rect2()
+		for region: Rect2 in encounter.regions:
+			for rect in floor_rects:
+				var shared: Rect2 = rect.intersection(region)
+				if shared.get_area() <= 0.0:
+					continue
+				clipped.append(shared)
+				bounding = shared if bounding.get_area() <= 0.0 else bounding.merge(shared)
+		var territory := WalkableBounds.new(clipped)
+
+		# Sample the bounding box: if every point in it is walkable territory, the union IS the
+		# box, which is exactly what convex means for an axis-aligned union.
+		var step: float = 0.5
+		var x: float = bounding.position.x
+		while x <= bounding.end.x:
+			var z: float = bounding.position.y
+			while z <= bounding.end.y:
+				assert_true(territory.is_inside(Vector3(x, 0.0, z)),
+					"ambient encounter %d has a hole or notch at (%.1f, %.1f): straight-line pursuit inside it would need routing the AI does not have" % [encounter.encounter_id, x, z])
+				z += step
+			x += step

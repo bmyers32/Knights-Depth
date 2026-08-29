@@ -89,16 +89,16 @@ func test_the_committed_fixture_describes_a_sane_floor() -> void:
 		assert_gt((trigger["effects"] as Array).size(), 0, "a controller with no effect does nothing")
 	assert_true(by_kind.has("region_entered"), "a one-way commitment")
 	assert_true(by_kind.has("breakable_destroyed"), "a concealment reveal")
-	assert_true(by_kind.has("interacted"), "player-operated switches")
 	assert_true(by_kind.has("encounter_cleared"), "and progression past the fight")
-	assert_true(by_kind.has("party_plate"), "the commitment beat is a plate you stand on, not an E press")
+	assert_true(by_kind.has("group_occupancy"), "the commitment beat is a plate you stand on, not an E press")
+	assert_false(by_kind.has("interacted"), "and no control anywhere on the floor asks for a press")
 
-	# THE PARTY BUTTON: its whole consequence in ONE record.
+	# THE PARTY PLATE: its whole consequence in ONE record.
 	var multi: int = 0
 	for trigger in triggers:
 		if (trigger["effects"] as Array).size() >= 3:
 			multi += 1
-	assert_gt(multi, 0, "one interactable must own a multi-effect sequence atomically")
+	assert_gt(multi, 0, "one controller must own a multi-effect sequence atomically")
 
 	# NO fight may start merely by entering a region -- the rule play falsified. A PARTY PLATE is
 	# deliberately exempt and deliberately a DIFFERENT KIND: the falsified rule was geometry
@@ -126,14 +126,14 @@ func test_the_committed_fixture_describes_a_sane_floor() -> void:
 	assert_true(roles.has("mandatory"), "one authored lock-in fight")
 	assert_true(roles.has("ambient"), "and one inhabited territory")
 
-	var hidden: int = 0
-	for interactable in fixture["interactables"]:
-		if bool(interactable["starts_hidden"]):
-			hidden += 1
-	assert_eq(hidden, 1, "exactly one concealed progression control")
+	var dormant: int = 0
+	for trigger in triggers:
+		if not bool(trigger["starts_enabled"]):
+			dormant += 1
+	assert_eq(dormant, 1, "exactly one concealed progression control")
 	assert_eq((fixture["breakables"] as Array).size(), 1, "concealed by exactly one prop")
-	assert_eq(int(fixture["breakables"][0]["conceals_interactable_id"]),
-		int(_first_hidden(fixture)["interactable_id"]), "and the prop must conceal THAT switch")
+	assert_eq(int(fixture["breakables"][0]["conceals_trigger_id"]),
+		int(_first_dormant(fixture)["trigger_id"]), "and the prop must conceal THAT control")
 
 	# --- Arrival and endpoint both stand on real ground, and the floor leads somewhere.
 	var entry: Dictionary = fixture["entry_point"]
@@ -154,10 +154,10 @@ func _by_id(items: Array, key: String, wanted: int) -> Dictionary:
 	return {}
 
 
-func _first_hidden(fixture: Dictionary) -> Dictionary:
-	for interactable in fixture["interactables"]:
-		if bool(interactable["starts_hidden"]):
-			return interactable
+func _first_dormant(fixture: Dictionary) -> Dictionary:
+	for trigger in fixture["triggers"]:
+		if not bool(trigger["starts_enabled"]):
+			return trigger
 	return {}
 
 

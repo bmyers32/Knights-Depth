@@ -4,7 +4,7 @@ extends GutTest
 ##   START -> one-way commitment -> hall wrapping a void -> forward route VISIBLE BUT BLOCKED
 ##   -> branch west -> break the crate -> reveal the switch -> use it -> route opens
 ##   -> PARTY PLATE (stood on, never pressed): rear seals, forward opens, roster ARRIVES
-##   -> clear -> ramp AND the last route open together -> raised ground -> endpoint
+##   -> clear -> ramp AND the last route open together -> raised ground -> EXIT PLATE
 ##
 ## The unit tests each prove one law. This proves they COMPOSE into something a player can
 ## actually walk, which is the only thing that answers "is this slice playable?" short of a
@@ -50,15 +50,20 @@ func _walk_to(arena: Node3D, target: Vector3, max_ticks: int = 1500) -> bool:
 	return arena.sim.entities[envoy_id].distance_to(target) < 1.2
 
 
-func _interact(arena: Node3D) -> Array[Event]:
-	return arena.sim.tick([Command.new(arena.sim.tick_count, _envoy(arena), "interact", {})] as Array[Command], DT)
-
-
-## Walks into range of an interactable and operates it. The walk matters: use_radius is the
-## SIM's decision, so a test that teleports would never exercise the range check a player does.
-func _use(arena: Node3D, position: Vector3) -> Array[Event]:
-	assert_true(_walk_to(arena, position), "the interactable at %s must be reachable" % position)
-	return _interact(arena)
+## Walks onto an authored plate region, COLLECTING events, because occupancy is evaluated every
+## tick: by the time the walk returns, whatever the plate does has already happened.
+func _step_onto(arena: Node3D, region: Rect2, tolerance: float = 0.6) -> Array[Event]:
+	var envoy_id: int = _envoy(arena)
+	var target := Vector3(region.position.x + region.size.x * 0.5, 0.0, region.position.y + region.size.y * 0.5)
+	var events: Array[Event] = []
+	for i in 1500:
+		var position: Vector3 = arena.sim.entities[envoy_id]
+		if position.distance_to(target) < tolerance:
+			break
+		var direction: Vector3 = target - position
+		direction.y = 0.0
+		events.append_array(arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "move", {"direction": direction.normalized()})] as Array[Command], DT))
+	return events
 
 
 func _patch_centre(arena: Node3D, patch_id: int) -> Vector3:
@@ -106,33 +111,15 @@ func _approach_hold() -> Vector3:
 	return Vector3(4.5, 0.0, -39.0)
 
 
-## The plate's centre. Standing here is the whole activation -- there is no Command to send.
-func _plate_centre() -> Vector3:
-	var region: Rect2 = L.PARTY_PLATE_REGION
-	return Vector3(region.position.x + region.size.x * 0.5, 0.0, region.position.y + region.size.y * 0.5)
-
-
-## Walks onto the plate, COLLECTING events, because activation happens during the walk itself:
-## occupancy is evaluated every tick, so by the time the walk returns the fight has begun.
 func _step_onto_the_plate(arena: Node3D) -> Array[Event]:
-	var envoy_id: int = _envoy(arena)
-	var target: Vector3 = _plate_centre()
-	var events: Array[Event] = []
-	for i in 1500:
-		var position: Vector3 = arena.sim.entities[envoy_id]
-		if position.distance_to(target) < 0.6:
-			break
-		var direction: Vector3 = target - position
-		direction.y = 0.0
-		events.append_array(arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "move", {"direction": direction.normalized()})] as Array[Command], DT))
-	return events
+	return _step_onto(arena, L.PARTY_PLATE_REGION)
 
 
 ## Everything up to and including the party committing to the fight.
 func _reach_and_start_the_fight(arena: Node3D) -> void:
 	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)))
 	_break_the_crate(arena)
-	_use(arena, _plan(arena).interactables[0].position)
+	_step_onto(arena, L.HIDDEN_PLATE_REGION)
 	assert_true(_walk_to(arena, _approach_hold()))
 	_step_onto_the_plate(arena)
 
@@ -151,7 +138,7 @@ func test_the_arena_boots_the_authored_floor_with_all_four_layers() -> void:
 	assert_gt(arena.sim._connections.size(), 0, "progression layer registered")
 	assert_gt(arena.sim._triggers.size(), 0, "controllers registered")
 	assert_gt(arena.sim._encounters.size(), 1, "encounter layer registered")
-	assert_gt(arena.sim._interactables.size(), 0, "interaction layer registered")
+	assert_gt(arena.sim._breakables.size(), 0, "interaction layer registered")
 	assert_eq(arena.sim._breakables.size(), 1, "and one prop to search behind")
 
 
@@ -214,15 +201,15 @@ func test_the_forward_route_is_visible_but_blocked_until_earned() -> void:
 func test_breaking_the_crate_reveals_the_switch_that_opens_the_route() -> void:
 	var arena: Node3D = _boot()
 	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)))
-	assert_eq(arena.sim._interactables[L.I_HIDDEN_SWITCH]["state"], &"hidden", "concealed to begin with")
+	assert_false(bool(arena.sim._trigger_enabled[L.T_HIDDEN_PLATE]), "concealed to begin with")
 
 	var kinds: Array = _kinds(_break_the_crate(arena))
 	assert_true(kinds.has("breakable_destroyed"), "the crate must be destructible")
-	assert_true(kinds.has("interactable_revealed"), "and must reveal what it hid")
+	assert_true(kinds.has("floor_trigger_enabled"), "and must reveal what it hid")
 
-	assert_false(_open(arena, L.C_TO_APPROACH), "revealing is not yet using")
-	_use(arena, _plan(arena).interactables[0].position)
-	assert_true(_open(arena, L.C_TO_APPROACH), "using the found switch is what opens the way")
+	assert_false(_open(arena, L.C_TO_APPROACH), "revealing is not yet standing on it")
+	_step_onto(arena, L.HIDDEN_PLATE_REGION)
+	assert_true(_open(arena, L.C_TO_APPROACH), "stepping onto what it hid is what opens the way")
 
 
 # --- THE PARTY PLATE ----------------------------------------------------------------------
@@ -233,7 +220,7 @@ func test_the_party_plate_seals_the_rear_opens_the_way_and_summons_the_roster() 
 	var arena: Node3D = _boot()
 	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)))
 	_break_the_crate(arena)
-	_use(arena, _plan(arena).interactables[0].position)
+	_step_onto(arena, L.HIDDEN_PLATE_REGION)
 	assert_true(_walk_to(arena, _approach_hold()))
 
 	assert_true(_open(arena, L.C_TO_APPROACH), "sanity: rear open before the plate")
@@ -249,13 +236,17 @@ func test_the_party_plate_seals_the_rear_opens_the_way_and_summons_the_roster() 
 		assert_false(arena.sim.debug_is_combat_absent(actor_id), "the roster ARRIVES when they commit")
 
 
-## NO E ANYWHERE ON THE APPROACH. The plate is not an interactable, so the only thing left on
-## this floor that answers an interact Command is the switch you had to search for.
-func test_the_plate_is_not_an_interactable() -> void:
+## NO PRESS SURVIVES ANYWHERE ON THIS FLOOR. Every control is something you stand on, and the
+## `interact` Command was retired with its last consumer.
+func test_the_floor_has_no_interact_verb_left() -> void:
 	var arena: Node3D = _boot()
-	for interactable in _plan(arena).interactables:
-		assert_ne(interactable.kind, &"party_button", "the party button must be gone entirely")
-	assert_eq(_plan(arena).interactables.size(), 1, "exactly one interactable survives: the hidden switch")
+	for trigger in _plan(arena).triggers:
+		assert_ne(String(trigger.kind), "interacted", "trigger %d still wants a press" % trigger.trigger_id)
+	var plates: int = 0
+	for trigger in _plan(arena).triggers:
+		if trigger.renders_as_plate:
+			plates += 1
+	assert_eq(plates, 3, "the hidden plate, the party plate and the exit are all stood on")
 
 
 func test_the_sealed_encounter_confines_both_sides() -> void:
@@ -310,7 +301,7 @@ func test_the_envoy_can_traverse_the_entire_floor_to_the_endpoint() -> void:
 	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_SOUTH)), "into the hall")
 	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_WEST)), "down the west branch")
 	_break_the_crate(arena)
-	_use(arena, plan.interactables[0].position)
+	_step_onto(arena, L.HIDDEN_PLATE_REGION)
 	assert_true(_walk_to(arena, _approach_hold()), "through the route it opened")
 	assert_false(_open(arena, L.C_TO_END), "sanity: the last route is earned, not free")
 	_step_onto_the_plate(arena)
@@ -321,7 +312,12 @@ func test_the_envoy_can_traverse_the_entire_floor_to_the_endpoint() -> void:
 	assert_true(_open(arena, L.C_TO_END), "clearing the fight opens the last route itself")
 	assert_true(_walk_to(arena, _patch_centre(arena, L.P_RAMP)), "up the ramp")
 	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HIGH)), "onto the high ground")
-	assert_true(_walk_to(arena, plan.end_marker), "and the floor ends somewhere")
+	# THE EXIT IS A CONDITION, not a pillar: the floor is not finished until the whole
+	# expedition is standing on it.
+	assert_false(arena.sim.debug_describe_floor()["floor_complete"], "sanity: not finished on arrival")
+	_step_onto(arena, L.EXIT_PLATE_REGION)
+	assert_true(arena.sim.debug_describe_floor()["floor_complete"],
+		"standing on the exit together is what finishes the floor")
 
 
 ## Elevation is PRESENTATION: the sim stays flat while the rendered Envoy climbs.

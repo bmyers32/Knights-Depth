@@ -23,6 +23,12 @@ extends SceneTree
 ##               deleted, so the last connection now opens from the encounter clear. The old
 ##               fixture describes a floor nothing can produce. Schema + authoring migration,
 ##               not a drift-hiding re-record. Hand-inspected before commit.
+##   2026-08-29  RE-BASELINED for the interaction ruling. INTERACTABLES ARE RETIRED: the hidden
+##               switch became a dormant PLATE enabled by the crate, the floor exit became a
+##               group-occupancy plate emitting floor_complete, and the `switch` kind,
+##               InteractablePlan, TRIGGER_INTERACTED and the `interact` Command went with their
+##               last consumer. Triggers gained starts_enabled + renders_as_plate. Schema +
+##               authoring migration, not a drift-hiding re-record. Hand-inspected before commit.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the
@@ -72,11 +78,9 @@ func _init() -> void:
 	for connection in serialized["connections"]:
 		print("  connection %d %s open=%s %s" % [connection["connection_id"], connection["patch_ids"], connection["starts_open"], connection["aperture"]])
 	for trigger in serialized["triggers"]:
-		print("  trigger %d %-22s source=%d effects=%s" % [trigger["trigger_id"], trigger["kind"], trigger["source_id"], trigger["effects"]])
+		print("  trigger %d %-22s source=%d enabled=%s plate=%s effects=%s" % [trigger["trigger_id"], trigger["kind"], trigger["source_id"], trigger["starts_enabled"], trigger["renders_as_plate"], trigger["effects"]])
 	for encounter in serialized["encounters"]:
 		print("  encounter %d %-10s confines=%s spawn_at_load=%s roster=%d" % [encounter["encounter_id"], encounter["role"], encounter["confines_player"], encounter["spawn_at_floor_load"], encounter["roster"].size()])
-	for interactable in serialized["interactables"]:
-		print("  interactable %d %-14s hidden=%s %s" % [interactable["interactable_id"], interactable["kind"], interactable["starts_hidden"], interactable["position"]])
 	for breakable in serialized["breakables"]:
-		print("  breakable %d conceals=%d %s" % [breakable["breakable_id"], breakable["conceals_interactable_id"], breakable["position"]])
+		print("  breakable %d conceals trigger %d %s" % [breakable["breakable_id"], breakable["conceals_trigger_id"], breakable["position"]])
 	quit(0)

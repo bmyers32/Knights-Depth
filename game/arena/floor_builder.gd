@@ -42,12 +42,11 @@ const _WALL_COLOR: Color = Color(0.36, 0.35, 0.42)
 const _GATE_CLOSED_COLOR: Color = Color(0.78, 0.28, 0.26)
 const _MARKER_COLOR: Color = Color(0.88, 0.80, 0.42)
 const _BREAKABLE_COLOR: Color = Color(0.52, 0.40, 0.24)
-const _SWITCH_COLOR: Color = Color(0.40, 0.72, 0.88)
 const _PLATE_COLOR: Color = Color(0.92, 0.62, 0.24)
 const _PLATE_THICKNESS: float = 0.12
 
 var _gates: Dictionary = {}          # connection_id -> barrier mesh
-var _interactables: Dictionary = {}  # interactable_id -> mesh
+var _plates: Dictionary = {}         # trigger_id -> plate mesh
 var _breakables: Dictionary = {}     # breakable_id -> mesh
 ## rect -> elevation, so an actor's transform can be lifted onto raised ground.
 var _elevation_rects: Array = []
@@ -65,14 +64,14 @@ func build(plan: FloorPlan, first_actor_id: int) -> Array[Dictionary]:
 		_build_connection(connection, plan)
 	for breakable in plan.breakables:
 		_build_breakable(breakable)
-	for interactable in plan.interactables:
-		_build_interactable(interactable)
 	# A PLATE IS A PICTURE OF A TRIGGER, exactly as a gate is a picture of a rule: the sim fires
 	# on occupancy whether or not this mesh exists. It is drawn from the trigger itself so the
-	# thing you stand on and the thing that fires can never be authored in two places.
+	# thing you stand on and the thing that fires can never be authored in two places. A DORMANT
+	# plate is built and hidden, never spawned later -- presentation must not be able to
+	# disagree with the sim about whether a control exists.
 	for trigger in plan.triggers:
-		if trigger.kind == FloorLayers.TRIGGER_PARTY_PLATE:
-			_build_plate(trigger.region)
+		if trigger.renders_as_plate:
+			_build_plate(trigger.trigger_id, trigger.region, trigger.starts_enabled)
 	_build_end_marker(plan.end_marker)
 
 	var spawned: Array[Dictionary] = []
@@ -99,7 +98,7 @@ func build(plan: FloorPlan, first_actor_id: int) -> Array[Dictionary]:
 ## would still answer get_children().
 func clear_floor() -> void:
 	_gates.clear()
-	_interactables.clear()
+	_plates.clear()
 	_breakables.clear()
 	_elevation_rects.clear()
 	for child in get_children():
@@ -125,9 +124,9 @@ func set_gate_closed(connection_id: int, closed: bool) -> void:
 		_gates[connection_id].visible = closed
 
 
-func set_interactable_visible(interactable_id: int, shown: bool) -> void:
-	if _interactables.has(interactable_id):
-		_interactables[interactable_id].visible = shown
+func set_plate_visible(trigger_id: int, shown: bool) -> void:
+	if _plates.has(trigger_id):
+		_plates[trigger_id].visible = shown
 
 
 func remove_breakable(breakable_id: int) -> void:
@@ -240,31 +239,20 @@ func _build_breakable(breakable: BreakablePlan) -> void:
 	_breakables[breakable.breakable_id] = mesh
 
 
-## A hidden interactable is built but not shown -- revealing it is a visibility flip driven by
-## a sim Event, never a spawn, so presentation can never disagree about whether it exists.
-func _build_interactable(interactable: InteractablePlan) -> void:
-	var size := Vector3(0.6, 1.4, 0.6)
-	var colour: Color = _SWITCH_COLOR
-	var mesh := _add_box(size, interactable.position + Vector3(0.0, size.y * 0.5, 0.0), colour)
-	mesh.material_override.emission_enabled = true
-	mesh.material_override.emission = colour
-	mesh.material_override.emission_energy_multiplier = 0.5
-	mesh.visible = not interactable.starts_hidden
-	_interactables[interactable.interactable_id] = mesh
-
-
 ## The floor plate the party stands on. Flush with the ground and lit, so it reads as somewhere
 ## to STAND rather than something to press.
-func _build_plate(region: Rect2) -> void:
+func _build_plate(trigger_id: int, region: Rect2, visible_now: bool) -> void:
 	var centre := Vector3(region.position.x + region.size.x * 0.5, 0.0, region.position.y + region.size.y * 0.5)
 	var plate := _add_box(
 		Vector3(region.size.x, _PLATE_THICKNESS, region.size.y),
-		centre + Vector3(0.0, _PLATE_THICKNESS * 0.5, 0.0),
+		centre + Vector3(0.0, elevation_at(centre) + _PLATE_THICKNESS * 0.5, 0.0),
 		_PLATE_COLOR,
 	)
 	plate.material_override.emission_enabled = true
 	plate.material_override.emission = _PLATE_COLOR
 	plate.material_override.emission_energy_multiplier = 0.5
+	plate.visible = visible_now
+	_plates[trigger_id] = plate
 
 
 ## The terminal marker (ruled): a deterministic visual endpoint whose only job is to make the

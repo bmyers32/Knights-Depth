@@ -10,9 +10,12 @@ extends RefCounted
 ## THE GRAMMAR IT ENCODES, in order:
 ##   START -> one-way commitment -> irregular open hall wrapping a VOID -> a forward route
 ##   visible but BLOCKED -> a branch (west solves, east is inhabited) -> breakable search
-##   revealing a switch -> switch opens the blocked route -> PARTY PLATE: rear seals, forward
-##   opens, roster spawns, encounter begins -> clear -> the way onward opens -> ramp to raised
-##   ground -> endpoint.
+##   revealing a HIDDEN PLATE -> standing on it opens the blocked route -> PARTY PLATE: rear
+##   seals, forward opens, roster spawns, encounter begins -> clear -> the way onward opens ->
+##   ramp to raised ground -> EXIT PLATE completes the floor.
+##
+## THERE IS NO `interact` VERB ON THIS FLOOR. Every control is something you STAND ON, and the
+## floor has no press left that a player could not have discovered by walking.
 ##
 ## TWO BEATS CHANGED AFTER HUMAN PLAY (2026-08-29), both removing input that bought nothing:
 ##   * the party button is now a PLATE you stand on, not an E interactable -- a coordination
@@ -74,12 +77,23 @@ const C_TO_END := 4
 const E_ARENA := 0
 const E_EAST_AMBIENT := 1
 
-# Interactable ids
-const I_HIDDEN_SWITCH := 0
+# Trigger ids
+const T_COMMIT := 0
+const T_CRATE := 1
+const T_HIDDEN_PLATE := 2
+const T_PARTY_PLATE := 3
+const T_CLEARED := 4
+const T_EXIT_PLATE := 5
 
+## What the crate hides: a plate, dormant until the crate is gone. Sits where the crate stood,
+## down the west branch, deliberately far from the route it opens.
+const HIDDEN_PLATE_REGION := Rect2(-13.6, -25.6, 3.2, 3.2)
 ## The plate the expedition must stand on to commit to the fight. Sits inside pApproach, so the
 ## seal closes around where the party already is.
 const PARTY_PLATE_REGION := Rect2(-2.0, -41.0, 4.0, 4.0)
+## THE FLOOR EXIT. Not a passive marker any more: progression is gated on the whole expedition
+## standing here together, which is the same condition the party plate asks (FloorLayers).
+const EXIT_PLATE_REGION := Rect2(-2.0, -97.0, 4.0, 4.0)
 
 # Breakable ids
 const B_CRATE := 0
@@ -137,16 +151,18 @@ static func _progression(plan: FloorPlan) -> void:
 
 	# ONE-WAY COMMITMENT, expressed as an ordinary controller rather than a new legality rule:
 	# reaching the hall fires once and blocks the way back. Nothing about C_COMMIT is special.
-	_trigger(plan, 0, FloorLayers.TRIGGER_REGION, plan.patch_by_id(P_HALL_SOUTH).rect, -1, [
+	_trigger(plan, T_COMMIT, FloorLayers.TRIGGER_REGION, plan.patch_by_id(P_HALL_SOUTH).rect, -1, [
 		FloorLayers.effect(FloorLayers.EFFECT_BLOCK_CONNECTION, C_COMMIT),
 	])
-	# Search -> discovery: breaking the crate reveals the switch that opens the forward route.
-	_trigger(plan, 1, FloorLayers.TRIGGER_BREAKABLE_DESTROYED, Rect2(), B_CRATE, [
-		FloorLayers.effect(FloorLayers.EFFECT_REVEAL_INTERACTABLE, I_HIDDEN_SWITCH),
+	# SEARCH -> DISCOVERY, with no press in it. Breaking the crate ENABLES the plate it hid;
+	# stepping onto that plate opens the forward route. The discovery is the crate and the
+	# plate, never a keypress -- the E only ever confirmed something the player already knew.
+	_trigger(plan, T_CRATE, FloorLayers.TRIGGER_BREAKABLE_DESTROYED, Rect2(), B_CRATE, [
+		FloorLayers.effect(FloorLayers.EFFECT_ENABLE_TRIGGER, T_HIDDEN_PLATE),
 	])
-	_trigger(plan, 2, FloorLayers.TRIGGER_INTERACTED, Rect2(), I_HIDDEN_SWITCH, [
+	_trigger(plan, T_HIDDEN_PLATE, FloorLayers.TRIGGER_REGION, HIDDEN_PLATE_REGION, -1, [
 		FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, C_TO_APPROACH),
-	])
+	], false, true)
 	# THE PARTY PLATE -- the whole reference sequence as ONE authored record. Reading these
 	# three lines tells you everything standing on it does; splitting them across gate, spawn
 	# and presentation code is how "why did the door shut?" becomes unanswerable.
@@ -154,18 +170,25 @@ static func _progression(plan: FloorPlan) -> void:
 	# It is a PLATE, not a button: the beat was always "the party commits together", and an E
 	# press could never express that. Its condition is every living Envoy standing here at once
 	# (solo resolves to one), and it fires on the FALSE -> TRUE edge, so waiting on it is quiet.
-	_trigger(plan, 3, FloorLayers.TRIGGER_PARTY_PLATE, PARTY_PLATE_REGION, -1, [
+	_trigger(plan, T_PARTY_PLATE, FloorLayers.TRIGGER_GROUP_OCCUPANCY, PARTY_PLATE_REGION, -1, [
 		FloorLayers.effect(FloorLayers.EFFECT_BLOCK_CONNECTION, C_TO_APPROACH),
 		FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, C_TO_ARENA),
 		FloorLayers.effect(FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, E_ARENA),
-	])
+	], true, true)
 	# THE REAL PREREQUISITE FOR THE WAY OUT IS THE FIGHT. Both remaining connections open on the
 	# clear, so the route onward is continuous once it is earned. The switch that used to sit on
 	# the high ground is gone: it gated nothing the clear had not already decided.
-	_trigger(plan, 4, FloorLayers.TRIGGER_ENCOUNTER_CLEARED, Rect2(), E_ARENA, [
+	_trigger(plan, T_CLEARED, FloorLayers.TRIGGER_ENCOUNTER_CLEARED, Rect2(), E_ARENA, [
 		FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, C_TO_RAMP),
 		FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, C_TO_END),
 	])
+	# THE EXIT IS THE SAME QUESTION AS THE COMMITMENT: is everyone here? One shared condition,
+	# two authored consequences. Completing the floor is a FACT and an Event -- there is no next
+	# floor yet, and faking one to give this somewhere to go would be building a system to
+	# satisfy a flag.
+	_trigger(plan, T_EXIT_PLATE, FloorLayers.TRIGGER_GROUP_OCCUPANCY, EXIT_PLATE_REGION, -1, [
+		FloorLayers.effect(FloorLayers.EFFECT_COMPLETE_FLOOR, -1),
+	], true, true)
 
 
 ## Builds the aperture between two patches stacked along -Z, poking _OVERLAP into each.
@@ -182,13 +205,15 @@ static func _connect(plan: FloorPlan, connection_id: int, near_id: int, far_id: 
 	plan.connections.append(connection)
 
 
-static func _trigger(plan: FloorPlan, trigger_id: int, kind: StringName, region: Rect2, source_id: int, effects: Array[Dictionary]) -> void:
+static func _trigger(plan: FloorPlan, trigger_id: int, kind: StringName, region: Rect2, source_id: int, effects: Array[Dictionary], starts_enabled: bool = true, renders_as_plate: bool = false) -> void:
 	var trigger := FloorTrigger.new()
 	trigger.trigger_id = trigger_id
 	trigger.kind = kind
 	trigger.region = region
 	trigger.source_id = source_id
 	trigger.effects = effects
+	trigger.starts_enabled = starts_enabled
+	trigger.renders_as_plate = renders_as_plate
 	plan.triggers.append(trigger)
 
 
@@ -211,20 +236,26 @@ static func _encounters(plan: FloorPlan) -> void:
 	]
 	plan.encounters.append(arena)
 
-	# AMBIENT. No activation ceremony and no lock: it inhabits the hall and fights if you cross
-	# it. Its territory is the EAST ARM PLUS BOTH STRIPS -- a union, authored deliberately.
-	# Binding it to the single patch it spawns in is what made it stick on the corner the
-	# instant the player stepped across a seam (human finding), and confinement was never the
-	# defect. The WEST ARM is pointedly excluded: the branch that solves the floor stays a place
-	# you can work in, which is what makes the branch mean anything.
-	# Still CONFINED, and still no roaming system and no pathfinding.
+	# AMBIENT. No activation ceremony and no lock: it inhabits the east column and fights if you
+	# cross it. Territory is authored as a UNION and may span patches -- binding it to the single
+	# patch it spawns in is what made it stick the instant the player crossed a seam.
+	#
+	# BUT IT IS DELIBERATELY ONE CONVEX RECTANGLE, not the whole hall ring. Instrumentation
+	# (tools/diagnose_ooze_pursuit.gd) confirmed that a territory wrapping the VOID makes
+	# straight-line pursuit rub along the corner: 80 of 80 contact-phase ticks lost to legality
+	# for 0.9 units of progress. The AI has no obstacle routing and this prototype is not the
+	# place to invent one, so the AUTHORING obeys the AI's actual capability:
+	#
+	#   AMBIENT TERRITORIES USED BY STRAIGHT-LINE AI MUST BE CONVEX -- their walkable union must
+	#   equal their own bounding box, so no pursuit inside them ever needs to route around
+	#   anything. Guarded by test_depth_generator.gd, not by memory.
+	#
+	# This column spans the east arm and its junction with BOTH strips, so the Ooze still meets
+	# anyone crossing its ground, and reads as guarding its arm rather than scraping a corner.
+	# Obstacle-aware navigation is ROADMAP work (P33), for a floor that actually needs it.
 	var east := EncounterSite.new()
 	east.encounter_id = E_EAST_AMBIENT
-	east.regions = [
-		plan.patch_by_id(P_HALL_EAST).rect,
-		plan.patch_by_id(P_HALL_SOUTH).rect,
-		plan.patch_by_id(P_HALL_NORTH).rect,
-	]
+	east.regions = [Rect2(8.0, -34.0, 8.0, 22.0)]
 	east.role = FloorLayers.ROLE_AMBIENT
 	east.confines_player = false
 	east.spawn_at_floor_load = true
@@ -235,24 +266,11 @@ static func _encounters(plan: FloorPlan) -> void:
 # --- WORLD INTERACTION -----------------------------------------------------------------
 
 static func _interaction(plan: FloorPlan) -> void:
-	# The blocker's solution is deliberately ELSEWHERE, down the west branch, behind a prop.
-	# THE ONLY INTERACTABLE LEFT ON THE FLOOR, and the only one that earned its E: you have to
-	# search for it, and breaking the crate is what reveals it.
-	_interactable(plan, I_HIDDEN_SWITCH, Vector3(-12.0, 0.0, -24.0), &"switch", true)
-
+	# The blocker's solution is deliberately ELSEWHERE, down the west branch, under a prop.
 	var crate := BreakablePlan.new()
 	crate.breakable_id = B_CRATE
 	crate.position = Vector3(-12.0, 0.0, -24.0)
 	crate.radius = 0.9
 	crate.durability = 1.0
-	crate.conceals_interactable_id = I_HIDDEN_SWITCH
+	crate.conceals_trigger_id = T_HIDDEN_PLATE
 	plan.breakables.append(crate)
-
-
-static func _interactable(plan: FloorPlan, interactable_id: int, position: Vector3, kind: StringName, starts_hidden: bool) -> void:
-	var interactable := InteractablePlan.new()
-	interactable.interactable_id = interactable_id
-	interactable.position = position
-	interactable.kind = kind
-	interactable.starts_hidden = starts_hidden
-	plan.interactables.append(interactable)

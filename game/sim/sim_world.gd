@@ -260,7 +260,7 @@ var _connection_open: Dictionary = {}    # connection_id -> bool  (THE gate stat
 var _triggers: Dictionary = {}           # trigger_id -> {kind, region, source_id, once, effects}
 var _triggers_fired: Dictionary = {}     # trigger_id -> true
 var _trigger_condition_met: Dictionary = {}  # trigger_id -> bool, last tick's occupancy state (edge detection)
-var _interactables: Dictionary = {}      # interactable_id -> {position, use_radius, state}
+var _trigger_enabled: Dictionary = {}    # trigger_id -> bool; a dormant controller is not evaluated at all
 var _breakables: Dictionary = {}         # breakable_id -> {position, radius, durability}
 var _encounters: Dictionary = {}         # encounter_id -> {region, role, confines_player}
 var _encounter_bounds: Dictionary = {}   # encounter_id -> WalkableBounds, region CLIPPED to walkable
@@ -272,6 +272,10 @@ var _patch_rects: Array[Rect2] = []
 ## The site currently sealing the Envoy, or -1. At most one: a second simultaneous seal has no
 ## authored consumer and would be speculative generality.
 var _active_confinement: int = -1
+## Set once every active Envoy stands on the authored exit region. Deliberately a FACT and an
+## Event and nothing else: there is no next floor to descend to yet, and inventing one to give
+## this somewhere to go would be building a system to satisfy a flag.
+var _floor_complete: bool = false
 
 const SCOPE_RUN: StringName = &"run"
 const SCOPE_FLOOR: StringName = &"floor"
@@ -392,7 +396,7 @@ const STATE_SCOPES: Dictionary = {
 	"_triggers": SCOPE_FLOOR,
 	"_triggers_fired": SCOPE_FLOOR,
 	"_trigger_condition_met": SCOPE_FLOOR,
-	"_interactables": SCOPE_FLOOR,
+	"_trigger_enabled": SCOPE_FLOOR,
 	"_breakables": SCOPE_FLOOR,
 	"_encounters": SCOPE_FLOOR,
 	"_encounter_bounds": SCOPE_FLOOR,
@@ -401,6 +405,7 @@ const STATE_SCOPES: Dictionary = {
 	"_actor_encounter": SCOPE_FLOOR,
 	"_patch_rects": SCOPE_FLOOR,         # Array — cleared by the same loop
 	"_active_confinement": SCOPE_FLOOR,  # not a collection — reset by load_floor
+	"_floor_complete": SCOPE_FLOOR,  # not a collection — reset by load_floor
 }
 
 
@@ -441,6 +446,7 @@ func load_floor(bounds: WalkableBounds, entry_point: Vector3) -> void:
 
 	_bounds = bounds
 	_active_confinement = -1  # not a Dictionary, so the clearing loop above cannot reach it
+	_floor_complete = false   # likewise
 	# Entry placement is not routed through add_entity's validation: these actors are
 	# already registered, and the entry point's legality is the GENERATOR's contract
 	# (test_depth_generator.gd asserts it), not something to re-decide per floor.
@@ -509,15 +515,12 @@ func register_connection(connection_id: int, aperture: Rect2, starts_open: bool)
 	_rebuild_regions()
 
 
-func register_trigger(trigger_id: int, kind: StringName, region: Rect2, source_id: int, once: bool, effects: Array) -> void:
+func register_trigger(trigger_id: int, kind: StringName, region: Rect2, source_id: int, once: bool, effects: Array, starts_enabled: bool = true) -> void:
 	_triggers[trigger_id] = {"kind": kind, "region": region, "source_id": source_id, "once": once, "effects": effects}
+	_trigger_enabled[trigger_id] = starts_enabled
 
 
-func register_interactable(interactable_id: int, position: Vector3, use_radius: float, starts_hidden: bool) -> void:
-	_interactables[interactable_id] = {
-		"position": position, "use_radius": use_radius,
-		"state": &"hidden" if starts_hidden else &"available",
-	}
+
 
 
 ## A BREAKABLE IS NOT A COMBATANT (see the pre-code inheritance audit, ROADMAP). It is
@@ -614,8 +617,7 @@ func debug_describe_floor() -> Dictionary:
 		"connections_open": _connection_open.duplicate(),
 		"encounters": _encounter_state.duplicate(),
 		"active_confinement": _active_confinement,
-		"interactables": _interactables.size(),
-		"breakables": _breakables.size(),
+		"breakables": _breakables.size(), "floor_complete": _floor_complete,
 	}
 
 
@@ -630,7 +632,12 @@ func _advance_floor_state() -> Array[Event]:
 	for trigger_id: int in trigger_ids:
 		var trigger: Dictionary = _triggers[trigger_id]
 		var kind: StringName = trigger["kind"]
-		if kind != &"region_entered" and kind != &"party_plate":
+		if kind != &"region_entered" and kind != &"group_occupancy":
+			continue
+		# A DORMANT controller is skipped ENTIRELY rather than evaluated-and-ignored, so it
+		# cannot bank an occupancy edge while it waits. That is what makes the plate under the
+		# crate fire when it is revealed under an Envoy already standing on it.
+		if not bool(_trigger_enabled.get(trigger_id, true)):
 			continue
 		var met: bool = _occupancy_condition_met(trigger)
 		# EDGE-TRIGGERED, FALSE -> TRUE. A plate everyone is still standing on must not re-fire
@@ -651,29 +658,40 @@ func _advance_floor_state() -> Array[Event]:
 ## has not stepped onto. Both consumers route through WalkableBounds.contains, the one shared
 ## INCLUSIVE helper, so Rect2.has_point's exclusive far edge can never re-enter here.
 ##
-##   region_entered  ANY living party member on the region
-##   party_plate     EVERY living party member on the region, simultaneously
-##
-## THE PARTY PLATE'S DENOMINATOR IS THE EXPEDITION, NOT THE ROOM. It is deliberately derived
-## from _run_persistent_actors -- the active party roster -- rather than from an authored count
-## or from "whoever is nearby", because a count would let a subset start the encounter while a
-## teammate is still outside. Solo M2 resolves to exactly one Envoy with no special case, and
-## M3 replaces the roster's membership without touching this condition.
+##   region_entered   ANY living party member on the region
+##   group_occupancy  ALL_ACTIVE_ENVOYS_OCCUPY_REGION (below)
 func _occupancy_condition_met(trigger: Dictionary) -> bool:
 	var region: Rect2 = trigger["region"]
-	var party_plate: bool = trigger["kind"] == &"party_plate"
+	if trigger["kind"] == &"group_occupancy":
+		return all_active_envoys_occupy(region)
+	for actor_id: int in _run_persistent_actors:
+		if _health.get(actor_id, 0.0) <= 0.0:
+			continue
+		var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
+		if WalkableBounds.contains(region, position.x, position.z):
+			return true
+	return false
+
+
+## ALL_ACTIVE_ENVOYS_OCCUPY_REGION -- ONE condition, TWO consumers (the party plate and the
+## floor exit). Committing to a fight and finishing a floor ask the same question, so they share
+## this and never grow a second copy of the occupancy math.
+##
+## THE DENOMINATOR IS THE EXPEDITION, NOT THE ROOM. Derived from _run_persistent_actors -- the
+## active party roster -- rather than from an authored count or "whoever is nearby", because a
+## count would let a subset commit everyone while a teammate is still outside. Solo M2 resolves
+## to exactly one Envoy with no special case, and M3 changes that roster's MEMBERSHIP without
+## touching this condition.
+func all_active_envoys_occupy(region: Rect2) -> bool:
 	var living: int = 0
 	for actor_id: int in _run_persistent_actors:
 		if _health.get(actor_id, 0.0) <= 0.0:
 			continue
 		living += 1
 		var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
-		var standing: bool = WalkableBounds.contains(region, position.x, position.z)
-		if standing and not party_plate:
-			return true
-		if not standing and party_plate:
+		if not WalkableBounds.contains(region, position.x, position.z):
 			return false
-	return party_plate and living > 0
+	return living > 0
 
 
 ## Applies one trigger's effects ATOMICALLY -- the whole ordered list lands within this call, so
@@ -705,11 +723,16 @@ func _apply_floor_effect(effect: Dictionary) -> Array[Event]:
 			return [Event.new(tick_count, "connection_changed", {"connection_id": target_id, "open": opened})]
 		"activate_encounter":
 			return _activate_encounter(target_id)
-		"reveal_interactable":
-			if not _interactables.has(target_id) or _interactables[target_id]["state"] != &"hidden":
+		"enable_trigger":
+			if not _triggers.has(target_id) or bool(_trigger_enabled.get(target_id, true)):
 				return []
-			_interactables[target_id]["state"] = &"available"
-			return [Event.new(tick_count, "interactable_revealed", {"interactable_id": target_id})]
+			_trigger_enabled[target_id] = true
+			return [Event.new(tick_count, "floor_trigger_enabled", {"trigger_id": target_id})]
+		"complete_floor":
+			if _floor_complete:
+				return []
+			_floor_complete = true
+			return [Event.new(tick_count, "floor_complete", {})]
 	push_warning("SimWorld: unknown floor effect kind '%s'" % kind)
 	return []
 
@@ -777,35 +800,6 @@ func _fire_triggers_watching(kind: StringName, source_id: int) -> Array[Event]:
 		if _triggers_fired.has(trigger_id):
 			continue
 		events.append_array(_fire_trigger(trigger_id))
-	return events
-
-
-## The "interact" Command: the player operates the nearest AVAILABLE interactable in range.
-## Range and candidacy are decided HERE, never by presentation -- a client may ask, the sim
-## answers (GAME-RULES §4.2: a client message is a request, validated server-side, never a
-## command the server obeys blindly).
-func _apply_interact(command: Command) -> Array[Event]:
-	var actor_id: int = command.actor_id
-	var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
-	var chosen_id: int = -1
-	var chosen_distance: float = INF
-	var interactable_ids: Array = _interactables.keys()
-	interactable_ids.sort()
-	for interactable_id: int in interactable_ids:
-		var interactable: Dictionary = _interactables[interactable_id]
-		if interactable["state"] != &"available":
-			continue
-		var distance: float = position.distance_to(interactable["position"])
-		if distance <= float(interactable["use_radius"]) and distance < chosen_distance:
-			chosen_distance = distance
-			chosen_id = interactable_id
-	if chosen_id < 0:
-		return [Event.new(tick_count, "interact_rejected", {"actor_id": actor_id, "reason": "nothing_in_range"})]
-	_interactables[chosen_id]["state"] = &"used"
-	var events: Array[Event] = [Event.new(tick_count, "interactable_used", {
-		"actor_id": actor_id, "interactable_id": chosen_id,
-	})]
-	events.append_array(_fire_triggers_watching(&"interacted", chosen_id))
 	return events
 
 
@@ -1385,8 +1379,6 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 			events.append_array(_apply_block(command))
 		elif command.kind == "switch_weapon":
 			events.append_array(_apply_switch_weapon(command))
-		elif command.kind == "interact":
-			events.append_array(_apply_interact(command))
 	# Contact spread reads this tick's post-attack status state (so a hit-applied
 	# status this same tick is visible as a snapshot candidate, but its one-tick grace
 	# keeps it from actually transmitting until a later tick); status ticking then

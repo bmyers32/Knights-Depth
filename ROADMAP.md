@@ -39,10 +39,78 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
 | P29 | Enemy action repertoire / distance-conditioned selection | **PASS / CLOSED 2026-08-18** | Frozen point `9378316`; follow-ups dispatched to P17/P28/P30/P31/P32 |
 | P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
+| P33 | Obstacle-aware enemy navigation | PROPOSED — **evidence recorded, not yet needed** | Straight-line pursuit rubs along any concave territory; today's answer is the ambient-convexity authoring constraint, guarded by test. Build this when a real floor needs a territory that must wrap something |
+| P34 | Projectile-vs-world obstruction | **DESIGN RETURNED 2026-08-29, AWAITING REVIEW** | P20's projectile fence consumed by play evidence: shots pass through walls, which folded topology turns into a sequence-break risk. Design below; NO implementation |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
+
+## M2 INTERACTION RULINGS BUILT + TWO RECONS RETURNED — 2026-08-29. Suite 603 -> 608.
+
+### HIDDEN CONTROL, AND THE RETIREMENT OF `interact`
+Breaking the crate no longer reveals a switch; it ENABLES a dormant PLATE (`FloorTrigger.
+starts_enabled`, `EFFECT_ENABLE_TRIGGER`). Stepping onto that plate opens the route. A dormant
+trigger is skipped ENTIRELY rather than evaluated-and-ignored, so it banks no occupancy edge
+while it waits -- which is what makes a plate revealed under an Envoy already standing there
+still fire.
+
+**SWITCH RETIRED, AND EVERYTHING THAT ONLY IT USED.** The audit the ruling asked for found the
+hidden switch was the last authored interactable, so `switch` became a zero-consumer kind --
+and with it `InteractablePlan`, `TRIGGER_INTERACTED`, `EFFECT_REVEAL_INTERACTABLE`,
+`use_radius`, the `interact` Command, its sim handler and the E binding. All retired together.
+Rule of two runs BOTH WAYS: vocabulary does not survive on the grounds that it might be useful
+later. It comes back out of git the day a deliberate press is earned.
+**The floor now has no `interact` verb at all. Every control is something you stand on.**
+
+### ONE SHARED GROUP-OCCUPANCY CONDITION
+`SimWorld.all_active_envoys_occupy(region)` -- ALL_ACTIVE_ENVOYS_OCCUPY_REGION -- extracted
+because it now has TWO concrete consumers. Every living member of the active expedition,
+simultaneously, anchor position, inclusive predicate, FALSE -> TRUE edge only. The denominator
+is `_run_persistent_actors` (the expedition), never an authored count and never "whoever is in
+the room", so a subset can never commit the party. Solo resolves to one with no special case;
+M3 changes that roster's membership without touching the condition.
+
+Effects stay authored separately -- the whole point of extracting the CONDITION and not the
+consequence:
+- **party plate** -> seal rear · open forward · activate roster · begin encounter
+- **exit plate**  -> `complete_floor`
+
+### THE FLOOR EXIT IS A CONDITION, NOT A PILLAR
+Progression is gated on the whole expedition standing on the final space. `floor_complete` is a
+FLOOR-scoped fact plus one Event, and nothing more: there is no next floor to descend to, and
+faking one to give the flag somewhere to go would be building a system to satisfy a test.
+
+### RECON 1 RETURNED — OOZE CORNER-RUBBING. **EXPECTED CAUSE CONFIRMED.**
+Instrumented on the real floor with `tools/diagnose_ooze_pursuit.gd`.
+
+**A first pass measured nothing and looked like a finding.** With the player 24 units away the
+Ooze sat perfectly still for 240 ticks -- which reads exactly like being stuck and was actually
+an IDLE enemy outside its 10-unit detection radius. The tool now prints separation, detection
+radius and `ai_state` so a zero can never be mistaken for a stall again (the repo's own trap:
+confirm the mechanism fired before believing a zero).
+
+With the player at 9.22 units, across the void:
+- **Q1/Q2** requested direction is straight at the player every tick; the per-axis clamp grants
+  only the unblocked component. Free approach down its own arm, then contact.
+- **Q3** the straight line is BLOCKED at t=0.43 -- it crosses ground nobody laid.
+- **Q4 contact phase: 80 of 80 ticks lost to legality, for 0.916 units of progress.** It is NOT
+  stuck -- it grinds forward and would round the corner -- but it reads as sluggish scraping.
+- **Q5** a route exists (the trace walks one); the coarse waypoint probe cannot describe it.
+
+**DISPOSITION: direct steering vs obstacle. Not a bounds defect.** Applied as the ruled v1
+AUTHORING CONSTRAINT: an ambient territory's walkable union must EQUAL ITS OWN BOUNDING BOX.
+A solid rectangle is convex, so no pursuit inside one ever needs routing. The east Ooze's
+territory is now the single convex column `Rect2(8, -34, 8, 22)` -- the east arm plus its
+junction with both strips -- so it still meets anyone crossing its ground and reads as guarding
+its arm. **Guarded by test, and the guard was proved to fail**: re-injecting the void-wrapping
+territory turns it red with the void's own coordinates. Obstacle-aware navigation is **P33**,
+for a floor that genuinely needs a territory that wraps something.
+
+Nothing was weakened, shrunk, widened or tuned to get here.
+
+### RECON 2 RETURNED — PROJECTILE-VS-WORLD (**P34 · DESIGN ONLY, NO CODE**)
+See the P34 pre-code design below. The swept-collision core is UNTOUCHED pending review.
 
 ## M2 FLOOR GRAMMAR — RULED CORRECTIONS BUILT 2026-08-29. Suite 582 -> 603.
 
@@ -120,7 +188,22 @@ touched.
 Procedural assembly · branching topology · minimap · elevator · drop economy · throwable ·
 general pathfinding · whole-floor roaming · combat tuning.
 
-## M2 FLOOR GRAMMAR — **PLAYED END TO END 2026-08-29 (build `9f97834`). FINDINGS RECORDED; VERDICT NOT RENDERED.**
+## M2 FLOOR GRAMMAR — **PASS (Breon, 2026-08-29).** Verdict rendered against the frozen criterion.
+
+> "The floor passes only if it feels like traversing and interacting with a place — seeing
+> somewhere before you can reach it, finding what opens the way — rather than moving between
+> generated arenas."
+
+**VERDICT: PASS — iterate implementation defects.** The floor-grammar ABSTRACTION is validated:
+four independent layers, encounter region != room, a continuous stateful traversal space. It
+reads as a place, and traversal itself feels good. **Current linearity is ACCEPTABLE for this
+prototype** and is not a defect; route complexity belongs to larger layouts, optional branches
+and procedural assembly. Every remaining finding is an implementation or content-law defect,
+never a rejection of the abstraction.
+
+The raw human findings and the recon that followed are preserved verbatim below, unedited.
+
+## M2 FLOOR GRAMMAR — PLAYED END TO END 2026-08-29 (build `9f97834`). RAW FINDINGS.
 
 The authored prototype was played start to endpoint on the committed build, unmodified.
 **No PASS/FAIL is stamped here.** The frozen criterion verdict belongs to Breon alone and has
@@ -2395,6 +2478,97 @@ watching a shot close the distance.
 **Do not** attempt to fix this by widening the melee parry window; that trades a timing
 problem for a leniency problem and leaves the player still unable to aim their timing.
 
+
+
+# P34 — PROJECTILE-VS-WORLD OBSTRUCTION · **PRE-CODE DESIGN, AWAITING REVIEW. NO CODE WRITTEN.**
+
+The P20 projectile fence is CONSUMED BY EVIDENCE: human play showed shots passing through
+solid walls. With folded topology this is not cosmetic -- a player can hit enemies, breakables
+and progression controls in areas they have not reached. Concretely, on the shipped floor the
+crate at `(-12, -24)` sits across the void from the south strip, so it can be destroyed from
+the hall without ever walking the west branch.
+
+## THE RECLASSIFICATION THIS REQUIRES (amends the 2026-08-29 walls/ledges ruling)
+`boundary_style` was authored as PRESENTATION ONLY. It becomes **authored floor data shared by
+sim and presentation**:
+- presentation reads it to decide whether to render a wall;
+- **sim reads it to decide whether that boundary obstructs projectiles.**
+
+`MOVEMENT BOUNDARY != PROJECTILE BLOCKER` stays a hard law. Movement legality remains governed
+by walkable space + body-aware bounds and is untouched by this work. A ledge bounds an actor
+and does NOT stop a shot.
+
+## Q1 — how wall segments are derived today
+`FloorBuilder.build_walls` walks every patch (skipping `ledge`) and every connection aperture,
+samples each edge in 1.0 spans, probes 0.5 beyond the span midpoint, and adds a 0.6 x 2.2 box
+where nothing walkable lies beyond. Purely presentational: no collision bodies exist, and the
+sim has never had any representation of a wall. Gates are separate meshes keyed by
+`connection_id`.
+
+## Q2 — where the sweep can consume solid segments
+`SimWorld._advance_projectiles`, `game/sim/sim_world.gd:2394-2397`. Per projectile per tick it
+already builds two candidates over the same segment and takes the earliest:
+```
+actor_hit     = _find_earliest_swept_hit(start, end, attacker_id, hit_radius)   -> {target_id, t}
+breakable_hit = _find_earliest_breakable_hit(start, end, hit_radius)            -> {breakable_id, t}
+```
+A third finder slots in beside them with no change to the pipeline's shape:
+```
+world_hit     = _find_earliest_solid_hit(start, end, hit_radius)                -> {edge_id, t}
+```
+Pure segment-vs-segment math against floor data. **No Godot physics authority anywhere** --
+consistent with `_actors_overlap`'s existing "no Area3D, no body_entered" fence.
+
+## Q3 — how the three candidate kinds compare
+All three already speak the same language: a parametric `t` in [0,1] along this tick's segment.
+Comparison becomes an explicit total order instead of today's two-way `<`.
+
+## Q4 — determinism
+Both existing finders sort their id arrays before scanning, so each is deterministic in
+isolation. The proposal keeps that and makes the cross-kind order explicit:
+
+> **ORDERING LAW.** Sort candidates by `t` ascending; on an exact tie, **WORLD < BREAKABLE <
+> ACTOR**. A shot that reaches a wall and an actor on the same instant stops at the wall.
+
+Ties are near-impossible in practice (an actor flush to a wall is met first, since its body
+radius extends outward) but the order must be authored rather than emergent, because M3 needs a
+client and a server to resolve identically.
+
+## THE DATA — and an honest state-scope answer
+Two populations, deliberately separated:
+
+1. **STATIC SOLID EDGES — immutable, derived once per floor.** Patch perimeter edges where no
+   walkable ground lies beyond AND the patch's `boundary_style` is `wall`. Same derivation
+   FloorBuilder already performs, moved into `FloorPlan` so BOTH consumers read one source
+   instead of presentation computing its own. **It is immutable FloorPlan data, so it gets no
+   mutable-state entry in STATE_SCOPES** -- classifying it as sim state would be dishonest, and
+   the ruling explicitly asks for the honest treatment rather than invented mutable state.
+2. **GATE BARRIERS — mutable, but ALREADY SCOPED.** A closed connection is a physical barrier.
+   Its solidity is derived from `_connection_open`, which is FLOOR-scoped and classified today.
+   **No new mutable state is introduced.** A gate blocks shots exactly while it blocks movement.
+
+## V1 BEHAVIOUR, as required
+| Obstruction | Blocks projectile |
+|---|---|
+| `wall` edge | YES |
+| closed gate | YES (derived from `_connection_open`) |
+| breakable | YES — already validated, unchanged |
+| actor | existing hit behaviour, unchanged |
+| `ledge` / open edge | **NO** — bounded for bodies, transparent to shots |
+
+## OPEN QUESTIONS FOR REVIEW (not decided here)
+1. **Wall height / arcs.** Everything is flat today; a `ledge` is "not solid" and a `wall` is
+   "solid to full height". No projectile has vertical travel, so height is currently a
+   non-question -- but authoring it as a boolean now is a decision worth making deliberately.
+2. **Should a blocked shot emit an Event?** Presentation wants a spark; `projectile_expired`
+   already exists and could carry a reason field rather than growing a new kind.
+3. **Edge sampling vs exact segments.** FloorBuilder samples in 1.0 spans because it is drawing
+   scenery. The sim wants EXACT segments; deriving them exactly is a different (and simpler)
+   computation than sampling, and the two must not silently diverge.
+4. **Does the ambient-convexity constraint interact with this?** A convex territory has no
+   internal walls, so ambient enemies gain no new cover. Worth confirming before assuming.
+
+**NOTHING IS IMPLEMENTED.** The swept-collision core is untouched pending this review.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

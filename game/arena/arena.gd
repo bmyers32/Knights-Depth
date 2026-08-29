@@ -237,7 +237,7 @@ func _load_floor() -> void:
 		"run_seed": run_seed, "depth": depth, "authored_layout": plan.authored_layout,
 		"patches": plan.patches.size(), "connections": plan.connections.size(),
 		"triggers": plan.triggers.size(), "encounters": plan.encounters.size(),
-		"interactables": plan.interactables.size(), "breakables": plan.breakables.size(),
+		"breakables": plan.breakables.size(),
 	})
 
 	sim.load_floor(plan.make_bounds(), plan.entry_point)
@@ -312,12 +312,10 @@ func _unpack_floor(plan: FloorPlan) -> void:
 		sim.register_connection(connection.connection_id, connection.aperture, connection.starts_open)
 	for encounter in plan.encounters:
 		sim.register_encounter(encounter.encounter_id, encounter.regions, encounter.role, encounter.confines_player, encounter.spawn_at_floor_load)
-	for interactable in plan.interactables:
-		sim.register_interactable(interactable.interactable_id, interactable.position, interactable.use_radius, interactable.starts_hidden)
 	for breakable in plan.breakables:
 		sim.register_breakable(breakable.breakable_id, breakable.position, breakable.radius, breakable.durability)
 	for trigger in plan.triggers:
-		sim.register_trigger(trigger.trigger_id, trigger.kind, trigger.region, trigger.source_id, trigger.once, trigger.effects)
+		sim.register_trigger(trigger.trigger_id, trigger.kind, trigger.region, trigger.source_id, trigger.once, trigger.effects, trigger.starts_enabled)
 
 
 ## Visual ground lift for an actor. Sim positions are FLAT -- combat lives on one plane -- so
@@ -613,13 +611,11 @@ func _report_events(events: Array[Event]) -> void:
 				_floor_builder.set_gate_closed(int(event.payload["connection_id"]), not bool(event.payload["open"]))
 			"floor_trigger_fired":
 				print("TRIGGER FIRED: ", event.payload)
-			"interactable_used":
-				print("INTERACTED: ", event.payload)
-			"interactable_revealed":
+			"floor_trigger_enabled":
 				print("REVEALED: ", event.payload)
-				_floor_builder.set_interactable_visible(int(event.payload["interactable_id"]), true)
-			"interact_rejected":
-				print("interact rejected: ", event.payload)
+				_floor_builder.set_plate_visible(int(event.payload["trigger_id"]), true)
+			"floor_complete":
+				print("FLOOR COMPLETE: the expedition stood on the exit together")
 			"breakable_hit":
 				print("breakable hit: ", event.payload)
 			"breakable_destroyed":

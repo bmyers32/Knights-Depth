@@ -37,7 +37,6 @@ var triggers: Array[FloorTrigger] = []
 # --- ENCOUNTER -----------------------------------------------------------------------
 var encounters: Array[EncounterSite] = []
 # --- WORLD INTERACTION ---------------------------------------------------------------
-var interactables: Array[InteractablePlan] = []
 var breakables: Array[BreakablePlan] = []
 
 ## Where the Envoy arrives.
@@ -155,7 +154,8 @@ func to_dict() -> Dictionary:
 		trigger_dicts.append({
 			"trigger_id": trigger.trigger_id, "kind": String(trigger.kind),
 			"region": _rect(trigger.region), "source_id": trigger.source_id,
-			"once": trigger.once, "effects": trigger.effects.map(func(e): return {"kind": String(e["kind"]), "target_id": e["target_id"]}),
+			"once": trigger.once, "starts_enabled": trigger.starts_enabled,
+			"renders_as_plate": trigger.renders_as_plate, "effects": trigger.effects.map(func(e): return {"kind": String(e["kind"]), "target_id": e["target_id"]}),
 		})
 	var encounter_dicts: Array = []
 	for encounter in encounters:
@@ -170,26 +170,18 @@ func to_dict() -> Dictionary:
 			"role": String(encounter.role), "confines_player": encounter.confines_player,
 			"spawn_at_floor_load": encounter.spawn_at_floor_load, "roster": roster,
 		})
-	var interactable_dicts: Array = []
-	for interactable in interactables:
-		interactable_dicts.append({
-			"interactable_id": interactable.interactable_id, "position": _point(interactable.position),
-			"use_radius": _snap(interactable.use_radius), "kind": String(interactable.kind),
-			"starts_hidden": interactable.starts_hidden,
-		})
 	var breakable_dicts: Array = []
 	for breakable in breakables:
 		breakable_dicts.append({
 			"breakable_id": breakable.breakable_id, "position": _point(breakable.position),
 			"radius": _snap(breakable.radius), "durability": _snap(breakable.durability),
-			"conceals_interactable_id": breakable.conceals_interactable_id,
+			"conceals_trigger_id": breakable.conceals_trigger_id,
 		})
 	return {
 		"run_seed": run_seed, "floor_seed": floor_seed, "depth": depth,
 		"stratum_id": String(stratum_id), "authored_layout": authored_layout,
 		"patches": patch_dicts, "connections": connection_dicts, "triggers": trigger_dicts,
-		"encounters": encounter_dicts, "interactables": interactable_dicts,
-		"breakables": breakable_dicts,
+		"encounters": encounter_dicts, "breakables": breakable_dicts,
 		"entry_point": _point(entry_point), "end_marker": _point(end_marker),
 	}
 
