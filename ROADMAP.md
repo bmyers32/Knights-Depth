@@ -44,7 +44,124 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
-## M2 FLOOR GRAMMAR — HAND-AUTHORED PROTOTYPE BUILT. **AWAITING HUMAN PASS.**
+## M2 FLOOR GRAMMAR — **PLAYED END TO END 2026-08-29 (build `9f97834`). FINDINGS RECORDED; VERDICT NOT RENDERED.**
+
+The authored prototype was played start to endpoint on the committed build, unmodified.
+**No PASS/FAIL is stamped here.** The frozen criterion verdict belongs to Breon alone and has
+not been rendered; these are the human findings and the read-only recon that followed them.
+
+### Human findings, verbatim
+> "It felt more like a floor albeit linear."
+> "Traversing felt good."
+
+- the Ooze on the early right branch was too wide to chase through the hallway, became stuck
+  on the corner, and visibly clipped through the wall;
+- every walkable boundary does not need a wall — some reference-floor platforms have
+  open/ledge edges while still preventing the player from falling;
+- small floor triggers should activate automatically when stepped on rather than requiring E;
+- the party encounter trigger should activate when the required party members are
+  simultaneously on the plate; this is a coordination trigger, not an E interactable;
+- requiring E on the final obvious progression switch/door felt unnecessary — either
+  progression should happen naturally there or the interaction should be justified by a hidden
+  switch / obvious puzzle / objective.
+
+### 1. FLOOR GRAMMAR — POSITIVE (movement off the falsified baseline)
+The prior failure was "four boxes / generated arenas". This build reads substantially more
+like a floor, and traversal itself feels good. **Current linearity alone is NOT recorded as a
+structural failure** — this is one small hand-authored grammar prototype, and route complexity
+belongs to larger layouts, optional branches and procedural assembly. Branching machinery must
+NOT be added merely to make this prototype less linear.
+
+### 2. OOZE PASSAGE — RECON COMPLETE. The human's *observations* hold; the *stated cause* does not.
+Read-only recon, no fix applied. Three separate causes, none of them "the Ooze is too wide":
+
+**(a) The sim position was NEVER illegal.** `WalkableBounds.is_inside` / `clamp_step` are POINT
+predicates over a union of rects; `clamp_step` lands a clamped actor EXACTLY on the boundary and
+`is_inside` is INCLUSIVE there. The Ooze was legally placed at all times. **No eight-seam breach.**
+
+**(b) "Cannot follow / stuck on the corner" is TERRITORY CONFINEMENT, working as ruled.** The
+east arm's ambient site is authored as `region = P_HALL_EAST.rect` = x 8..16, z -30..-14, and
+`SimWorld._legal_bounds_for` confines an enemy to its own site's territory ALWAYS — ambient
+included, unconditional on activation. Chase the player west of x=8 and the Ooze clamps onto
+x=8 and stops. That is the authored law (`floor_layers.gd`: "ambient does not yet mean
+whole-floor roaming"), surfacing as an apparent movement defect. The corner it "sticks" on is
+the territory boundary at the arm/strip junction, not a geometry pinch.
+
+**(c) The clipping is POINT-LEGALITY vs BODY-WIDTH — one real structural gap.** The sim already
+owns an authoritative body radius (`combat_radius`; Ooze = **1.45**), used by Burn contact-spread
+and the projectile Minkowski sweep — but `WalkableBounds` never reads it. A body clamped onto
+x=8 therefore extends 1.45 into ground nobody laid, exactly where `floor_builder.build_walls`
+drew the void wall. Clipping and boundary-hugging are ONE defect with ONE cause: **bounds do not
+know actor size.**
+
+**Clearance is NOT the binding constraint here.** The arm is 8.0 wide and apertures are 5.0
+wide against a 2.9 diameter — the passage fits. The clearance law is still worth authoring, but
+it would not have prevented this.
+
+**Design fork (genuine, unresolved):** does `combat_radius` enter the bounds predicate — making
+legality body-aware everywhere, with an M3 replication cost and a re-baseline of every clamp
+test — or does presentation inset the wall mesh / does authoring guarantee clearance? Cheapest
+honest option is recorded below; the choice is a design call, not a defect fix.
+
+### 3. WALKABILITY != WALL MESH — CONFIRMED CHEAP
+`floor_builder.build_walls` samples each patch edge in 1.0 spans and erects a wall wherever no
+walkable ground lies 0.5 beyond. It is already COMPUTED from the union, not authored, and it is
+already presentation-only (meshes carry no collision; sim legality is the sole authority). So
+open/ledge edges need **no new sim boundary system** — only an authored per-patch or per-edge
+boundary STYLE that `_walls_for` reads. Sim legality is untouched by construction.
+
+### 4. TRIGGER SEMANTICS — the automatic half ALREADY EXISTS
+`TRIGGER_REGION` (`region_entered`) is implemented and shipping: `_advance_floor_state` scans
+run-persistent actors each tick and fires on occupancy, with no E. The one-way commitment beat
+already uses it. **"Automatic floor trigger" is therefore not new machinery** — the switch/plate
+beats simply need re-authoring onto the kind that already exists.
+
+**PARTY PLATE — what is genuinely missing:** a required-occupant COUNT. Today the region loop
+`break`s on the first occupant found and `FloorTrigger.once` defaults true. A plate needs
+`required_occupants` (solo M2 resolves to 1) and non-`once` re-evaluation. Model the condition
+only; build no M3 networking. Validated encounter behaviour is unchanged — activation semantics
+change, the atomic seal/open/spawn effect list does not.
+
+**OCCUPANCY PREDICATE — one deliberate answer owed, for BOTH consumers.** Occupancy is currently
+`Rect2.has_point(x, z)` — a POINT test, and `Rect2.has_point` is EXCLUSIVE on the far edge
+(the documented trap), so it disagrees with `WalkableBounds.is_inside`, which is INCLUSIVE.
+This is the SAME point-vs-body seam as finding 2(c), surfacing in a second consumer in the same
+session. Resolve it ONCE, deliberately, for plates and bounds together.
+
+### 5. FINAL INTERACTION — MEANINGLESS E
+The end switch is `I_END_SWITCH` → trigger 5 → `OPEN_CONNECTION(C_TO_END)`, a one-effect switch
+with no discovery and no decision. Smallest coherent outcomes: open `C_TO_END` on the
+prerequisite directly (a `TRIGGER_ENCOUNTER_CLEARED` or region trigger — both already exist, so
+this is an authoring edit, not new code), OR give the interaction a real discovery purpose.
+Do NOT invent a puzzle merely to preserve the press.
+
+### Provenance (both standing questions, answered on the record)
+1. **Commit-before-play HELD.** The played build was `9f97834`, working tree verified clean by
+   `git status` immediately before launch, launched unmodified. Nothing uncommitted was played.
+2. **The frozen criterion DID ride ahead of the build.** It is present verbatim in `d0b5f49`
+   (the docs commit that closed the multi-room playtest and declared the grammar falsified),
+   which precedes the implementation commit `9f97834`. The criterion was pre-registered, not
+   back-filled. No process defect to record on this one.
+
+### Session telemetry (captured from the play process before its log was discarded)
+The floor was played **twice** in one launch, both on `9f97834`.
+
+- **ZERO errors and ZERO warnings for the whole session.** No refused placement, no
+  illegal-position report, no bounds complaint. This is a SECOND line of evidence, independent
+  of the code reading in finding 2(a), that the sim never held an actor somewhere illegal.
+- **Run 1** fired triggers 0→4 and cleared the encounter, but **trigger 5 (the final E switch)
+  never fired** — the run ended without it and was restarted with `R`. Why is not recorded;
+  do not over-read it. It sits alongside finding 5 as a fact, not as its proof.
+- **Run 2** fired all six triggers through to the endpoint.
+- The crate was destroyed by **melee** in run 1 and by a **projectile** in run 2
+  (`"projectile_id": 1`). The projectile-terminates-on-prop seam is therefore proven IN LIVE
+  PLAY, not only in `test_breakable_props.gd`.
+
+### NOT DONE, deliberately
+No procedural-generation expansion · no pathfinding system · no roster tuning · no presentation
+polish beyond what proving open/ledge boundaries requires · no fix of any kind applied yet.
+
+## M2 FLOOR GRAMMAR — HAND-AUTHORED PROTOTYPE BUILT. **PLAYED 2026-08-29; see findings above.**
 
 Suite 552 -> 581. Boots clean. No procedural assembly; no throwable; no minimap/elevator.
 
