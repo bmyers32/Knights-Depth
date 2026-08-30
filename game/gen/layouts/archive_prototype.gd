@@ -87,7 +87,16 @@ const T_EXIT_PLATE := 5
 
 ## What the crate hides: a plate, dormant until the crate is gone. Sits where the crate stood,
 ## down the west branch, deliberately far from the route it opens.
-const HIDDEN_PLATE_REGION := Rect2(-13.6, -25.6, 3.2, 3.2)
+##
+## SMALLER THAN THE PARTY PLATE, footprint and look both (human finding 2026-08-29). The two
+## read as different KINDS OF THING -- a local control you discovered, versus a coordinated
+## commitment the whole expedition steps onto -- and that difference is carried entirely by
+## authoring and presentation. No mechanic distinguishes them.
+##
+## The footprint shrinks WITH the mesh, never independently: a plate whose visual is smaller
+## than its trigger would fire from ground that does not look like a plate, which is exactly
+## the kind of quiet dishonesty the gate/rule split exists to prevent.
+const HIDDEN_PLATE_REGION := Rect2(-13.0, -25.0, 2.0, 2.0)
 ## The plate the expedition must stand on to commit to the fight. Sits inside pApproach, so the
 ## seal closes around where the party already is.
 const PARTY_PLATE_REGION := Rect2(-2.0, -41.0, 4.0, 4.0)

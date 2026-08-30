@@ -42,8 +42,12 @@ const _WALL_COLOR: Color = Color(0.36, 0.35, 0.42)
 const _GATE_CLOSED_COLOR: Color = Color(0.78, 0.28, 0.26)
 const _MARKER_COLOR: Color = Color(0.88, 0.80, 0.42)
 const _BREAKABLE_COLOR: Color = Color(0.52, 0.40, 0.24)
+## A COMMITMENT plate (the party's, the exit's): bold, warm, unmistakable.
 const _PLATE_COLOR: Color = Color(0.92, 0.62, 0.24)
+## A LOCAL control you discovered: cooler, dimmer, thinner. Same mechanism, quieter voice.
+const _PLATE_MINOR_COLOR: Color = Color(0.40, 0.66, 0.78)
 const _PLATE_THICKNESS: float = 0.12
+const _PLATE_MINOR_THICKNESS: float = 0.06
 
 var _gates: Dictionary = {}          # connection_id -> barrier mesh
 var _plates: Dictionary = {}         # trigger_id -> plate mesh
@@ -71,7 +75,11 @@ func build(plan: FloorPlan, first_actor_id: int) -> Array[Dictionary]:
 	# disagree with the sim about whether a control exists.
 	for trigger in plan.triggers:
 		if trigger.renders_as_plate:
-			_build_plate(trigger.trigger_id, trigger.region, trigger.starts_enabled)
+			# PROMINENCE FOLLOWS THE AUTHORED KIND, and reads it rather than being told twice:
+			# a group-occupancy plate is a commitment the whole expedition makes, so it is loud;
+			# anything else is a local control, so it is quiet. No new data, no new mechanic.
+			var commitment: bool = trigger.kind == FloorLayers.TRIGGER_GROUP_OCCUPANCY
+			_build_plate(trigger.trigger_id, trigger.region, trigger.starts_enabled, commitment)
 	_build_end_marker(plan.end_marker)
 
 	var spawned: Array[Dictionary] = []
@@ -241,16 +249,20 @@ func _build_breakable(breakable: BreakablePlan) -> void:
 
 ## The floor plate the party stands on. Flush with the ground and lit, so it reads as somewhere
 ## to STAND rather than something to press.
-func _build_plate(trigger_id: int, region: Rect2, visible_now: bool) -> void:
+## THE MESH IS EXACTLY THE TRIGGER REGION, always. What varies is colour, thickness and glow --
+## never footprint, because a plate that fires from ground outside its own picture is a lie.
+func _build_plate(trigger_id: int, region: Rect2, visible_now: bool, commitment: bool) -> void:
 	var centre := Vector3(region.position.x + region.size.x * 0.5, 0.0, region.position.y + region.size.y * 0.5)
+	var colour: Color = _PLATE_COLOR if commitment else _PLATE_MINOR_COLOR
+	var thickness: float = _PLATE_THICKNESS if commitment else _PLATE_MINOR_THICKNESS
 	var plate := _add_box(
-		Vector3(region.size.x, _PLATE_THICKNESS, region.size.y),
-		centre + Vector3(0.0, elevation_at(centre) + _PLATE_THICKNESS * 0.5, 0.0),
-		_PLATE_COLOR,
+		Vector3(region.size.x, thickness, region.size.y),
+		centre + Vector3(0.0, elevation_at(centre) + thickness * 0.5, 0.0),
+		colour,
 	)
 	plate.material_override.emission_enabled = true
-	plate.material_override.emission = _PLATE_COLOR
-	plate.material_override.emission_energy_multiplier = 0.5
+	plate.material_override.emission = colour
+	plate.material_override.emission_energy_multiplier = 0.5 if commitment else 0.25
 	plate.visible = visible_now
 	_plates[trigger_id] = plate
 

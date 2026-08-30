@@ -39,12 +39,144 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
 | P29 | Enemy action repertoire / distance-conditioned selection | **PASS / CLOSED 2026-08-18** | Frozen point `9378316`; follow-ups dispatched to P17/P28/P30/P31/P32 |
 | P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
-| P33 | Obstacle-aware enemy navigation | PROPOSED — **evidence recorded, not yet needed** | Straight-line pursuit rubs along any concave territory; today's answer is the ambient-convexity authoring constraint, guarded by test. Build this when a real floor needs a territory that must wrap something |
+| P33 | Obstacle-aware enemy navigation | **ACTIVE REQUIREMENT — recon returned 2026-08-29, awaiting option choice** | Second live sighting graduates this from deferred limitation. Detector VALIDATED 7/7; three options costed below; recommendation is B (narrow committed sidestep) |
 | P34 | Projectile-vs-world obstruction | **DESIGN RETURNED 2026-08-29, AWAITING REVIEW** | P20's projectile fence consumed by play evidence: shots pass through walls, which folded topology turns into a sequence-break risk. Design below; NO implementation |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
+
+## M2 REPLAY CLOSE — FLOOR GRAMMAR STAYS **PASS**. 2026-08-29.
+
+Replayed `af85f3f` unchanged, one clean run to FLOOR COMPLETE with zero errors and zero
+warnings. Every beat fired once, in order.
+
+### Human findings, verbatim
+- hidden plate interaction **feels good**;
+- hidden plate should be **smaller / less prominent** than the party plate;
+- open ledges **look fine**;
+- **no E is needed for this floor grammar**; walking over authored controls feels good;
+- Ooze **still struggles to follow cleanly around the wall/corner**.
+
+### NO-E — recorded as a PROTOTYPE FINDING, not a law
+> Occupancy-driven floor interactions feel natural here; no E is needed for this floor grammar.
+
+This is NOT a permanent law against deliberate-interaction consumers. `interact` stays retired
+until a concrete consumer genuinely requires a press (see the amended scope above).
+
+### HIDDEN PLATE — presentation, and footprint, both quieter
+Mechanics unchanged; no new mechanic distinguishes the two plates. The hidden plate is now
+2.0 x 2.0 (was 3.2), cooler-coloured, thinner and dimmer; commitment plates stay bold and warm.
+Prominence is READ from the authored trigger kind rather than authored twice.
+**The mesh remains exactly the trigger region** -- shrinking the picture without the footprint
+would make a plate fire from ground that does not look like a plate.
+
+### THE TWO REMAINING FOUNDATIONS before the grammar scales up
+1. **P33** obstacle navigation (recon below)
+2. **P34** projectile-vs-world (approved direction, open questions still to close)
+
+Procedural floor scaling waits on both: larger and folded layouts would only multiply whatever
+these leave broken.
+
+## P33 — OBSTACLE NAVIGATION · RECON RETURNED 2026-08-29. **NO IMPLEMENTATION.**
+
+### CLASSIFICATION CORRECTION (recorded before anything else)
+**The territory-union simplification is NOT falsified, and must not be unwound.** It held as
+scoped: it preserved confinement, removed the accidental one-patch boundary behaviour, and kept
+the Ooze inside its intended authored area. It was never a navigation mechanism and never
+claimed to be.
+
+The surviving symptom is a DIFFERENT and already-known thing -- straight-line steering has no
+way around an obstruction -- previously carried as a deferred limitation. **The second live
+sighting graduates it from deferred limitation to ACTIVE DESIGN REQUIREMENT.**
+
+### DETECTOR FIRST — VALIDATED 7/7 (`tools/diagnose_obstruction_detector.gd`)
+The scurry lesson applied: the trigger is validated on the real failing geometry BEFORE any
+behaviour is designed on it. The detector question, exactly as ruled: *is my intended direct
+movement toward the target obstructed by authoritative floor geometry?*
+
+| case | required | result |
+|---|---|---|
+| LITERAL corner (arena -> neck, off-axis) | FIRE | blocked after 0.72 u |
+| DIAGONAL into the neck | FIRE | blocked after 2.17 u |
+| NEAR-TANGENT grazing the west jamb | FIRE | blocked after 1.45 u |
+| CONTROL clear line across the open arena | quiet | clear |
+| CONTROL straight up the middle of the neck | quiet | clear |
+| HORIZON same corner 23 u away | quiet | clear |
+| CONTROL inside the convex ambient column | quiet | clear |
+
+**The first authoring of these cases was WRONG and the tool caught it.** Two "literal" cases sat
+23 u away with a 12 u lookahead, so the detector correctly said *clear* and I had a red result
+that was really a mis-authored test. Lookahead is now tied to `detection_radius` (10.0) rather
+than picked -- an actor that only pursues what it can detect has no business reasoning past it --
+and the cases sit where rubbing actually happens: AT the obstruction. The horizon case is now
+asserted deliberately, so "quiet beyond lookahead" is recorded as designed, not as a miss.
+
+Sampling steps at half the body radius, so a body cannot tunnel through a gap narrower than
+itself. Pure sim geometry -- no physics query, no raycast, no navmesh, anywhere.
+
+### THE SIX QUESTIONS, ANSWERED
+Measured at the literal corner, driving `WalkableBounds.clamp_step` directly (the authoritative
+displacement seam locomotion itself calls), 180 ticks:
+
+1. **Where is the Envoy relative to the blocking wall?** Up the 5-wide neck between the arena
+   and the approach, with the arena's north jamb between it and the pursuer. This geometry is
+   the MANDATORY encounter's territory -- and note that the ambient-convexity constraint does
+   not cover it, deliberately: the party-plate beat REQUIRES the seal to span approach +
+   corridor + arena, so "just make it convex too" is not available here as it was for ambient.
+2. **What does it request each tick?** Straight at the target, every single tick. Pursuit never
+   stops asking for the blocked vector.
+3. **What does legality permit?** **133 of 180 ticks lost more than half the step.** Per-tick
+   motion decays 0.0500 -> 0.0252 -> 0.0196 -> **0.0047** as the approach angle turns into the
+   jamb. It travels 2.11 u in six seconds and is asymptotically stalling, pinned at z = -49.45,
+   which is exactly the arena edge (-48.0) minus the body radius (1.45).
+4. **Can the actor prove the route is obstructed from sim geometry alone?** **YES** -- the
+   detector above does exactly that, deterministically, with no engine involvement.
+5. **Is there a legal local route around it inside the territory?** **YES, and it is
+   asymmetric**: a right sidestep of 4.35 u perpendicular yields a legal two-leg route; the left
+   side finds nothing within 16 u. Asymmetry matters -- it means the choice is usually forced by
+   geometry rather than by a tie rule, but the tie rule must still exist.
+6. **What minimal retained state is needed?** **Three fields, per actor, floor-scoped**: the
+   committed waypoint, the side chosen, and a re-evaluation deadline. Without commitment a
+   sidestep is just rubbing with extra steps -- the moment the waypoint stops being the nearest
+   improvement, direct pursuit re-requests the blocked vector.
+
+### THE THREE OPTIONS, COSTED
+
+**A. Keep direct steering + wall slide.** Cost zero. **REJECTED by its own measurement**: it IS
+the observed behaviour (133/180 ticks lost, decaying to 0.0047 u/tick). Recorded so the baseline
+is a number rather than an impression.
+
+**B. NARROW DETERMINISTIC LOCAL AVOIDANCE — RECOMMENDED.**
+Shape, and no larger: detect the blocked direct route (validated detector) -> probe perpendicular
+offsets outward in a fixed ascending sequence, first legal two-leg waypoint wins -> COMMIT to it
+-> re-evaluate on arrival, on the direct line clearing, on the waypoint becoming illegal, or on a
+commit deadline.
+- **Determinism:** offsets ascend in fixed increments of half a body radius; both sides are
+  probed at each offset; if both are legal at the same offset the tie breaks on distance to
+  target, then on an authored side preference. No RNG, no engine query, no iteration-order
+  dependence, no neighbour sampling. Same sim state -> same route, which is what M3 needs.
+- **Blast radius:** ONE seam -- the AI's chosen movement vector. `_clamp_to_bounds`,
+  `WalkableBounds` and the combat pipeline are all untouched.
+- **Cost:** roughly 75 lines of sim plus 3 STATE_SCOPES entries, and a test file carrying the
+  seven detector cases plus commitment, re-evaluation, the tie rule, determinism (same state ->
+  same route twice) and a clear-line no-regression control.
+- **Serves the current floors?** Yes -- the probe shows ONE waypoint clears the only concave
+  territory that exists.
+
+**C. FULL PATHFINDING.** Godot NavMesh/NavigationAgent is **rejected outright**: it would put
+gameplay authority outside SimWorld, which breaks Prime Directive 1 and cannot be replicated by
+the M3 driver. A sim-side A* over the rect-overlap graph is buildable -- roughly 150 lines
+(graph, search, path-following, replanning) plus stable node ordering and cost/id tie-breaks --
+but it is a framework with ONE consumer, which §1.4 forbids until there are two.
+**Its honest trigger condition:** a floor that needs MORE THAN ONE TURN. That is not
+hypothetical -- the earlier ambient-ring probe found no single-waypoint route around the void,
+needing two. Today that case is excluded by the ambient-convexity constraint, so B suffices; the
+day an authored territory legitimately needs two turns, B stops being enough and C is earned.
+
+### RECOMMENDATION
+**Option B**, on the already-validated detector, with C's trigger condition written down so the
+upgrade is a recognised event rather than a discovery. Nothing implemented pending your choice.
 
 ## M2 INTERACTION RULINGS BUILT + TWO RECONS RETURNED — 2026-08-29. Suite 603 -> 608.
 

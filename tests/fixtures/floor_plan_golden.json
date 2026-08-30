@@ -343,10 +343,10 @@
 			"kind": "region_entered",
 			"once": true,
 			"region": {
-				"d": 3.2,
-				"w": 3.2,
-				"x": -13.6,
-				"z": -25.6
+				"d": 2.0,
+				"w": 2.0,
+				"x": -13.0,
+				"z": -25.0
 			},
 			"renders_as_plate": true,
 			"source_id": -1,

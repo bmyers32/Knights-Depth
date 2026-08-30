@@ -29,6 +29,10 @@ extends SceneTree
 ##               InteractablePlan, TRIGGER_INTERACTED and the `interact` Command went with their
 ##               last consumer. Triggers gained starts_enabled + renders_as_plate. Schema +
 ##               authoring migration, not a drift-hiding re-record. Hand-inspected before commit.
+##   2026-08-29  RE-BASELINED for the hidden-plate sizing (human replay finding). The plate's
+##               authored FOOTPRINT shrank 3.2 -> 2.0 with its mesh, so it reads as a local
+##               discovered control rather than a commitment plate. Geometry change only; no
+##               mechanic, schema or effect changed. Hand-inspected before commit.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the

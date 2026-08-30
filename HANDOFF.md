@@ -1,9 +1,10 @@
 # HANDOFF
 Milestone: **2 — Procedural depths. IN PROGRESS.** First M2 gate work has landed.
 
-**M2 FLOOR GRAMMAR: PASS (Breon, 2026-08-29)** against the frozen criterion — the abstraction
-is VALIDATED; linearity is acceptable for this prototype. Interaction rulings BUILT; two recons
-RETURNED. Awaiting the re-play. Suite **608/608**. Boots clean.
+**M2 FLOOR GRAMMAR: PASS (Breon), CONFIRMED ON REPLAY 2026-08-29.** Hidden plate, party plate,
+exit and open ledges all pass; no-E grammar reads as natural. **Two foundations remain before
+the grammar scales: P33 obstacle navigation (recon returned, awaiting option choice) and P34
+projectile-vs-world (direction approved, questions open).** Boots clean.
 Public M1 build: https://bmyers32.itch.io/knight-depths
 
 ## Where things stand
@@ -18,21 +19,15 @@ branch (west solves, east is inhabited) → **break the crate** → reveals a sw
 route → **PARTY BUTTON** (rear seals + forward opens + roster arrives + fight begins, one
 atomic record) → clear → ramp → raised ground → switch → endpoint.
 
-## Next action — RE-PLAY, then decide P34
-Press play. **WASD** to move, mouse to attack, **R** to restart. **There is no E any more** —
-every control is something you STAND ON.
-Route: walk in → west arm → break the crate → **step on the plate it hid** → follow the opened
-route → **stand on the orange party plate** → fight → the clear opens the whole way out → ramp
-→ high ground (open ledges, no walls) → **stand on the exit plate** → FLOOR COMPLETE.
+## Next action — CHOOSE P33's OPTION, then close P34's questions
+**P33 recon is returned with a costed recommendation (ROADMAP): option B, narrow committed
+sidestep, on a detector already validated 7/7 against the real failing geometry.** Measured
+baseline for rejecting option A: 133 of 180 ticks lost, decaying to 0.0047 u/tick. Nothing
+implemented pending your choice.
 
-Watch for: hidden-plate activation after the crate · the party plate · the all-party exit ·
-Ooze behaviour under the convex-territory constraint · whether body-aware bounds still feel
-natural at corners · the open ledges · and whether a **completely no-E interaction grammar**
-reads as natural or as overly automatic.
-
-Then: **P34 direction is APPROVED; implementation is gated** on this replay plus closing the
-four open questions in ROADMAP. Note while playing that shots still pass through walls — on this
-floor the crate can be destroyed from across the void.
+Then **P34**: direction approved, four open questions still to close before implementation.
+**Procedural scaling waits on both** — bigger folded layouts would only multiply what these
+leave broken.
 
 ### FROZEN CRITERION (verbatim — the verdict is rendered against this exact sentence)
 > "The floor passes only if it feels like traversing and interacting with a place — seeing
