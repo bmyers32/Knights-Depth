@@ -167,50 +167,36 @@ func _build_patch(patch: WalkablePatch) -> void:
 ## edge is sampled in short spans; a span with no other walkable ground beyond it gets a wall.
 ## Sampling rather than exact rectangle subtraction on purpose: the union is small, the result
 ## is identical at this resolution, and the alternative is a clipping library for scenery.
-## NOT EVERY WALKABILITY EDGE IS A WALL (human finding, 2026-08-29). A `ledge` patch renders no
-## vertical boundary at all: you can see over the drop, and the sim still refuses to let anyone
-## off it, because legality was never these meshes' job in the first place. This is a rendering
-## distinction only -- there is no second movement-legality system here, and adding one would be
-## the exact inversion Prime Directive 1 forbids.
+## WALLS ARE READ, NOT REDISCOVERED (P34). FloorPlan.solid_segments() is the ONE authoritative
+## boundary fact; the sim reads it for projectile obstruction and this reads it for rendering.
+## Presentation may tessellate a segment into geometry -- it must never decide whether or where
+## a wall exists, because two derivations of one fact drift the moment either changes.
+##
+## This REPLACED a 1.0-span sampler that probed 0.5 beyond each edge. That sampler was fine for
+## scenery and wrong as a source of truth: it quantised every wall to whole units.
+##
+## LEDGE patches emit no segments at all (FloorPlan), so they render no wall and stop no shot,
+## from the same authored fact. Movement legality is untouched either way -- it never came from
+## these meshes.
 func build_walls(plan: FloorPlan) -> void:
-	var rects: Array[Rect2] = plan.all_rects()
-	for patch in plan.patches:
-		if patch.boundary_style == &"ledge":
-			continue
-		_walls_for(patch.rect, patch.elevation, rects)
-	for connection in plan.connections:
-		_walls_for(connection.aperture, 0.0, rects)
+	for segment in plan.solid_segments():
+		_build_wall_segment(segment)
 
 
-func _walls_for(rect: Rect2, elevation: float, all_rects: Array[Rect2]) -> void:
-	var step: float = 1.0
+func _build_wall_segment(segment: Dictionary) -> void:
+	var vertical: bool = segment["axis"] == &"x"
+	var at: float = float(segment["at"])
+	var low: float = float(segment["min"])
+	var high: float = float(segment["max"])
+	var span: float = high - low
+	var middle: float = low + span * 0.5
+	var elevation: float = float(segment["elevation"])
+	var push: float = float(segment["outward"]) * _WALL_THICKNESS * 0.5
 	var y: float = elevation + _WALL_HEIGHT * 0.5
-	var x: float = rect.position.x
-	while x < rect.end.x - 0.001:
-		var span: float = minf(step, rect.end.x - x)
-		var mid_x: float = x + span * 0.5
-		if not _is_walkable(all_rects, Vector2(mid_x, rect.position.y - 0.5)):
-			_add_box(Vector3(span, _WALL_HEIGHT, _WALL_THICKNESS), Vector3(mid_x, y, rect.position.y - _WALL_THICKNESS * 0.5), _WALL_COLOR)
-		if not _is_walkable(all_rects, Vector2(mid_x, rect.end.y + 0.5)):
-			_add_box(Vector3(span, _WALL_HEIGHT, _WALL_THICKNESS), Vector3(mid_x, y, rect.end.y + _WALL_THICKNESS * 0.5), _WALL_COLOR)
-		x += span
-	var z: float = rect.position.y
-	while z < rect.end.y - 0.001:
-		var span: float = minf(step, rect.end.y - z)
-		var mid_z: float = z + span * 0.5
-		if not _is_walkable(all_rects, Vector2(rect.position.x - 0.5, mid_z)):
-			_add_box(Vector3(_WALL_THICKNESS, _WALL_HEIGHT, span), Vector3(rect.position.x - _WALL_THICKNESS * 0.5, y, mid_z), _WALL_COLOR)
-		if not _is_walkable(all_rects, Vector2(rect.end.x + 0.5, mid_z)):
-			_add_box(Vector3(_WALL_THICKNESS, _WALL_HEIGHT, span), Vector3(rect.end.x + _WALL_THICKNESS * 0.5, y, mid_z), _WALL_COLOR)
-		z += span
-
-
-func _is_walkable(rects: Array[Rect2], point: Vector2) -> bool:
-	for rect in rects:
-		if point.x >= rect.position.x and point.x <= rect.end.x \
-				and point.y >= rect.position.y and point.y <= rect.end.y:
-			return true
-	return false
+	if vertical:
+		_add_box(Vector3(_WALL_THICKNESS, _WALL_HEIGHT, span), Vector3(at + push, y, middle), _WALL_COLOR)
+	else:
+		_add_box(Vector3(span, _WALL_HEIGHT, _WALL_THICKNESS), Vector3(middle, y, at + push), _WALL_COLOR)
 
 
 func _build_connection(connection: TraversalConnection, plan: FloorPlan) -> void:

@@ -270,6 +270,16 @@ var _triggers: Dictionary = {}           # trigger_id -> {kind, region, source_i
 var _triggers_fired: Dictionary = {}     # trigger_id -> true
 var _trigger_condition_met: Dictionary = {}  # trigger_id -> bool, last tick's occupancy state (edge detection)
 var _trigger_enabled: Dictionary = {}    # trigger_id -> bool; a dormant controller is not evaluated at all
+## P34. STATIC SOLID SEGMENTS -- IMMUTABLE FLOOR DATA, handed over whole by the generator and
+## never mutated after load. It is registered rather than derived here so the sim and
+## presentation provably read the SAME canonical fact (FloorPlan.solid_segments), never two
+## computations of it.
+##
+## STATE-SCOPE, HONESTLY: this is floor-lifetime data like _patch_rects, so it is classified
+## SCOPE_FLOOR for lifetime -- but it is NOT a mutable collision mirror, and nothing writes to it
+## after load_floor. Dynamic blocking (a closed gate) is NOT stored here at all: it derives from
+## _connection_open, which is already the authoritative mutable state for exactly that question.
+var _solid_segments: Array[Dictionary] = []
 var _breakables: Dictionary = {}         # breakable_id -> {position, radius, durability}
 var _encounters: Dictionary = {}         # encounter_id -> {region, role, confines_player}
 var _encounter_bounds: Dictionary = {}   # encounter_id -> WalkableBounds, region CLIPPED to walkable
@@ -408,6 +418,7 @@ const STATE_SCOPES: Dictionary = {
 	"_triggers_fired": SCOPE_FLOOR,
 	"_trigger_condition_met": SCOPE_FLOOR,
 	"_trigger_enabled": SCOPE_FLOOR,
+	"_solid_segments": SCOPE_FLOOR,  # immutable after load; scoped for LIFETIME, not mutation
 	"_breakables": SCOPE_FLOOR,
 	"_encounters": SCOPE_FLOOR,
 	"_encounter_bounds": SCOPE_FLOOR,
@@ -540,6 +551,12 @@ func register_trigger(trigger_id: int, kind: StringName, region: Rect2, source_i
 ## contact-spread, no i-frames, no flinch, no pressure, no knockback, no status -- and crucially
 ## it is never a valid target for an enemy. It shares only DETECTION with melee and projectiles;
 ## resolution forks immediately into _resolve_hit_on_breakable.
+## Hands the sim the floor's canonical boundary. No derivation happens here on purpose: one
+## computation, in FloorPlan, read by both consumers.
+func register_solid_segments(segments: Array[Dictionary]) -> void:
+	_solid_segments = segments
+
+
 func register_breakable(breakable_id: int, position: Vector3, radius: float, durability: float) -> void:
 	_breakables[breakable_id] = {"position": position, "radius": radius, "durability": durability}
 
@@ -857,6 +874,65 @@ func _breakables_in_cone(attacker_position: Vector3, resolved_aim: Vector3, weap
 				continue
 		hit_ids.append(breakable_id)
 	return hit_ids
+
+
+## Earliest SOLID WORLD obstruction along this tick's travel segment, as {t}, or empty.
+##
+## SIM AUTHORITY ONLY: axis-aligned segment maths against canonical floor data. No physics
+## query, no raycast, no collision shape, no NavigationServer -- the same fence _actors_overlap
+## already sits behind.
+##
+## Static segments and CLOSED GATES are checked together because a projectile does not care which
+## kind of solid it met; only their SOURCES differ, and a gate's solidity is read live from
+## _connection_open rather than stored anywhere.
+##
+## THE SEGMENT'S ENDS ARE NOT INFLATED by hit_radius, deliberately. Inflating them would let a
+## shot threading a doorway be stopped by the jamb it visibly cleared; the failure that remains
+## is a shot squeaking through a hair's gap, which is the kinder way to be wrong.
+func _find_earliest_solid_hit(start: Vector3, end: Vector3, hit_radius: float) -> Dictionary:
+	var best_t: float = INF
+	for segment in _solid_segments:
+		var t: float = _segment_crossing(start, end, segment, hit_radius)
+		if t >= 0.0 and t < best_t:
+			best_t = t
+	for connection_id in _connections:
+		if bool(_connection_open.get(connection_id, false)):
+			continue  # an open route obstructs nothing
+		var t: float = _segment_crossing(start, end, _gate_segment(_connections[connection_id]["aperture"]), hit_radius)
+		if t >= 0.0 and t < best_t:
+			best_t = t
+	return {} if best_t == INF else {"t": best_t}
+
+
+## A CLOSED GATE IS A SOLID LINE ACROSS ITS APERTURE, derived from the aperture rather than
+## authored, so the barrier and the picture of it can never be placed differently.
+func _gate_segment(aperture: Rect2) -> Dictionary:
+	if aperture.size.y >= aperture.size.x:
+		# travel runs along z, so the barrier lies across x
+		return {"axis": &"z", "at": aperture.position.y + aperture.size.y * 0.5,
+			"min": aperture.position.x, "max": aperture.end.x}
+	return {"axis": &"x", "at": aperture.position.x + aperture.size.x * 0.5,
+		"min": aperture.position.y, "max": aperture.end.y}
+
+
+## Parametric t in [0,1] at which the projectile's leading edge meets this segment, or -1.
+func _segment_crossing(start: Vector3, end: Vector3, segment: Dictionary, hit_radius: float) -> float:
+	var vertical: bool = segment["axis"] == &"x"
+	var from_axis: float = start.x if vertical else start.z
+	var to_axis: float = end.x if vertical else end.z
+	var delta: float = to_axis - from_axis
+	if absf(delta) <= 0.000001:
+		return -1.0  # travelling parallel to this boundary: it is not in the way
+	var at: float = float(segment["at"])
+	# Contact is when the LEADING EDGE reaches the plane, not the centre.
+	var touch: float = at - signf(delta) * hit_radius
+	var t: float = (touch - from_axis) / delta
+	if t < 0.0 or t > 1.0:
+		return -1.0
+	var across: float = (start.z + (end.z - start.z) * t) if vertical else (start.x + (end.x - start.x) * t)
+	if across < float(segment["min"]) or across > float(segment["max"]):
+		return -1.0  # crossed the infinite line, but past the end of the real wall
+	return t
 
 
 ## Earliest breakable along a projectile's travel segment, as {breakable_id, t}, or empty.
@@ -2405,7 +2481,29 @@ func _advance_projectiles(dt: float) -> Array[Event]:
 		# penetration is never the default.
 		var actor_hit: Dictionary = _find_earliest_swept_hit(start_position, end_position, projectile.attacker_id, weapon.hit_radius)
 		var breakable_hit: Dictionary = _find_earliest_breakable_hit(start_position, end_position, weapon.hit_radius)
-		var breakable_first: bool = not breakable_hit.is_empty() and (actor_hit.is_empty() or float(breakable_hit["t"]) < float(actor_hit["t"]))
+		var world_hit: Dictionary = _find_earliest_solid_hit(start_position, end_position, weapon.hit_radius)
+
+		# THE ORDERING LAW (P34). Smallest authoritative parametric travel distance wins. The
+		# WORLD -> BREAKABLE -> ACTOR order applies ONLY to exact/epsilon-equivalent ties and is
+		# a DETERMINISM RULE FOR DEGENERATE GEOMETRY -- never a general gameplay priority. It
+		# exists because M3 needs a client and a server to resolve the same shot identically,
+		# not because walls are "more important" than actors.
+		var world_first: bool = not world_hit.is_empty() \
+			and (breakable_hit.is_empty() or float(world_hit["t"]) <= float(breakable_hit["t"]) + _TIE_EPSILON) \
+			and (actor_hit.is_empty() or float(world_hit["t"]) <= float(actor_hit["t"]) + _TIE_EPSILON)
+		if world_first:
+			# A shot stopped by the world has NO impact event of its own, so this is the one
+			# termination that needs provenance -- hence the reason field, and hence why actor
+			# and breakable impacts deliberately do not carry one.
+			events.append(Event.new(tick_count, "projectile_expired", {
+				"attacker_id": projectile.attacker_id, "weapon_id": projectile.weapon_id,
+				"projectile_id": projectile_id,
+				"position": start_position + (end_position - start_position) * float(world_hit["t"]),
+				"reason": PROJECTILE_END_WORLD,
+			}))
+			expired_ids.append(projectile_id)
+			continue
+		var breakable_first: bool = not breakable_hit.is_empty() and (actor_hit.is_empty() or float(breakable_hit["t"]) <= float(actor_hit["t"]) + _TIE_EPSILON)
 		if breakable_first:
 			# Stamped with the projectile id so presentation retires the tracer through the same
 			# uniform rule every other terminal event uses.
@@ -2424,6 +2522,7 @@ func _advance_projectiles(dt: float) -> Array[Event]:
 			events.append(Event.new(tick_count, "projectile_expired", {
 				"attacker_id": projectile.attacker_id, "weapon_id": projectile.weapon_id,
 				"projectile_id": projectile_id, "position": projectile.position,
+				"reason": PROJECTILE_END_LIFETIME,
 			}))
 			expired_ids.append(projectile_id)
 
@@ -2912,6 +3011,36 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 ## fine enough that a body cannot tunnel across a gap narrower than itself, which is the only
 ## way this detector could lie by omission.
 const _AVOID_SAMPLE_FRACTION: float = 0.5
+
+
+# --- P34: PROJECTILE TERMINATION PROVENANCE ----------------------------------------------
+## THE CLOSED ENUM, frozen after auditing every path that destroys a projectile. Four exist:
+##
+##   1. BREAKABLE impact -- emits breakable_hit (+ breakable_destroyed), stamped with the
+##      projectile id. Already authoritative and already retires the tracer.
+##   2. ACTOR impact -- emits hit (and blocked / shield_broken / death as applicable), carrying
+##      the projectile id. Likewise already authoritative.
+##   3. LIFETIME expiry -- emits projectile_expired. Nothing else explains it.
+##   4. FLOOR UNLOAD -- _projectiles is SCOPE_FLOOR and is cleared wholesale; no per-projectile
+##      event is emitted, and presentation drops every tracer on floor rebuild anyway.
+##
+## SO THE ENUM HAS EXACTLY TWO MEMBERS: the reasons that actually accompany a
+## projectile_expired. Cases 1 and 2 are DELIBERATELY ABSENT -- their own hit events completely
+## explain the destruction and already carry the projectile id, so a termination reason there
+## would be a second channel for provenance those events own (ruled). Case 4 needs no event.
+##
+## projectile_expired therefore means: THIS PROJECTILE CEASED TO EXIST AND NO OTHER EVENT
+## EXPLAINS WHY. Broadening it to every termination was considered and rejected: it would emit a
+## second terminal event for shots that already have one, and presentation's uniform "any event
+## carrying my projectile_id retires me" rule would fire twice for one shot.
+##
+## A NEW REASON REQUIRES A REAL CONSUMER AND AN EXPLICIT SCHEMA CHANGE. No free-form strings, no
+## "future reasons" placeholder -- test_projectile_world.gd pins the membership and the count.
+const PROJECTILE_END_LIFETIME: StringName = &"lifetime"
+const PROJECTILE_END_WORLD: StringName = &"world"
+const PROJECTILE_END_REASONS: Array[StringName] = [PROJECTILE_END_LIFETIME, PROJECTILE_END_WORLD]
+## Tolerance for "arrived at the same instant". Only degenerate geometry ever reaches it.
+const _TIE_EPSILON: float = 0.000001
 
 
 ## THE DETECTOR (validated 7/7 on the real failing geometry before any of this existed --
