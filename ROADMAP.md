@@ -59,9 +59,25 @@ still fire.
 hidden switch was the last authored interactable, so `switch` became a zero-consumer kind --
 and with it `InteractablePlan`, `TRIGGER_INTERACTED`, `EFFECT_REVEAL_INTERACTABLE`,
 `use_radius`, the `interact` Command, its sim handler and the E binding. All retired together.
-Rule of two runs BOTH WAYS: vocabulary does not survive on the grounds that it might be useful
-later. It comes back out of git the day a deliberate press is earned.
 **The floor now has no `interact` verb at all. Every control is something you stand on.**
+
+### SCOPE OF THAT RETIREMENT — AMENDED 2026-08-29 (Breon), read this before citing it
+The retirement is a statement about CONSUMERS, not a verdict on the verb. The recorded law is
+exactly:
+
+> **No active floor-grammar consumer currently uses `interact`. Do not restore the machinery
+> until a concrete deliberate-action consumer requires it.**
+
+The evidence only ever supported that. It does NOT support "deliberate interaction is rejected",
+and this file must not be cited as though it did. Plausible future M2 consumers where accidental
+proximity activation would be actively WRONG: loadout/gear stations, elevators, rest-floor
+controls, and other authored objects a player must choose to operate. When one of those arrives,
+reintroduce **only the narrow surface it requires** -- not the retired schema wholesale.
+
+The prototype-floor assertions (`test_no_authored_control_requires_a_press`, and the golden
+fixture's `interacted` check) are scoped to THIS authored plan and to the committed fixture, so
+they describe today's floor rather than legislating every future one. That scoping is deliberate
+and must survive any rewrite of them.
 
 ### ONE SHARED GROUP-OCCUPANCY CONDITION
 `SimWorld.all_active_envoys_occupy(region)` -- ALL_ACTIVE_ENVOYS_OCCUPY_REGION -- extracted
@@ -2555,6 +2571,36 @@ Two populations, deliberately separated:
 | breakable | YES — already validated, unchanged |
 | actor | existing hit behaviour, unchanged |
 | `ledge` / open edge | **NO** — bounded for bodies, transparent to shots |
+
+## DIRECTION APPROVED 2026-08-29 (Breon) — IMPLEMENTATION STILL GATED
+Approved as architecture; **no code until the replay is done and the open questions below are
+closed.** The four rulings, as accepted:
+
+1. **SOLID EDGE IS AUTHORITATIVE FLOOR DATA.** WALL/LEDGE stops being presentation-only. ONE
+   authored boundary fact feeds both consumers -- presentation renders wall vs open ledge, sim
+   decides projectile obstruction. **A second projectile-only wall representation is forbidden**:
+   two descriptions of one boundary is exactly the drift Truth Homes exists to prevent.
+2. **NO NEW MUTABLE COLLISION STATE.** Static solid edges are immutable FloorPlan data and get
+   no STATE_SCOPES entry. Dynamic blocking derives from existing authoritative connection state,
+   which remains the sole mutable authority.
+3. **RESOLUTION BY SMALLEST t.** Candidates come from actors, breakables and solid world edges /
+   closed blockers; the smallest authoritative parametric travel distance wins. The
+   **WORLD -> BREAKABLE -> ACTOR** tie order is a DETERMINISTIC DEGENERACY RULE ONLY, for
+   exact/epsilon-equivalent ties -- it is explicitly NOT a general gameplay priority, and must
+   never be cited as one.
+4. **SIM AUTHORITY ONLY.** Godot physics and wall meshes are never authoritative for projectile
+   collision. Presentation continues to mirror FloorPlan and sim state.
+
+### REQUIRED TESTS (pre-registered, all must exist before this is called done)
+- actor clearly before wall -> actor is hit
+- wall clearly before actor -> wall stops the shot
+- breakable before wall -> breakable is hit and stops it
+- wall before breakable -> wall stops it, prop untouched
+- actor flush with wall / tie case -> pinned deterministic outcome
+- open LEDGE boundary -> projectile CONTINUES (bounded for bodies, transparent to shots)
+- closed connection/gate -> projectile stops
+- the same connection open -> projectile passes
+- no sequence-breaking shot through a solid wall into an unreached breakable or actor
 
 ## OPEN QUESTIONS FOR REVIEW (not decided here)
 1. **Wall height / arcs.** Everything is flat today; a `ledge` is "not solid" and a `wall` is
