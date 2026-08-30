@@ -39,7 +39,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
 | P29 | Enemy action repertoire / distance-conditioned selection | **PASS / CLOSED 2026-08-18** | Frozen point `9378316`; follow-ups dispatched to P17/P28/P30/P31/P32 |
 | P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
-| P33 | Obstacle-aware enemy navigation | **ACTIVE REQUIREMENT — recon returned 2026-08-29, awaiting option choice** | Second live sighting graduates this from deferred limitation. Detector VALIDATED 7/7; three options costed below; recommendation is B (narrow committed sidestep) |
+| P33 | Bounded local obstacle avoidance | **OPTION B APPROVED 2026-08-29 · SPEC FROZEN, AWAITING REVIEW** | Detector validated 7/7; spec below carries the frozen pass sentence, the pinned tie rule and the pre-registered tests. No code written |
 | P34 | Projectile-vs-world obstruction | **DESIGN RETURNED 2026-08-29, AWAITING REVIEW** | P20's projectile fence consumed by play evidence: shots pass through walls, which folded topology turns into a sequence-break risk. Design below; NO implementation |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
@@ -2626,6 +2626,125 @@ watching a shot close the distance.
 **Do not** attempt to fix this by widening the melee parry window; that trades a timing
 problem for a leniency problem and leaves the player still unable to aim their timing.
 
+
+# P33 — BOUNDED LOCAL OBSTACLE AVOIDANCE · **PRE-CODE SPECIFICATION (FROZEN). NO CODE WRITTEN.**
+
+Option B approved 2026-08-29 on the recon above. This spec returns for review BEFORE
+implementation. Frozen means: the criterion and the laws below are fixed before any code exists,
+so the result is judged against what was promised rather than against what was built.
+
+## FROZEN PASS SENTENCE (verbatim — the verdict is rendered against this exact sentence)
+> "The avoidance passes when the Ooze follows around the corner instead of rubbing at it:
+> recognizes obstruction, routes around, arrives"
+
+## V1 CAPABILITY, AND ITS CEILING
+Recognize ONE intervening obstruction, choose ONE deterministic local route around it, commit
+long enough to clear it, then return to normal pursuit.
+
+**EXPLICITLY NOT BUILT:** NavMesh / NavigationAgent authority · A* · a navigation graph · a
+general waypoint framework · multi-turn planning.
+
+**ESCALATION TRIGGER, written down so the upgrade is a recognised event and not a discovery:**
+a required engagement route that cannot be solved with ONE local turn. The earlier ambient-ring
+probe (no single-waypoint route around the void) is evidence that such a consumer can exist. It
+is not the current consumer, and the ambient-convexity constraint currently excludes it.
+
+## 1. DETECTOR LAW
+Avoidance may begin ONLY when the already-validated authoritative obstruction detector fires
+within the pursuit horizon. No engine physics or navigation query may substitute for it, ever.
+
+The detector is the one validated 7/7 in `tools/diagnose_obstruction_detector.gd`:
+- question: *is my intended direct movement toward the target obstructed by authoritative floor
+  geometry?*
+- walks the direct line at BODY WIDTH against the actor's own legality region
+  (`_legal_bounds_for` -> `fits`), so territory confinement and body extent are both respected
+  by construction;
+- horizon = the actor's `detection_radius`, not a picked constant. An actor that only pursues
+  what it can detect has no business reasoning past that;
+- samples at HALF the body radius, so a body cannot tunnel across a gap narrower than itself;
+- returns the first blocked point, or nothing.
+
+Porting it into sim/ must not change its behaviour: the seven validated cases become tests.
+
+## 2. CANDIDATE SELECTION — DETERMINISM IS THE WHOLE POINT
+Candidates are perpendicular sidesteps from the blocked line, generated and evaluated in a
+STABLE order. Identical authoritative state must yield an identical selected route.
+
+Generation order, fixed:
+1. offsets ascend from one body radius in increments of half a body radius, to a cap;
+2. at each offset, the RIGHT candidate is generated before the LEFT one;
+3. a candidate qualifies only if the waypoint is body-legal AND both legs (actor -> waypoint,
+   waypoint -> target) are unobstructed by the same detector;
+4. the FIRST qualifying candidate wins.
+
+**PINNED TIE RULE.** If the right and left candidates qualify at the SAME offset, the winner is
+the one whose waypoint is nearer the target; if those distances are equal within epsilon, RIGHT
+wins by authored convention. This is a degeneracy rule, not a steering preference — the observed
+case is asymmetric (right clears at 4.35 u, left finds nothing within 16), so geometry decides
+almost always and the tie rule exists to make the remainder replayable.
+
+FORBIDDEN as inputs: RNG · container or iteration order · physics-query order · anything not
+derivable from authoritative sim state.
+
+## 3. COMMITMENT AND STATE
+Without commitment a sidestep is rubbing with extra steps: the moment the waypoint stops being
+the nearest improvement, direct pursuit re-requests the blocked vector.
+
+**STATE CLASSIFICATION (ruled).** These are PER-ACTOR AI FIELDS whose lifetime ends with the
+floor. They are filed alongside the existing `_ai_*` family and classified `SCOPE_FLOOR` for the
+same reason those are — NOT promoted to floor-global state merely because a floor transition
+clears them.
+
+Store ONLY what the behaviour consumes:
+| field | why it cannot be derived |
+|---|---|
+| `_ai_avoid_waypoint` | the committed local target; re-deriving it every tick is the oscillation |
+| `_ai_avoid_deadline` | absolute sim tick at which commitment lapses; bounds the behaviour |
+
+**The committed SIDE is deliberately NOT stored**: it is derivable from the waypoint's position
+relative to the actor-to-target line, and a field that duplicates a derivable fact is a second
+truth waiting to disagree. If implementation proves it genuinely cannot be derived, add it then
+and say so — do not add it speculatively.
+
+## 4. EXIT CONDITIONS
+Leave avoidance when ANY applies:
+1. direct pursuit becomes unobstructed (detector goes quiet);
+2. the committed waypoint is reached or cleared;
+3. the commitment deadline expires;
+4. target or encounter state invalidates pursuit (death, clear, combat-absence, leash).
+
+**The deadline must fail DETERMINISTICALLY and must never leave an actor permanently in
+avoidance.** On expiry the actor returns to ordinary pursuit; if the obstruction still fires, a
+fresh selection may occur. That is bounded degradation to today's behaviour, never a stall.
+
+## 5. WHAT MUST NOT CHANGE
+Body-aware legality · territory-union confinement · the existing movement clamp
+(`_clamp_to_bounds` / `WalkableBounds.clamp_step`) · the combat pipeline. **None of them may be
+weakened to make avoidance easier.** Avoidance changes only the DIRECTION the AI asks for; the
+displacement seam that answers is untouched.
+
+## 6. REQUIRED TESTS (pre-registered; all must exist before this is called done)
+- literal observed right-side route succeeds
+- opposite side has no route in that case and is NOT selected
+- diagonal blocked approach
+- near-tangent blocked approach
+- unobstructed pursuit does NOT enter avoidance
+- deterministic tie case
+- side commitment prevents oscillation
+- direct route becoming clear exits avoidance early
+- deadline / failure path is bounded
+- same initial sim state produces an identical route
+- instrumentation proves detector -> selector -> committed avoidance actually FIRED
+
+That last one is load-bearing: a behaviour that appears to work because the actor happened to
+slide somewhere useful is not this mechanic firing. Confirm the chain before believing a result.
+
+## 7. BLAST RADIUS
+ONE seam — the AI's chosen movement vector. Nothing in `WalkableBounds`, `_clamp_to_bounds`,
+the eight displacement seams, or the combat pipeline is touched. Pure function of sim state, so
+the M3 driver replicates it unchanged.
+
+**NOTHING IS IMPLEMENTED. This spec awaits review.**
 
 
 # P34 — PROJECTILE-VS-WORLD OBSTRUCTION · **PRE-CODE DESIGN, AWAITING REVIEW. NO CODE WRITTEN.**
