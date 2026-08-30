@@ -39,7 +39,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
 | P29 | Enemy action repertoire / distance-conditioned selection | **PASS / CLOSED 2026-08-18** | Frozen point `9378316`; follow-ups dispatched to P17/P28/P30/P31/P32 |
 | P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
-| P33 | Bounded local obstacle avoidance | **OPTION B APPROVED 2026-08-29 · SPEC FROZEN, AWAITING REVIEW** | Detector validated 7/7; spec below carries the frozen pass sentence, the pinned tie rule and the pre-registered tests. No code written |
+| P33 | Bounded local obstacle avoidance | **IMPLEMENTED 2026-08-29 · awaiting human play** | Built to the frozen spec. Measured on the real geometry: rub ticks 203 -> 0, arrival 321 -> 202 ticks. All 11 pre-registered tests green |
 | P34 | Projectile-vs-world obstruction | **DESIGN RETURNED 2026-08-29, AWAITING REVIEW** | P20's projectile fence consumed by play evidence: shots pass through walls, which folded topology turns into a sequence-break risk. Design below; NO implementation |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
@@ -2744,7 +2744,37 @@ ONE seam — the AI's chosen movement vector. Nothing in `WalkableBounds`, `_cla
 the eight displacement seams, or the combat pipeline is touched. Pure function of sim state, so
 the M3 driver replicates it unchanged.
 
-**NOTHING IS IMPLEMENTED. This spec awaits review.**
+## AS BUILT (2026-08-29). Suite 608 -> 623.
+
+Implemented to this spec, at the one seam it named. **MEASURED ON THE REAL GEOMETRY** (the
+shipped arena -> neck, pursuer off-axis beside the jamb, 600 ticks):
+
+| | rub ticks | arrives |
+|---|---|---|
+| avoidance ON | **0** | tick 202 |
+| avoidance OFF (baseline) | **203** | tick 321 |
+
+"Rub ticks" is the recon's own metric -- ticks that lost more than half the requested step -- so
+the mechanic is judged by the same measurement that condemned the baseline. That is the frozen
+sentence in numbers: it follows around instead of rubbing, and arrives.
+
+**ONE CORRECTION THE TESTS FORCED, recorded because it changed the design.** The first build
+sampled the detector and the second leg all the way INTO the target's position. A 1.45-radius
+Ooze frequently cannot fit where a 0.4-radius Envoy is standing, so in the near-tangent case no
+route could ever qualify and avoidance silently never fired -- a FALSE obstruction, indefinitely
+unresolvable. Both now stop short by `preferred_attack_distance`: a pursuer needs a clear route
+to WHERE IT WILL STAND, never into the target's own footprint. The near-tangent test is what
+exposed it.
+
+**Authored, not hardcoded:** `avoid_commit_ticks` on enemy stats (45, PROVISIONAL, outside the
+M1 fence). **ABSENCE IS OFF** -- 0 means a family pursues in straight lines exactly as before
+P33 existed, which is what leaves every pre-existing test untouched.
+
+**The committed SIDE is still not stored**, as specified: it never proved necessary, so the state
+is exactly two fields.
+
+Not built, as fenced: no NavMesh/NavigationAgent, no A*, no navigation graph, no waypoint
+framework, no multi-turn planning. The escalation trigger stands unchanged.
 
 
 # P34 — PROJECTILE-VS-WORLD OBSTRUCTION · **PRE-CODE DESIGN, AWAITING REVIEW. NO CODE WRITTEN.**

@@ -181,6 +181,15 @@ var _combat_absent: Dictionary = {}
 ## suspended. One record with a phase field: the lifecycle is strictly linear
 ## (jump -> underground -> reacquisition), so parallel dicts would only invite an inconsistent
 ## middle.
+## P33 BOUNDED LOCAL AVOIDANCE. PER-ACTOR AI STATE whose lifetime ends with the floor, filed
+## here with the rest of the _ai_* family and scoped SCOPE_FLOOR for the same reason they are --
+## NOT promoted to floor-global state merely because a floor transition clears it.
+##
+## Only what the behaviour consumes. The committed SIDE is deliberately absent: it is derivable
+## from the waypoint's position relative to the actor-to-target line, and a stored field that
+## duplicates a derivable fact is a second truth waiting to disagree.
+var _ai_avoid_waypoint: Dictionary = {}  # actor_id -> Vector3, the committed local target
+var _ai_avoid_deadline: Dictionary = {}  # actor_id -> int, absolute tick the commitment lapses
 var _ai_burrow: Dictionary = {}                # actor_id -> resolved config
 var _burrow: Dictionary = {}                   # actor_id -> live lifecycle record
 var _next_burrow_tick: Dictionary = {}         # actor_id -> int, production pacing
@@ -385,6 +394,8 @@ const STATE_SCOPES: Dictionary = {
 	"_ai_last_in_close_band": SCOPE_FLOOR,
 	"_ai_last_frustration_commit": SCOPE_FLOOR,
 	"_ai_close_band": SCOPE_FLOOR,
+	"_ai_avoid_waypoint": SCOPE_FLOOR,
+	"_ai_avoid_deadline": SCOPE_FLOOR,
 	"_ai_burrow": SCOPE_FLOOR,
 	"_burrow": SCOPE_FLOOR,
 	"_next_burrow_tick": SCOPE_FLOOR,
@@ -1162,7 +1173,7 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 ## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
 ## than preferred -> approach, closer than minimum -> back away, inside the band ->
 ## stop. Since P29 they govern MOVEMENT ONLY; attack eligibility is the action band.
-func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0, burrow_jump_distance: float = 0.0, burrow_jump_step_distance: float = 0.0, burrow_underground_ticks: int = 0, burrow_emergence_radius: float = 0.0, burrow_emergence_retry_ticks: int = 0, burrow_reacquisition_ticks: int = 0, burrow_cooldown_ticks: int = 0) -> void:
+func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0, burrow_jump_distance: float = 0.0, burrow_jump_step_distance: float = 0.0, burrow_underground_ticks: int = 0, burrow_emergence_radius: float = 0.0, burrow_emergence_retry_ticks: int = 0, burrow_reacquisition_ticks: int = 0, burrow_cooldown_ticks: int = 0, avoid_commit_ticks: int = 0) -> void:
 	# The TERMINAL band is the one with the largest max_range — the only band that
 	# includes its own maximum (see _select_action). Derived, never authored, so content
 	# cannot accidentally declare two terminals or none.
@@ -1195,6 +1206,7 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 		"leash_radius": leash_radius,
 		"engagement_delay_ticks": engagement_delay_ticks,
 		"close_frustration_ticks": close_frustration_ticks,
+		"avoid_commit_ticks": avoid_commit_ticks,
 	}
 	# The CLOSE band: the innermost action that is not itself frustration-gated. Derived
 	# from authored bands, never from a separate "close range" number, so the proximity test
@@ -2888,9 +2900,192 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		return [Command.new(tick_count, actor_id, "move", {"direction": -to_player.normalized()})]
 
 	if distance_to_player > tuning.preferred_attack_distance:
-		return [Command.new(tick_count, actor_id, "move", {"direction": to_player.normalized()})]
+		# P33: the ONE seam. Ordinary pursuit unless an obstruction is detected between here and
+		# the target, in which case a committed local route around it replaces the direct vector.
+		return [Command.new(tick_count, actor_id, "move", {"direction": _pursuit_direction(actor_id, player_position, events)})]
 
 	return []  # in band, weapon on cooldown: hold position and wait
+
+
+# --- P33: BOUNDED LOCAL OBSTACLE AVOIDANCE ----------------------------------------------
+## Sampling step as a fraction of the body radius. NOT a tunable: it is a correctness parameter,
+## fine enough that a body cannot tunnel across a gap narrower than itself, which is the only
+## way this detector could lie by omission.
+const _AVOID_SAMPLE_FRACTION: float = 0.5
+
+
+## THE DETECTOR (validated 7/7 on the real failing geometry before any of this existed --
+## tools/diagnose_obstruction_detector.gd, whose seven cases are now tests).
+##
+## "Is my intended direct movement toward the target obstructed by authoritative floor geometry?"
+##
+## Answered from sim state alone: no physics query, no raycast, no navigation agent, ever. It
+## walks the direct line at BODY WIDTH against this actor's OWN legality region, so territory
+## confinement and body extent are both respected by construction rather than by a second rule.
+##
+## HORIZON IS detection_radius, not a picked constant: an actor that only pursues what it can
+## detect has no business reasoning about geometry beyond that. Returns the first blocked point,
+## or {} for clear.
+func _direct_route_obstruction(actor_id: int, target: Vector3) -> Dictionary:
+	var region: WalkableBounds = _legal_bounds_for(actor_id)
+	if region == null:
+		return {}
+	var radius: float = _body_radius_for(actor_id)
+	if radius <= 0.0:
+		return {}  # a bodiless actor cannot be obstructed by width
+	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var span: Vector3 = target - from
+	span.y = 0.0
+	var horizon: float = float(_ai_tuning.get(actor_id, {}).get("detection_radius", 0.0))
+	var distance: float = minf(span.length(), horizon)
+	if distance <= 0.0001:
+		return {}
+	# STOP SHORT OF THE TARGET'S OWN GROUND. A pursuer needs a clear route to WHERE IT WILL
+	# STAND, not into the target's body -- and a wide actor frequently cannot fit where a narrow
+	# Envoy is standing. Sampling all the way in made every route unqualifiable in the
+	# near-tangent case, which is a false obstruction, not a real one.
+	distance -= float(_ai_tuning.get(actor_id, {}).get("preferred_attack_distance", 0.0))
+	if distance <= 0.0001:
+		return {}
+	var direction: Vector3 = span.normalized()
+	var step: float = maxf(radius * _AVOID_SAMPLE_FRACTION, 0.05)
+	var travelled: float = step
+	while travelled <= distance:
+		var probe: Vector3 = from + direction * travelled
+		if not region.fits(probe, radius):
+			return {"at": probe, "distance": travelled}
+		travelled += step
+	return {}
+
+
+## THE SELECTOR. Perpendicular sidesteps generated in a STABLE order so identical authoritative
+## state yields an identical route: offsets ascend from one body radius in half-radius
+## increments up to the detection horizon, and RIGHT is generated before LEFT at each offset.
+##
+## A candidate qualifies only if the waypoint is body-legal AND both legs -- actor to waypoint,
+## waypoint to target -- are clear to the same detector. The first qualifying OFFSET wins.
+##
+## PINNED TIE RULE: if both sides qualify at the SAME offset, the waypoint nearer the target
+## wins; if those are equal within epsilon, RIGHT wins by authored convention. This is a
+## degeneracy rule for replayability, NOT a steering preference -- the observed geometry is
+## asymmetric (right clears at 4.35 u, left finds nothing within 16), so geometry decides almost
+## always. Nothing here consults RNG, container order or any engine query.
+func _select_avoidance_waypoint(actor_id: int, target: Vector3) -> Vector3:
+	var region: WalkableBounds = _legal_bounds_for(actor_id)
+	var radius: float = _body_radius_for(actor_id)
+	if region == null or radius <= 0.0:
+		return Vector3.ZERO
+	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var span: Vector3 = target - from
+	span.y = 0.0
+	if span.length() <= 0.0001:
+		return Vector3.ZERO
+	var forward: Vector3 = span.normalized()
+	var perpendicular := Vector3(-forward.z, 0.0, forward.x)
+	var cap: float = float(_ai_tuning.get(actor_id, {}).get("detection_radius", 0.0))
+	var offset: float = radius
+	while offset <= cap:
+		var right: Vector3 = from + perpendicular * offset
+		var left: Vector3 = from - perpendicular * offset
+		var right_ok: bool = _waypoint_qualifies(actor_id, right, target, region, radius)
+		var left_ok: bool = _waypoint_qualifies(actor_id, left, target, region, radius)
+		if right_ok and left_ok:
+			var right_gap: float = right.distance_to(target)
+			var left_gap: float = left.distance_to(target)
+			return left if left_gap < right_gap - 0.0001 else right
+		if right_ok:
+			return right
+		if left_ok:
+			return left
+		offset += radius * _AVOID_SAMPLE_FRACTION
+	return Vector3.ZERO
+
+
+## A waypoint is only useful if the actor can both REACH it and GO ON from it. Checking only the
+## first leg is how an actor commits to a corner it then cannot leave.
+func _waypoint_qualifies(actor_id: int, waypoint: Vector3, target: Vector3, region: WalkableBounds, radius: float) -> bool:
+	if not region.fits(waypoint, radius):
+		return false
+	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	if not _segment_is_clear(region, from, waypoint, radius, 0.0):
+		return false
+	# Same stop-short as the detector, and for the same reason: the second leg must reach the
+	# STANDING position, never the target's own footprint.
+	return _segment_is_clear(region, waypoint, target, radius,
+		float(_ai_tuning.get(actor_id, {}).get("preferred_attack_distance", 0.0)))
+
+
+func _segment_is_clear(region: WalkableBounds, from: Vector3, to: Vector3, radius: float, stop_short: float) -> bool:
+	var span: Vector3 = to - from
+	span.y = 0.0
+	var distance: float = span.length() - stop_short
+	if distance <= 0.0001:
+		return true
+	var direction: Vector3 = span.normalized()
+	var step: float = maxf(radius * _AVOID_SAMPLE_FRACTION, 0.05)
+	var travelled: float = step
+	while travelled <= distance:
+		if not region.fits(from + direction * travelled, radius):
+			return false
+		travelled += step
+	return true
+
+
+## THE APPROACH DIRECTION, and the ONLY seam P33 touches. Everything below the returned vector
+## -- the clamp, WalkableBounds, all eight displacement seams, the combat pipeline -- is
+## untouched: avoidance changes what the AI ASKS FOR, never what legality permits.
+func _pursuit_direction(actor_id: int, target: Vector3, events: Array[Event]) -> Vector3:
+	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var direct: Vector3 = target - from
+	direct.y = 0.0
+	direct = direct.normalized()
+	if int(_ai_tuning.get(actor_id, {}).get("avoid_commit_ticks", 0)) <= 0:
+		return direct  # this family authors no avoidance: ABSENCE IS OFF
+
+	# EXIT CONDITIONS, evaluated before anything else so a commitment can never outlive its
+	# reason. A lapsed commitment degrades to ordinary pursuit -- bounded, never a stall.
+	if _ai_avoid_waypoint.has(actor_id):
+		var waypoint: Vector3 = _ai_avoid_waypoint[actor_id]
+		var reason: String = ""
+		if tick_count >= int(_ai_avoid_deadline.get(actor_id, 0)):
+			reason = "deadline"
+		elif from.distance_to(waypoint) <= _body_radius_for(actor_id):
+			reason = "reached"
+		elif _direct_route_obstruction(actor_id, target).is_empty():
+			reason = "route_clear"
+		elif not _legal_bounds_for(actor_id).fits(waypoint, _body_radius_for(actor_id)):
+			reason = "waypoint_illegal"
+		if reason.is_empty():
+			var toward: Vector3 = waypoint - from
+			toward.y = 0.0
+			return toward.normalized()
+		_clear_avoidance(actor_id, reason, events)
+		if reason != "route_clear":
+			return direct  # one selection per obstruction episode; do not re-select this tick
+
+	if _direct_route_obstruction(actor_id, target).is_empty():
+		return direct
+	var chosen: Vector3 = _select_avoidance_waypoint(actor_id, target)
+	if chosen == Vector3.ZERO:
+		return direct  # nothing legal within the horizon: today's behaviour, honestly
+	_ai_avoid_waypoint[actor_id] = chosen
+	_ai_avoid_deadline[actor_id] = tick_count + int(_ai_tuning[actor_id]["avoid_commit_ticks"])
+	# INSTRUMENTATION, not decoration: a behaviour that merely appears to work because an actor
+	# slid somewhere useful is not this mechanic firing. The chain is observable in the log.
+	events.append(Event.new(tick_count, "avoidance_committed", {
+		"actor_id": actor_id, "waypoint": chosen, "deadline": _ai_avoid_deadline[actor_id],
+	}))
+	var toward_new: Vector3 = chosen - from
+	toward_new.y = 0.0
+	return toward_new.normalized()
+
+
+func _clear_avoidance(actor_id: int, reason: String, events: Array[Event]) -> void:
+	if not _ai_avoid_waypoint.has(actor_id):
+		return
+	_ai_avoid_waypoint.erase(actor_id)
+	_ai_avoid_deadline.erase(actor_id)
+	events.append(Event.new(tick_count, "avoidance_cleared", {"actor_id": actor_id, "reason": reason}))
 
 
 ## BURROW registration. ABSENCE IS OFF: a record exists only when content authors a usable

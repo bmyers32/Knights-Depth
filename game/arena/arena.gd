@@ -611,6 +611,10 @@ func _report_events(events: Array[Event]) -> void:
 				_floor_builder.set_gate_closed(int(event.payload["connection_id"]), not bool(event.payload["open"]))
 			"floor_trigger_fired":
 				print("TRIGGER FIRED: ", event.payload)
+			"avoidance_committed":
+				print("AVOIDANCE COMMITTED: ", event.payload)
+			"avoidance_cleared":
+				print("avoidance cleared: ", event.payload)
 			"floor_trigger_enabled":
 				print("REVEALED: ", event.payload)
 				_floor_builder.set_plate_visible(int(event.payload["trigger_id"]), true)

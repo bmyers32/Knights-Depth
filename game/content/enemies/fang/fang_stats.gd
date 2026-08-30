@@ -152,6 +152,16 @@ extends Resource
 
 ## The conspicuous disengage. 4.0 units is more than a second of ordinary movement delivered in
 ## a fraction of one, so the jump reads as a decision rather than as backing away.
+## P33 BOUNDED LOCAL AVOIDANCE — how long a chosen local route is committed to, in sim ticks.
+## ABSENCE IS OFF: 0 means this family never routes around an obstruction and pursues in
+## straight lines, exactly as before P33 existed.
+##
+## PROVISIONAL/UNVALIDATED, outside the M1 numeric fence: 45 ticks is 1.5 s at 30 Hz, long
+## enough to clear the authored neck (a 4.35 u sidestep at 1.5 u/s takes ~2.9 s of travel, but
+## the commitment only has to survive until the direct line clears, which happens well before
+## the waypoint is reached). The deadline exists to BOUND the behaviour, not to pace it.
+@export var avoid_commit_ticks: int = 45
+
 @export var burrow_jump_distance: float = 0.0
 
 ## Displacement per tick during the jump. 0.35 = 10.5 u/s, covering the 4.0 in ~12 ticks.

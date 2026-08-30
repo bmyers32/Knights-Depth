@@ -20,12 +20,10 @@ route → **PARTY BUTTON** (rear seals + forward opens + roster arrives + fight 
 atomic record) → clear → ramp → raised ground → switch → endpoint.
 
 ## Next action — CHOOSE P33's OPTION, then close P34's questions
-**P33 recon is returned with a costed recommendation (ROADMAP): option B, narrow committed
-sidestep, on a detector already validated 7/7 against the real failing geometry.** Measured
-baseline for rejecting option A: 133 of 180 ticks lost, decaying to 0.0047 u/tick. Nothing
-implemented pending your choice.
+**P33 IS BUILT** (rub ticks 203 -> 0; arrival 321 -> 202 on the real geometry). Play the fight
+and watch whether the roster now FOLLOWS around the neck instead of grinding on the jamb.
 
-Then **P34**: direction approved, four open questions still to close before implementation.
+**P34 is next**: direction and all four questions ruled; implement to the recorded rulings.
 **Procedural scaling waits on both** — bigger folded layouts would only multiply what these
 leave broken.
 
