@@ -46,6 +46,47 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## WEDGED-OOZE REPRODUCTION 2026-08-31 — **APERTURE WIDTH IS NOT THE CAUSE. DO NOT WIDEN.**
+
+Reproduced before changing anything (`tools/diagnose_wedged_ooze.gd`). The four-way contradiction
+resolves cleanly, and none of the pre-routed causes was the real one.
+
+**MEASURED:**
+- every aperture: authored width 5.00, **legal centre band 2.08** for a 1.45-radius body. Passable
+  with room to spare. The clearance validator was right.
+- jamb-hugging probe at all five mouths: **free** in all three directions. No corner trap exists.
+- **the ambient Ooze's territory is x in [8, 16].** Its westernmost legal centre is **x = 9.45**
+  (territory edge 8.0 + body radius 1.45). The nearest hall aperture mouth is x in [-2.5, 2.5] --
+  **6.95 units beyond anywhere it may legally stand.**
+
+**THE OOZE CANNOT REACH A HALL OPENING AT ALL, SO IT CANNOT BE WEDGED IN ONE.** What it does is
+stop dead at x = 9.45 -- and a shield bump shoving it west against that limit is exactly the
+event that makes the stop vivid.
+
+**THE ACTUAL DEFECT IS THAT THE BOUNDARY IS INVISIBLE.** The territory edge at x = 8 runs through
+the MIDDLE of the hall strips, which are walkable floor from x = -16 to x = 16 with no wall
+anywhere near it. So a player sees an enemy halt in open ground for no visible reason. "Stuck in
+the gap" is the only available reading; there is nothing on screen offering another.
+
+Its territory is convex (guarded by test), so genuine wedging is geometrically impossible: from
+any legal point a body can always move. Nothing is stuck. It is BOUNDED, invisibly.
+
+**A DESIGN LAW IS AVAILABLE HERE, not yet ruled:**
+> *An enemy's confinement boundary must coincide with something the player can see.* Territory
+> that ends in open floor cannot be read as territory -- only as a bug.
+
+**OPTIONS, none applied:**
+1. **Author the territory to visible geometry** -- make the east arm's mouth the boundary, so the
+   Ooze stops where a wall or floor change explains it. Authoring only; convexity preserved.
+2. **Accept and signal it** -- keep the region, add a presentation cue (surface change at the
+   arm's mouth). Also authoring only, and it composes with the open-roundabout idea below.
+3. **Widen the territory to the whole hall ring** -- REJECTED on existing evidence: it breaks the
+   P33 ambient-convexity constraint and reinstates the corner-rubbing this same Ooze produced.
+
+**NOT DONE:** no aperture widened, no body resized, no validator changed, no territory
+re-authored. The pre-routed "widen modestly" branch is explicitly NOT taken, because the measured
+cause is not width.
+
 ## M2 REPLAY CLOSE — FLOOR GRAMMAR STAYS **PASS**. 2026-08-29.
 
 Replayed `af85f3f` unchanged, one clean run to FLOOR COMPLETE with zero errors and zero
