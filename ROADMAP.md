@@ -46,6 +46,48 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## TERRITORY SPLIT — **BUILT 2026-08-31.** Behavioural leash separated from physical legality.
+
+The wedged-Ooze cause, fixed at its root. `_legal_bounds_for` now answers ONE question --
+*where is this body physically forbidden to leave* -- and ambient territory no longer
+participates in it.
+
+| source | voluntary | forced displacement |
+|---|---|---|
+| floor / WALL / closed connection | cannot cross | **hard stop** |
+| hard encounter seal | cannot cross | **hard stop** |
+| ambient home territory | will not leave | **MAY cross if floor-legal; returns** |
+
+**ONE GEOMETRY, TWO DOORS.** `_legal_bounds_for` and `_home_territory` both read
+`_encounter_bounds`; neither duplicates it. Behaviour and legality consult the same authored
+fact through different semantics -- which is the structural point, not an accident.
+
+**NO NEW RETAINED STATE, verified rather than asserted.** `outside_home` is derived from
+position each tick; resumption likewise. The diff adds zero `var` declarations and touches zero
+STATE_SCOPES rows -- checked mechanically, so the scanner's silence is a RESULT.
+
+**GUARDED CONSERVATISM, made executable.** Hard confinement currently keys on role, which is
+sufficient only because every non-ambient roster in shipped content is deferred or dead.
+`test_no_shipped_encounter_spawns_a_non_ambient_roster_at_floor_load` is the mechanical revisit
+trigger: the day `FLOOR_LOAD + non-ambient` is authored, a roster is present and hittable before
+its fight seals, role stops being a sufficient proxy, and activation/seal state must become
+authoritative. The test names the function to change when it fails.
+
+**V1 LIMITATION, RECORDED NOT DRESSED UP.** At the leash edge the actor tries two
+axis-preserving slides and otherwise HOLDS. It is not tactical repositioning and must not grow
+into one to prettify the boundary; if holding reads badly in play, that is evidence for a
+ruling, not licence.
+
+**ONE PRE-EXISTING LAW DELIBERATELY OVERTURNED.**
+`test_territory_binds_knockback_not_only_locomotion` asserted that an AMBIENT territory binds
+knockback. That is exactly the law the evidence falsified. It was rewritten as
+`test_a_hard_seal_binds_knockback_not_only_locomotion`, preserving the original intent -- forced
+displacement is not exempt from confinement -- against the confinement that is genuinely hard.
+The ambient half moved to `test_territory_semantics.gd`, where it now asserts the opposite.
+
+**P33 REUSED, NOT DUPLICATED.** Return feeds the home point into the same detector, selector,
+commitment, arrival tolerance and clamp. No second navigation system, no new stored side.
+
 ## WEDGED-OOZE REPRODUCTION 2026-08-31 — **APERTURE WIDTH IS NOT THE CAUSE. DO NOT WIDEN.**
 
 Reproduced before changing anything (`tools/diagnose_wedged_ooze.gd`). The four-way contradiction

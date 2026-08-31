@@ -1,0 +1,286 @@
+extends GutTest
+## TERRITORY SEMANTICS — behavioural leash vs physical legality (ruled 2026-08-31).
+##
+## THE DEFECT THIS SPLIT FIXED: an ambient Ooze shield-bumped toward open floor clamped against
+## its own territory edge. That edge runs through walkable ground with no wall anywhere near it,
+## so a player saw an enemy stop dead in the open and read it as wedged in a gap. A BEHAVIOURAL
+## LEASH HAD BEEN COMPILED INTO PHYSICAL LEGALITY.
+##
+## THE SEMANTIC MATRIX under test, and the anti-collapse guard that keeps it a matrix:
+##
+##   source                                voluntary          forced displacement
+##   floor / WALL / closed connection      cannot cross       cannot cross
+##   hard encounter seal                   cannot cross       cannot cross
+##   ambient home territory                will not leave     MAY cross if floor-legal; returns
+##
+## SYNTHETIC FIXTURE GEOMETRY -- mechanical law only, never shipped tuning.
+
+const PLAYER := 0
+const ENEMY := 1
+const DT := 1.0 / 30.0
+const RADIUS := 1.45
+const ENCOUNTER := 0
+
+## One wide open room. HOME is the eastern half only, so the leash edge at x = 0 sits in the
+## middle of perfectly walkable floor -- exactly the shipped condition that produced the defect.
+const ROOM := Rect2(-20.0, -10.0, 40.0, 20.0)
+const HOME := Rect2(0.0, -10.0, 20.0, 20.0)
+
+var sim: SimWorld
+
+
+func before_each() -> void:
+	sim = SimWorld.new()
+	sim.set_damage_matrix({}, 1.5, 0.5)
+	var rects: Array[Rect2] = [ROOM]
+	sim.load_floor(WalkableBounds.new(rects), Vector3.ZERO)
+	sim.register_patches(rects)
+
+
+## The Envoy, armed with a shield whose bump shoves hard enough to cross the leash.
+func _arm_player(at: Vector3) -> void:
+	sim.add_entity(PLAYER, at, 6.0, Vector3(1, 0, 0), 0.4)
+	sim.register_combatant(PLAYER, 5000.0, &"envoy", 0, 0.4, &"player")
+	sim.mark_run_persistent(PLAYER)
+	sim.register_shield(PLAYER, 100.0, 1.0, 30, 0.0, 0.5, 6.0, 6, 0)
+
+
+func _add_ooze(at: Vector3, role: StringName, regions: Array[Rect2], confines: bool = false) -> void:
+	sim.register_encounter(ENCOUNTER, regions, role, confines, true)
+	sim.add_entity(ENEMY, at, 1.5, Vector3(-1, 0, 0), RADIUS)
+	sim.register_combatant(ENEMY, 500.0, &"ooze", 0, RADIUS, &"enemy")
+	sim.register_weapon(&"test_slam", 5.0, &"force", 1.9, 90.0, 0.0, 9999)
+	sim.register_ai(ENEMY, CombatTestHelpers.single_action_repertoire(&"test_slam", 1.9, 10000),
+		at, 2.2, 1.9, 40.0, 80.0, 0, 0, 0.0, 0.0, 0, 0.0, 0, 0, 0, 45)
+	assert_true(sim.assign_actor_encounter(ENEMY, ENCOUNTER), "sanity: bound to its site")
+	sim.debug_set_ai_active(ENEMY)
+
+
+## Drives the real shield bump, westward, into the enemy.
+func _bump() -> void:
+	sim.tick([Command.new(sim.tick_count, PLAYER, "block", {"held": true})] as Array[Command], DT)
+	sim.tick([Command.new(sim.tick_count, PLAYER, "bump", {"aim": Vector3(-1, 0, 0)})] as Array[Command], DT)
+	for i in 12:
+		sim.tick([] as Array[Command], DT)
+
+
+func _run(ticks: int) -> void:
+	for i in ticks:
+		sim.tick([] as Array[Command], DT)
+
+
+func _home_bounds() -> WalkableBounds:
+	return sim._encounter_bounds[ENCOUNTER]
+
+
+# --- THE HUMAN CASE, END TO END -----------------------------------------------------------
+
+## Crosses instead of clamping, keeps aggro, steers home, arrives, resumes.
+func test_a_bump_carries_an_ambient_actor_across_its_own_leash_and_it_returns() -> void:
+	var ambient: Array[Rect2] = [HOME]
+	_arm_player(Vector3(4.0, 0.0, 0.0))
+	_add_ooze(Vector3(1.8, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
+	assert_true(_home_bounds().fits(sim.entities[ENEMY], RADIUS), "sanity: starts legally inside home")
+
+	_bump()
+	var after_bump: Vector3 = sim.entities[ENEMY]
+
+	assert_lt(after_bump.x, 1.45,
+		"the bump must CARRY it across the invisible leash, not clamp against it (at %s)" % after_bump)
+	assert_false(_home_bounds().fits(after_bump, RADIUS), "sanity: it really is outside home now")
+	assert_true(sim._bounds.fits(after_bump, RADIUS), "and physical legality still holds")
+	assert_eq(sim._ai_state[ENEMY], "active", "aggro must survive being displaced")
+
+	# Movement policy is homeward, not player-ward. The player sits EAST, inside home, so an
+	# outward-pursuing actor and a homeward one would move the same way here; the discriminating
+	# case is the next test. This one proves it gets home at all.
+	_run(400)
+	assert_true(_home_bounds().fits(sim.entities[ENEMY], RADIUS),
+		"it must return to its home territory, ending at %s" % sim.entities[ENEMY])
+	assert_eq(sim._ai_state[ENEMY], "active", "and still be engaged when it arrives")
+
+
+## THE DISCRIMINATING CASE. Player OUTSIDE home, standing between the actor and its way back, so
+## outward pursuit and homeward return point in OPPOSITE directions.
+##
+## The actor is displaced out by a REAL BUMP rather than placed there: an authored spawn outside
+## its own site is refused by assign_actor_encounter (correctly -- that is a content defect), so
+## "outside home" is only ever reachable the way it happens in play.
+func test_a_player_between_the_actor_and_home_cannot_pull_it_further_out() -> void:
+	var ambient: Array[Rect2] = [HOME]
+	_arm_player(Vector3(4.0, 0.0, 0.0))
+	_add_ooze(Vector3(1.8, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
+	_bump()
+	assert_false(_home_bounds().fits(sim.entities[ENEMY], RADIUS), "sanity: the bump put it outside")
+
+	# Now put the player further out still, directly between the actor and home's edge.
+	sim.entities[PLAYER] = Vector3(-16.0, 0.0, 0.0)
+	var start_x: float = sim.entities[ENEMY].x
+	_run(200)
+	assert_gt(sim.entities[ENEMY].x, start_x,
+		"it must move HOMEWARD (+x) even though the player lies the other way (%.2f -> %.2f)"
+			% [start_x, sim.entities[ENEMY].x])
+	assert_eq(sim._ai_state[ENEMY], "active", "and must not go passive while returning")
+
+
+## Aggro and movement policy are SEPARATE FACTS: a returning actor is not a pacifist.
+func test_a_returning_actor_is_still_a_combatant() -> void:
+	var ambient: Array[Rect2] = [HOME]
+	_arm_player(Vector3(4.0, 0.0, 0.0))
+	_add_ooze(Vector3(1.8, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
+	_bump()
+	assert_false(_home_bounds().fits(sim.entities[ENEMY], RADIUS), "sanity: outside home")
+
+	# Stand INSIDE the action's authored band (1.9), outside home, and let it act. At 2.0 the
+	# action is simply not eligible and the test would measure band arithmetic, not aggro.
+	sim.entities[PLAYER] = sim.entities[ENEMY] + Vector3(-1.5, 0.0, 0.0)
+	sim._next_fire_tick[ENEMY] = 0
+	var telegraphs: int = 0
+	for i in 200:
+		for event in sim.tick([] as Array[Command], DT):
+			if event.kind == "attack_telegraph":
+				telegraphs += 1
+		sim.entities[PLAYER] = sim.entities[ENEMY] + Vector3(-1.5, 0.0, 0.0)
+	assert_gt(telegraphs, 0, "an actor outside home must still fight when the player is in reach")
+
+
+# --- VOLUNTARY MOVEMENT STILL RESPECTS THE LEASH -------------------------------------------
+
+func test_an_ambient_actor_will_not_voluntarily_chase_out_of_home() -> void:
+	var ambient: Array[Rect2] = [HOME]
+	_arm_player(Vector3(-12.0, 0.0, 0.0))
+	_add_ooze(Vector3(6.0, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
+	_run(500)
+	assert_true(_home_bounds().fits(sim.entities[ENEMY], RADIUS),
+		"voluntary pursuit must never leave home, ended at %s" % sim.entities[ENEMY])
+
+
+## Inside its own home, away from the edge, nothing about this changes ordinary behaviour.
+func test_ordinary_pursuit_inside_home_is_unchanged() -> void:
+	var ambient: Array[Rect2] = [HOME]
+	_arm_player(Vector3(16.0, 0.0, 0.0))
+	_add_ooze(Vector3(4.0, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
+	var start_gap: float = sim.entities[ENEMY].distance_to(sim.entities[PLAYER])
+	_run(300)
+	assert_lt(sim.entities[ENEMY].distance_to(sim.entities[PLAYER]), start_gap,
+		"an unleashed pursuit inside home must still close on the player")
+
+
+# --- THE OTHER TWO CONFINEMENT SOURCES: BOTH HARD ------------------------------------------
+
+## PHYSICAL. The same bump into a real boundary hard-stops.
+func test_the_same_bump_into_a_wall_hard_stops() -> void:
+	sim = SimWorld.new()
+	sim.set_damage_matrix({}, 1.5, 0.5)
+	var narrow: Array[Rect2] = [Rect2(0.0, -10.0, 20.0, 20.0)]  # floor ENDS at x = 0
+	sim.load_floor(WalkableBounds.new(narrow), Vector3.ZERO)
+	sim.register_patches(narrow)
+	_arm_player(Vector3(4.0, 0.0, 0.0))
+	_add_ooze(Vector3(1.8, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, narrow)
+
+	_bump()
+	assert_true(sim._bounds.fits(sim.entities[ENEMY], RADIUS),
+		"physical legality is HARD for forced displacement too, ended at %s" % sim.entities[ENEMY])
+	assert_gte(sim.entities[ENEMY].x, RADIUS - 0.001, "it must rest with its body against the floor edge")
+
+
+## SEAL. A roster actor cannot be bumped out of a live sealed fight.
+func test_a_roster_actor_cannot_be_bumped_out_of_a_sealed_encounter() -> void:
+	var seal: Array[Rect2] = [HOME]
+	_arm_player(Vector3(4.0, 0.0, 0.0))
+	_add_ooze(Vector3(1.8, 0.0, 0.0), FloorLayers.ROLE_MANDATORY, seal, true)
+
+	_bump()
+	assert_true(_home_bounds().fits(sim.entities[ENEMY], RADIUS),
+		"a sealed encounter is HARD legality; the roster stays in the fight (at %s)" % sim.entities[ENEMY])
+
+
+# --- ANTI-COLLAPSE: the three must resolve DIFFERENTLY --------------------------------------
+
+## THE POINT OF THE SPLIT, asserted as a distinction rather than as three separate behaviours.
+## A future refactor cannot merge confinement back into one generic predicate without failing
+## this: the SAME requested displacement against the SAME geometry resolves one way for a
+## behavioural leash and the opposite way for the two hard sources.
+func test_the_three_confinement_sources_resolve_differently() -> void:
+	var region: Array[Rect2] = [HOME]
+
+	before_each()
+	_arm_player(Vector3(4.0, 0.0, 0.0))
+	_add_ooze(Vector3(1.8, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, region)
+	_bump()
+	var ambient_crossed: bool = not _home_bounds().fits(sim.entities[ENEMY], RADIUS)
+
+	before_each()
+	_arm_player(Vector3(4.0, 0.0, 0.0))
+	_add_ooze(Vector3(1.8, 0.0, 0.0), FloorLayers.ROLE_MANDATORY, region, true)
+	_bump()
+	var seal_crossed: bool = not _home_bounds().fits(sim.entities[ENEMY], RADIUS)
+
+	assert_true(ambient_crossed, "an ambient leash MAY be crossed by force")
+	assert_false(seal_crossed, "a seal may NOT -- same geometry, same bump, opposite result")
+
+
+# --- THE P33 DETECTOR MUST NOT SEE A LEASH AS AN OBSTACLE -----------------------------------
+
+## This refactor changes what the AI ASKS FOR at a home edge, so it could plausibly disturb the
+## obstruction detector that reads those requests. Territory is not geometry: the detector must
+## stay quiet at a leash edge in open floor, and must still fire on real geometry.
+func test_the_obstruction_detector_ignores_a_leash_edge_but_not_a_real_wall() -> void:
+	var ambient: Array[Rect2] = [HOME]
+	_arm_player(Vector3(-12.0, 0.0, 0.0))
+	_add_ooze(Vector3(1.6, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
+	assert_true(sim._direct_route_obstruction(ENEMY, Vector3(-12.0, 0.0, 0.0)).is_empty(),
+		"a behavioural boundary in open floor is NOT a physical obstruction")
+
+	# The same actor, same heading, with real geometry in the way instead.
+	sim = SimWorld.new()
+	sim.set_damage_matrix({}, 1.5, 0.5)
+	var split: Array[Rect2] = [Rect2(0.0, -10.0, 20.0, 20.0), Rect2(-40.0, -10.0, 15.0, 20.0)]
+	sim.load_floor(WalkableBounds.new(split), Vector3.ZERO)
+	sim.register_patches(split)
+	_arm_player(Vector3(-30.0, 0.0, 0.0))
+	_add_ooze(Vector3(1.6, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, [Rect2(0.0, -10.0, 20.0, 20.0)] as Array[Rect2])
+	assert_false(sim._direct_route_obstruction(ENEMY, Vector3(-30.0, 0.0, 0.0)).is_empty(),
+		"a real gap in the floor IS an obstruction, and must still be seen")
+
+
+# --- THE HOME-POINT TIE RULE ---------------------------------------------------------------
+
+## Two equally distant body-valid home rects. The winner must be the earlier authored one, on
+## every run -- a determinism rule for degenerate geometry, carrying no gameplay meaning.
+func test_equidistant_home_candidates_resolve_on_authored_order() -> void:
+	var chosen: Array = []
+	for attempt in 2:
+		sim = SimWorld.new()
+		sim.set_damage_matrix({}, 1.5, 0.5)
+		var rects: Array[Rect2] = [Rect2(-30.0, -20.0, 60.0, 40.0)]
+		sim.load_floor(WalkableBounds.new(rects), Vector3.ZERO)
+		sim.register_patches(rects)
+		# Symmetric about x = 0. The actor is BOUND while legally inside the first rect, then
+		# moved to the exact midpoint -- binding outside a site is refused, and rightly so.
+		var twin: Array[Rect2] = [Rect2(-20.0, -8.0, 10.0, 16.0), Rect2(10.0, -8.0, 10.0, 16.0)]
+		_arm_player(Vector3(0.0, 0.0, 18.0))
+		_add_ooze(Vector3(-15.0, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, twin)
+		sim.entities[ENEMY] = Vector3(0.0, 0.0, 0.0)
+		chosen.append(sim._nearest_home_point(ENEMY))
+	assert_eq(chosen[0], chosen[1], "identical state must choose the identical home point")
+	assert_lt(float(chosen[0].x), 0.0, "and it must be the FIRST authored rect on an exact tie")
+
+
+# --- THE MECHANICAL REVISIT TRIGGER --------------------------------------------------------
+
+## GUARDED CONSERVATISM, MADE EXECUTABLE. Hard confinement currently keys on role, which is only
+## sufficient because every non-ambient roster in shipped content is deferred or dead. The moment
+## an authored encounter spawns a non-ambient roster AT FLOOR LOAD, that roster is present and
+## hittable BEFORE its fight seals -- and would meet exactly the invisible boundary this split
+## removed. This asserts no shipped floor does that yet.
+func test_no_shipped_encounter_spawns_a_non_ambient_roster_at_floor_load() -> void:
+	var plan: FloorPlan = DepthGenerator.generate(0, 1)
+	for encounter in plan.encounters:
+		if encounter.role == FloorLayers.ROLE_AMBIENT:
+			continue
+		assert_false(encounter.spawn_at_floor_load,
+			("encounter %d is %s AND spawns at floor load. That is the REVISIT TRIGGER for "
+			+ "SimWorld._hard_encounter_confinement_applies: role is no longer a sufficient "
+			+ "proxy for hard confinement, and activation/seal state must become authoritative.")
+				% [encounter.encounter_id, encounter.role])

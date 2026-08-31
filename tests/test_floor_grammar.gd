@@ -330,15 +330,21 @@ func test_an_ambient_roster_engages_without_ceremony_and_stays_in_its_territory(
 	assert_true(_in(EAST, ENEMY_A), "ambient does NOT mean whole-floor roaming, got %s" % sim.entities[ENEMY_A])
 
 
-func test_territory_binds_knockback_not_only_locomotion() -> void:
-	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_AMBIENT, false)
+## DELIBERATELY REWRITTEN 2026-08-31 (territory split). This test previously asserted that an
+## AMBIENT territory binds knockback. That law was overturned by evidence: a behavioural leash
+## acting as a hard clamp is an invisible wall in walkable floor, and a player shield-bumping an
+## Ooze saw it wedge against nothing. The ORIGINAL INTENT -- "forced displacement is not exempt
+## from confinement" -- is preserved and now asserted against the confinement that is genuinely
+## HARD. The ambient half moved to test_territory_semantics.gd, where it asserts the opposite.
+func test_a_hard_seal_binds_knockback_not_only_locomotion() -> void:
+	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	_add_enemy(ENEMY_A, Vector3(5.0, 0.0, 0.0))
 	sim.register_weapon(&"test_shove", 5.0, &"force", 4.0, 90.0, 12.0, 0)
 	sim.set_equipped_weapon(PLAYER, &"test_shove")
 	sim.entities[PLAYER] = Vector3(8.0, 0.0, 0.0)
 	sim.tick([Command.new(sim.tick_count, PLAYER, "attack", {"aim": Vector3(-1, 0, 0)})] as Array[Command], DT)
 	assert_lt(sim._health[ENEMY_A], 100.0, "sanity: the hit landed")
-	assert_true(_in(EAST, ENEMY_A), "12 units of knockback pushed it out of its territory to %s" % sim.entities[ENEMY_A])
+	assert_true(_in(EAST, ENEMY_A), "12 units of knockback pushed it out of a HARD seal to %s" % sim.entities[ENEMY_A])
 
 
 func test_assigning_an_actor_outside_its_site_fails_loudly() -> void:

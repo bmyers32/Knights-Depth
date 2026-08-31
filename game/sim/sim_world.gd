@@ -476,21 +476,93 @@ func load_floor(bounds: WalkableBounds, entry_point: Vector3) -> void:
 		entities[actor_id] = entry_point
 
 
-## THE ONE PLACE "where may this actor legally be" is decided. Resolves the three notions
-## documented at the floor-layer state into a single region, most specific first:
-##   1. an ENEMY is confined to its own encounter site's territory, ALWAYS -- never conditional
-##      on activation, and true for AMBIENT rosters as much as triggered ones
-##   2. the Envoy is sealed into a confining site's region while its encounter runs
-##   3. otherwise, the whole floor as currently connected
+## PHYSICAL LEGALITY, and nothing else: "where is this body FORBIDDEN to leave right now".
+##
+## THE SPLIT (ruled 2026-08-31). This predicate used to answer two different questions at once,
+## and the collapse produced a real defect: an ambient Ooze shield-bumped toward open floor
+## clamped against its own territory edge -- an INVISIBLE WALL in walkable ground, which reads
+## to a player as an enemy wedged in a gap. A behavioural leash had been compiled into physical
+## legality. The two are now separated:
+##
+##   PHYSICAL LEGALITY (here)   floor walkability + body extent, WALL, closed connection, and
+##                              encounter confinement where it is genuinely hard. Hard-stops
+##                              BOTH voluntary movement and forced displacement.
+##   AI TERRITORY (_home_territory, consumed in _pursuit_direction)  where an actor voluntarily
+##                              lives and where it returns. Never clamps a body.
+##
+## ONE GEOMETRY, TWO DOORS. Both read _encounter_bounds; neither duplicates it. That is the
+## point -- behaviour and legality consult the same authored fact through different semantics.
 ##
 ## Returns null when no floor is loaded, keeping every seam an identity operation for a bare
 ## SimWorld -- the property that leaves the whole pre-M2 suite untouched.
 func _legal_bounds_for(actor_id: int) -> WalkableBounds:
-	if _actor_encounter.has(actor_id):
+	if _actor_encounter.has(actor_id) and _hard_encounter_confinement_applies(actor_id):
 		return _encounter_bounds.get(int(_actor_encounter[actor_id]), _bounds)
 	if _active_confinement >= 0 and _run_persistent_actors.has(actor_id):
 		return _encounter_bounds.get(_active_confinement, _bounds)
 	return _bounds
+
+
+## Does a HARD confinement rule currently bind this actor's body to its site?
+##
+## GUARDED CONSERVATISM, and deliberately temporary. Today this reduces to "the site is not
+## ambient", because every non-ambient roster in shipped content is either deferred (present
+## only once its encounter activates and seals) or dead. That makes role a SUFFICIENT proxy
+## right now -- it does not make role a synonym for physical solidity, and it must never harden
+## into one.
+##
+## THE REVISIT TRIGGER IS MECHANICAL, not remembered: the moment an authored encounter combines
+## spawn_at_floor_load = true with a non-ambient role, a roster becomes physically present and
+## hittable BEFORE its fight is sealed, and would meet an invisible boundary exactly like the
+## ambient defect this split fixed. test_territory_semantics.gd asserts no shipped content does
+## that, and names this function when it fails. At that point activation/seal state -- not role
+## -- must become the authority here.
+func _hard_encounter_confinement_applies(actor_id: int) -> bool:
+	var encounter_id: int = int(_actor_encounter[actor_id])
+	if not _encounters.has(encounter_id):
+		return false
+	return _encounters[encounter_id]["role"] != &"ambient"
+
+
+## THE BEHAVIOURAL DOOR onto the same geometry. Null for anyone who has no ambient home -- which
+## is every actor whose confinement is physical, so they never consult a leash at all.
+func _home_territory(actor_id: int) -> WalkableBounds:
+	if not _actor_encounter.has(actor_id):
+		return null
+	var encounter_id: int = int(_actor_encounter[actor_id])
+	if not _encounters.has(encounter_id) or _encounters[encounter_id]["role"] != &"ambient":
+		return null
+	return _encounter_bounds.get(encounter_id, null)
+
+
+## The nearest body-valid point inside home. Each authored home rect is INSET by the body radius
+## -- so the result is somewhere the body actually fits, not merely a point inside the rect --
+## then the position is clamped into it and the nearest candidate wins.
+##
+## TIE RULE: equal distances resolve on authored array order. That is a DETERMINISM RULE FOR
+## DEGENERATE GEOMETRY so an identical state always yields an identical destination (M3 needs
+## client and server to agree); it carries no gameplay meaning and expresses no route preference.
+func _nearest_home_point(actor_id: int) -> Vector3:
+	var home: WalkableBounds = _home_territory(actor_id)
+	if home == null:
+		return Vector3.ZERO
+	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var radius: float = _body_radius_for(actor_id)
+	var best: Vector3 = Vector3.ZERO
+	var best_distance: float = INF
+	for rect: Rect2 in home.rects:
+		var min_x: float = rect.position.x + radius
+		var max_x: float = rect.end.x - radius
+		var min_z: float = rect.position.y + radius
+		var max_z: float = rect.end.y - radius
+		if min_x > max_x or min_z > max_z:
+			continue  # this rect cannot hold this body at all
+		var candidate := Vector3(clampf(from.x, min_x, max_x), from.y, clampf(from.z, min_z, max_z))
+		var distance: float = candidate.distance_squared_to(from)
+		if distance < best_distance - 0.000001:  # strict: ties keep the earlier rect
+			best_distance = distance
+			best = candidate
+	return best
 
 
 ## THE AUTHORITATIVE BODY EXTENT for movement legality (ruled 2026-08-29). combat_radius is
@@ -2996,12 +3068,24 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		return []
 
 	if distance_to_player < tuning.minimum_attack_distance:
-		return [Command.new(tick_count, actor_id, "move", {"direction": -to_player.normalized()})]
+		# Backing off is voluntary movement too, so it obeys the same leash: an actor must not
+		# retreat out of its own home any more than it may chase out of it.
+		var away: Vector3 = -to_player.normalized()
+		var home: WalkableBounds = _home_territory(actor_id)
+		var here: Vector3 = entities.get(actor_id, Vector3.ZERO)
+		if home != null and home.fits(here, _body_radius_for(actor_id)) \
+				and not _step_keeps_home(here, away, home, _body_radius_for(actor_id)):
+			return []  # hold rather than back through the leash
+		return [Command.new(tick_count, actor_id, "move", {"direction": away})]
 
 	if distance_to_player > tuning.preferred_attack_distance:
-		# P33: the ONE seam. Ordinary pursuit unless an obstruction is detected between here and
-		# the target, in which case a committed local route around it replaces the direct vector.
-		return [Command.new(tick_count, actor_id, "move", {"direction": _pursuit_direction(actor_id, player_position, events)})]
+		# P33 + the ambient leash: one seam for both. Ordinary pursuit unless an obstruction is
+		# detected (committed local route around it) or the actor is outside its behavioural home
+		# (steer back). A ZERO direction is a deliberate HOLD, not a missing decision.
+		var heading: Vector3 = _leashed_pursuit_direction(actor_id, player_position, events)
+		if heading == Vector3.ZERO:
+			return []
+		return [Command.new(tick_count, actor_id, "move", {"direction": heading})]
 
 	return []  # in band, weapon on cooldown: hold position and wait
 
@@ -3173,6 +3257,60 @@ func _segment_is_clear(region: WalkableBounds, from: Vector3, to: Vector3, radiu
 			return false
 		travelled += step
 	return true
+
+
+## THE MOVEMENT POLICY for an ambient actor, layered OVER P33 rather than beside it.
+##
+## Two clauses, and no retained state -- every fact below is derived from the authoritative
+## position each tick, so there is no `returning` flag to fall out of sync with reality:
+##
+##   OUTSIDE HOME  the movement TARGET becomes the nearest body-valid home point. Aggro is
+##                 untouched, the actor stays a combatant, and its attacks still resolve. It
+##                 simply stops steering by the player. A player standing between the actor and
+##                 home therefore cannot pull it further out -- not by a special case, but
+##                 because outward pursuit is no longer EXPRESSIBLE: the target is the home point.
+##   INSIDE HOME   ordinary pursuit, except that a step which would carry the body out of home
+##                 is declined. Declined, never clamped: the leash shapes what the AI ASKS FOR,
+##                 and forced displacement (bump, knockback) still crosses it freely.
+##
+## V1 LIMITATION, RECORDED HONESTLY rather than dressed up: when the direct step would leave
+## home, this tries the two axis-preserving slides and otherwise HOLDS. It is not a tactical
+## repositioning system and must not grow into one to prettify the leash edge; if holding at the
+## boundary proves unsatisfying in play, that is evidence for a future ruling, not licence here.
+func _leashed_pursuit_direction(actor_id: int, player_position: Vector3, events: Array[Event]) -> Vector3:
+	var home: WalkableBounds = _home_territory(actor_id)
+	if home == null:
+		return _pursuit_direction(actor_id, player_position, events)  # no leash: physical only
+
+	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var radius: float = _body_radius_for(actor_id)
+	if not home.fits(from, radius):
+		# OUTSIDE. Steer home through the SAME P33 detector/selector/commitment -- a return route
+		# blocked by real geometry is routed around by the mechanism that already exists, never
+		# by a second navigation system.
+		var home_point: Vector3 = _nearest_home_point(actor_id)
+		if home_point == Vector3.ZERO:
+			return _pursuit_direction(actor_id, player_position, events)
+		return _pursuit_direction(actor_id, home_point, events)
+
+	# INSIDE. Ordinary pursuit, then refuse to walk out of my own home.
+	var wanted: Vector3 = _pursuit_direction(actor_id, player_position, events)
+	if wanted == Vector3.ZERO or _step_keeps_home(from, wanted, home, radius):
+		return wanted
+	for slide: Vector3 in [Vector3(wanted.x, 0.0, 0.0), Vector3(0.0, 0.0, wanted.z)]:
+		if slide.length() <= 0.0001:
+			continue
+		var candidate: Vector3 = slide.normalized()
+		if _step_keeps_home(from, candidate, home, radius):
+			return candidate
+	return Vector3.ZERO  # hold: nothing useful stays home
+
+
+## Probes one body length ahead, which is the granularity at which "am I about to leave" is a
+## meaningful question for a body of that size. Deliberately not a per-tick step test: dt is not
+## available here, and tying the leash to frame timing would make it frame-rate dependent.
+func _step_keeps_home(from: Vector3, direction: Vector3, home: WalkableBounds, radius: float) -> bool:
+	return home.fits(from + direction * maxf(radius, 0.5), radius)
 
 
 ## THE APPROACH DIRECTION, and the ONLY seam P33 touches. Everything below the returned vector
