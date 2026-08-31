@@ -3210,6 +3210,15 @@ func _select_avoidance_waypoint(actor_id: int, target: Vector3) -> Vector3:
 		return Vector3.ZERO
 	var forward: Vector3 = span.normalized()
 	var perpendicular := Vector3(-forward.z, 0.0, forward.x)
+	# CANDIDATE GENERATION AND ORDERING ARE UNCHANGED, deliberately (ruled: preserve unless
+	# implementation evidence proves otherwise).
+	#
+	# Shortest-total-route selection WAS tried here and measured: it changed nothing. Every
+	# perpendicular candidate sits the same `offset` from the actor and barely alters the
+	# distance to the target, so minimising |from -> wp| + |wp -> target| still lands on a
+	# sideways point. That is evidence about the GENERATOR, not the selection rule -- these
+	# candidates cannot express "advance through the gap", so no ranking over them can. Recorded
+	# in ROADMAP as the open question; not papered over with a ranking that does not help.
 	var cap: float = float(_ai_tuning.get(actor_id, {}).get("detection_radius", 0.0))
 	var offset: float = radius
 	while offset <= cap:
@@ -3294,26 +3303,39 @@ func _pursuit_direction(actor_id: int, target: Vector3, events: Array[Event]) ->
 	if int(_ai_tuning.get(actor_id, {}).get("avoid_commit_ticks", 0)) <= 0:
 		return direct  # this family authors no avoidance: ABSENCE IS OFF
 
-	# EXIT CONDITIONS, evaluated before anything else so a commitment can never outlive its
-	# reason. A lapsed commitment degrades to ordinary pursuit -- bounded, never a stall.
+	# THE COMMITTED LEG (ruled 2026-08-31 after play rejected the zig-zag).
+	#
+	# WHILE COMMITTED, THE WAYPOINT IS THE STEERING TARGET AND THE PLAYER IS ONLY THE COMBAT
+	# TARGET. Those were the same thing before, and that identity was the defect: the sidestep
+	# made the direct line look clear, `route_clear` dropped the leg, taking the direct line
+	# re-obstructed it, and a new near-identical waypoint was chosen 2-3 ticks later. Live log:
+	# waypoints 0.08 apart, cycling indefinitely. Every decision in that loop was locally correct,
+	# which is why nothing caught it -- the loop lived in the TRANSITION, not in any one rule.
+	#
+	# `route_clear` IS DELIBERATELY NO LONGER AN EXIT. A direct line that opens mid-leg is exactly
+	# the transient the sidestep itself created; acting on it is what closes the loop. The leg is
+	# re-evaluated against the world when it ENDS, not while it is being walked.
 	if _ai_avoid_waypoint.has(actor_id):
 		var waypoint: Vector3 = _ai_avoid_waypoint[actor_id]
+		var region: WalkableBounds = _legal_bounds_for(actor_id)
+		var radius: float = _body_radius_for(actor_id)
 		var reason: String = ""
 		if tick_count >= int(_ai_avoid_deadline.get(actor_id, 0)):
 			reason = "deadline"
 		elif from.distance_to(waypoint) <= _AVOID_ARRIVAL_TOLERANCE:
 			reason = "reached"
-		elif _direct_route_obstruction(actor_id, target).is_empty():
-			reason = "route_clear"
-		elif not _legal_bounds_for(actor_id).fits(waypoint, _body_radius_for(actor_id)):
-			reason = "waypoint_illegal"
+		elif region != null and (not region.fits(waypoint, radius) \
+				or not _segment_is_clear(region, from, waypoint, radius, 0.0)):
+			# The LEG ITSELF became impossible -- a gate shut across it, or the actor was
+			# displaced somewhere the route no longer works from. That is a real invalidation,
+			# unlike a passing direct line.
+			reason = "leg_invalid"
 		if reason.is_empty():
 			var toward: Vector3 = waypoint - from
 			toward.y = 0.0
 			return toward.normalized()
+		# The leg is over: fall through and assess the CURRENT world fresh, this tick.
 		_clear_avoidance(actor_id, reason, events)
-		if reason != "route_clear":
-			return direct  # one selection per obstruction episode; do not re-select this tick
 
 	if _direct_route_obstruction(actor_id, target).is_empty():
 		return direct

@@ -164,15 +164,14 @@ func test_commitment_does_not_churn_across_a_whole_pursuit() -> void:
 		"a committed route must not be re-chosen dozens of times (pre-fix live play: 41 in one encounter)")
 
 
-## THE SEMANTICALLY CORRECT EXIT should dominate: a commitment ends because avoidance is no
-## longer NEEDED, not because the actor drifted a body-width from its own waypoint.
-func test_route_clear_dominates_successful_avoidance() -> void:
+## INVERTED 2026-08-31. This asserted route_clear should DOMINATE -- correct under the old model
+## and exactly what the zig-zag was made of. A direct line opening mid-leg is the transient the
+## sidestep itself created, so acting on it closes the loop. It is no longer an exit at all.
+func test_a_committed_leg_never_ends_on_a_transient_direct_line() -> void:
 	var result: Dictionary = _pursue(COMMIT_TICKS)
 	var reasons: Dictionary = result["reasons"]
-	var clear: int = int(reasons.get("route_clear", 0))
-	var reached: int = int(reasons.get("reached", 0))
-	assert_gt(clear, reached,
-		"route_clear must dominate on the observed corner; got %s" % reasons)
+	assert_eq(int(reasons.get("route_clear", 0)), 0,
+		"route_clear must not be an exit any more; got %s" % reasons)
 
 
 ## The arrival tolerance must stay strictly below the smallest first candidate offset, which IS
@@ -284,19 +283,21 @@ func test_commitment_prevents_per_tick_reconsideration() -> void:
 
 # --- 8: the direct route clearing exits avoidance early ------------------------------------
 
-func test_the_route_clearing_exits_avoidance_before_the_deadline() -> void:
+## INVERTED 2026-08-31, and this is THE test for the ruling. Teleporting the player into open
+## line of sight mid-leg previously released the commitment at once. That responsiveness WAS the
+## defect: player motion must not cancel a still-valid leg.
+func test_player_motion_alone_cannot_cancel_a_valid_committed_leg() -> void:
 	_engage()
 	_run(2)
 	assert_true(_committed(), "sanity: committed")
-	# Put the target in open line of sight without touching the deadline.
+	var waypoint: Vector3 = sim._ai_avoid_waypoint[ENEMY]
+
+	# The most extreme version of "the player moved": straight into open sight.
 	sim.entities[PLAYER] = Vector3(-5.0, 0.0, -58.0)
-	var events: Array[Event] = _run(2)
-	assert_false(_committed(), "a cleared direct route must release the commitment immediately")
-	var reasons: Array = []
-	for event in events:
-		if event.kind == "avoidance_cleared":
-			reasons.append(String(event.payload["reason"]))
-	assert_true(reasons.has("route_clear"), "and say why it released")
+	_run(3)
+
+	assert_true(_committed(), "the leg must survive the player moving into open sight")
+	assert_eq(sim._ai_avoid_waypoint[ENEMY], waypoint, "and must still be walking to the SAME point")
 
 
 # --- 9: the deadline is bounded and deterministic ------------------------------------------
@@ -312,7 +313,7 @@ func test_the_deadline_bounds_the_commitment() -> void:
 	for event in events:
 		if event.kind == "avoidance_cleared":
 			reasons.append(String(event.payload["reason"]))
-	assert_true(reasons.has("deadline") or reasons.has("route_clear"),
+	assert_true(reasons.has("deadline") or reasons.has("reached"),
 		"a commitment must end within its budget, and say how")
 	if _committed():
 		assert_lt(int(sim._ai_avoid_deadline[ENEMY]) - sim.tick_count, 11,
@@ -355,3 +356,112 @@ func test_avoidance_cannot_leave_a_sealed_encounter() -> void:
 		sim.tick([] as Array[Command], DT)
 		assert_true(sim._encounter_bounds[0].fits(sim.entities[ENEMY], RADIUS),
 			"a routing enemy left a SEALED encounter to %s" % sim.entities[ENEMY])
+
+
+# --- THE LIVE ZIG-ZAG SIGNATURE, PINNED (ruled 2026-08-31) ---------------------------------
+
+## THE RECOVERED LIVE SIGNATURE this must never reproduce, from the human session log:
+##   COMMIT (12.50, -16.31) d=186942 / CLEAR route_clear
+##   COMMIT (12.49, -16.23) d=186944 / CLEAR route_clear
+##   COMMIT (12.49, -16.11) d=186947 / CLEAR route_clear
+## Deadlines 2-3 ticks apart, waypoints ~0.08 apart, cycling indefinitely.
+##
+## A MOVING TARGET IS THE LOAD THAT EXPOSED IT. P33 was validated entirely against a stationary
+## one, where the loop never closes -- which is why a fully green suite missed a defect a player
+## saw in seconds.
+func _strafing_pursuit(ticks: int = 400) -> Dictionary:
+	_engage()
+	var commits: int = 0
+	var waypoints: Array = []
+	var reasons: Dictionary = {}
+	var lifetimes: Array = []
+	var since: int = -1
+	for tick in ticks:
+		for event in sim.tick([] as Array[Command], DT):
+			if event.kind == "avoidance_committed":
+				commits += 1
+				waypoints.append(event.payload["waypoint"])
+				since = tick
+			elif event.kind == "avoidance_cleared":
+				var reason: String = String(event.payload["reason"])
+				reasons[reason] = int(reasons.get(reason, 0)) + 1
+				if since >= 0:
+					lifetimes.append(tick - since)
+		# Strafe laterally, the shape a human actually produces while fighting.
+		sim.entities[PLAYER] = PLAYER_AT + Vector3(sin(float(tick) * 0.06) * 2.5, 0.0, 0.0)
+	var mean: float = 0.0
+	for life in lifetimes:
+		mean += float(life)
+	mean = 0.0 if lifetimes.is_empty() else mean / float(lifetimes.size())
+	return {"commits": commits, "waypoints": waypoints, "reasons": reasons, "mean_life": mean,
+		"gap": sim.entities[ENEMY].distance_to(sim.entities[PLAYER])}
+
+
+func test_a_strafing_player_does_not_produce_commit_clear_churn() -> void:
+	var result: Dictionary = _strafing_pursuit()
+	# 15 is a CHURN CEILING, not a target. The live defect produced a commit every 2-3 ticks --
+	# of order 130 across this window. Around a dozen long legs is the mechanic working.
+	assert_lt(int(result["commits"]), 15,
+		"a strafing player must not drive repeated re-commits; got %d (%s)" % [result["commits"], result["reasons"]])
+	assert_eq(int((result["reasons"] as Dictionary).get("route_clear", 0)), 0,
+		"and no leg may end on a transient direct line")
+
+
+## The live tell was not just the COUNT but the near-identity of successive waypoints: 0.08 apart
+## means the actor re-chose essentially where it already was.
+func test_successive_waypoints_are_never_near_identical() -> void:
+	var result: Dictionary = _strafing_pursuit()
+	var waypoints: Array = result["waypoints"]
+	for i in range(1, waypoints.size()):
+		var step: float = (waypoints[i] as Vector3).distance_to(waypoints[i - 1])
+		assert_gt(step, 0.5,
+			"waypoints %s and %s are %.2f apart -- that is the churn signature" % [waypoints[i - 1], waypoints[i], step])
+
+
+## Commitments must be LONG, not merely few. The live cycle was 2-3 ticks.
+func test_commitments_last_meaningfully_long_under_a_moving_target() -> void:
+	var result: Dictionary = _strafing_pursuit()
+	if int(result["commits"]) == 0:
+		pass_test("no avoidance was needed on this run")
+		return
+	assert_gt(float(result["mean_life"]), 8.0,
+		"mean commitment %.1f ticks is churn, not commitment" % result["mean_life"])
+
+
+## A RATCHET OVER A KNOWN-OPEN FINDING, not a statement that this is good enough.
+##
+## Committed legs removed the oscillation but did NOT restore closure against a strafing player:
+## measured final gap 6.04, where the old churning model reached ~2.05. The cause is the
+## CANDIDATE GENERATOR, and it is measured rather than guessed -- across an entire pursuit every
+## chosen waypoint sat FURTHER from the target than the actor already stood (e.g. wp_to_target
+## 9.64 against a gap of 8.60). Perpendicular offsets can only step sideways; nothing in them
+## can express "advance through the gap". Shortest-total-route ranking was tried over the same
+## candidates and changed nothing, which is what identifies the generator rather than the
+## ranking as the constraint.
+##
+## This bound exists to catch REGRESSION while that design question is open. It must be tightened
+## when the generator is answered -- never loosened to accommodate a worse result.
+func test_a_strafing_player_is_not_lost_entirely() -> void:
+	var result: Dictionary = _strafing_pursuit()
+	assert_lt(float(result["gap"]), 7.0,
+		"pursuit must at least keep station on a strafing player; got %.2f" % result["gap"])
+
+
+## A leg whose own path is destroyed mid-walk MAY abort -- that is a real invalidation, unlike a
+## transient direct line.
+func test_a_leg_aborts_when_its_own_path_becomes_impossible() -> void:
+	_engage()
+	_run(2)
+	assert_true(_committed(), "sanity: committed")
+	# Replace the floor with one that genuinely EXCLUDES the committed waypoint (~z -52.5).
+	# A first attempt kept the whole arena, which still contained it -- so nothing was
+	# invalidated and the test proved only that a VALID leg is not abandoned.
+	var shrunk: Array[Rect2] = [Rect2(-15.0, -68.0, 30.0, 10.0)]
+	sim._bounds = WalkableBounds.new(shrunk)
+	var events: Array[Event] = _run(2)
+	var reasons: Array = []
+	for event in events:
+		if event.kind == "avoidance_cleared":
+			reasons.append(String(event.payload["reason"]))
+	assert_true(reasons.has("leg_invalid") or reasons.has("deadline") or not _committed(),
+		"an impossible leg must not be walked forever; got %s" % [reasons])

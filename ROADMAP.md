@@ -46,6 +46,66 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## P33 OPTION B — **BUILT 2026-08-31.** Oscillation removed; a NEW finding took its place.
+
+`route_clear` is no longer an exit. While committed, the **waypoint is the steering target and
+the player is only the combat target**, so a direct line opening mid-leg -- the transient the
+sidestep itself created -- can no longer close the loop. A leg ends only on: reached, deadline,
+or the leg itself becoming physically impossible (`leg_invalid`).
+
+**THE OSCILLATION IS GONE, measured on the strafing load:**
+
+| | before | after |
+|---|---|---|
+| `route_clear` exits | dominant | **0** |
+| commit cycle | every 2-3 ticks | ~40 ticks mean |
+| successive waypoints | ~0.08 apart | > 0.5 apart |
+
+### BUT CLOSURE REGRESSED, and the cause is the CANDIDATE GENERATOR
+Final gap against a strafing player: **6.04**, where the old churning model reached ~2.05.
+
+Measured cause, not guessed. Across an entire pursuit **every chosen waypoint sat FURTHER from
+the target than the actor already stood**:
+
+```
+t  0  wp_to_target 9.64   gap_now 8.60
+t 45  wp_to_target 9.50   gap_now 9.39
+t 70  wp_to_target 9.90   gap_now 8.89
+...  eleven legs, every one of them
+```
+
+Perpendicular offsets can only step SIDEWAYS; nothing in that generator can express *advance
+through the gap*. Short legs hid it -- the actor re-chose before the waste showed. Long legs turn
+it into a slow sideways shuffle: **the same defect wearing a calmer face**, and plausibly worse
+to watch than the zig-zag it replaced.
+
+**SHORTEST-TOTAL-ROUTE RANKING WAS TRIED AND REVERTED.** It changed nothing: every candidate sits
+the same `offset` from the actor and barely alters distance-to-target, so minimising
+|from -> wp| + |wp -> target| still lands sideways. That result is what IDENTIFIES the generator
+rather than the ranking as the constraint -- and it is why no ranking over these candidates can
+fix it. Candidate generation and ordering are therefore left exactly as ruled.
+
+### THIS IS THE SCENARIO-4 CAVEAT ARRIVING EARLY
+The recon flagged that *a candidate-generator limit and a leg-count limit look identical from
+outside*. That was recorded as a caveat about the hall ring. It is now the live constraint in
+ORDINARY FIGHT-SPACE GEOMETRY, which means the distinction the C-trigger depends on is no longer
+hypothetical: **C's trigger must not be evaluated against this generator**, or a generator
+weakness will be mistaken for proof that multi-leg routing is required.
+
+### RATCHET, NOT ACCEPTANCE
+`test_a_strafing_player_is_not_lost_entirely` bounds the gap at 7.0 to catch regression while the
+design question is open. **It must be tightened when the generator is answered, never loosened.**
+
+### THE OPEN QUESTION, for ruling
+Committed legs are correct and the oscillation is genuinely dead. What remains is that the
+generator proposes only sidesteps. Options, none taken:
+1. **Aperture-aware candidates** -- propose points at gap/threshold mouths, so "go through the
+   doorway" becomes expressible. Smallest change that could restore closure.
+2. **Accept the standoff** -- a slow blob that keeps station but rarely corners a strafing player
+   may be acceptable enemy character rather than a defect.
+3. **Re-sequence** -- apply Floor 1 authoring first and re-measure; different geometry may not
+   provoke it.
+
 ## P33 REOPENED — ZIG-ZAG REJECTED BY PLAY. Navigation recon returned 2026-08-31. NO CODE.
 
 **Human verdict on `ec82254`:** *"The zig zag to get to you is bad."* and *"I wouldn't even mind
