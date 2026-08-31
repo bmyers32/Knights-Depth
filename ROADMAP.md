@@ -46,6 +46,75 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## P33 REOPENED — ZIG-ZAG REJECTED BY PLAY. Navigation recon returned 2026-08-31. NO CODE.
+
+**Human verdict on `ec82254`:** *"The zig zag to get to you is bad."* and *"I wouldn't even mind
+just moving in straight lines to get to where it wants to go."*
+
+Not classified acceptable on telemetry: reaching attack range, positive progress and internally
+correct detector/commit/clear traces are all true and all beside the point. The player-facing
+result fails.
+
+### THE MECHANISM (from the live log, recovered before it was discarded)
+```
+COMMIT (12.50, -16.31) deadline 186942   CLEAR route_clear
+COMMIT (12.49, -16.23) deadline 186944   CLEAR route_clear
+COMMIT (12.49, -16.11) deadline 186947   CLEAR route_clear
+COMMIT (12.47, -16.03) deadline 186949   CLEAR route_clear
+```
+Deadlines 2-3 ticks apart, waypoints 0.08 apart. **A two-state oscillation with no hysteresis:**
+sidestepping is exactly what makes the direct line look clear, and taking the direct line is
+exactly what re-obstructs it. Every individual decision is correct; the loop between them is not
+forbidden anywhere, because each half was validated against a stationary target where it never
+closes.
+
+### HOW MANY COMMITTED LEGS DOES THE REAL GEOMETRY NEED?
+`tools/cost_navigation_models.gd`, Floor 1 values, deterministic candidates:
+
+| scenario | result |
+|---|---|
+| 1 stationary, across the arena | **DIRECT** |
+| 2 player around one corner (arena -> neck) | **1 leg** |
+| 3 strafing player | **1 leg** |
+| 3b strafed to the far side | **1 leg** |
+| 5 disengaged return, neck -> arena | **1 leg** |
+| 4 TOP-OF-SQUARE, west arm -> east arm across the hall void | **no route within 2 legs** |
+
+**Every fight-space case is one leg or none.** The only failure is the hall ring.
+
+### RECOMMENDATION: **B — committed straight-leg waypoint navigation**
+Smallest design that meets the bar. Direct when clear; one deterministic intermediate point when
+blocked; straight line to it; **player motion alone never cancels a valid leg**; reassess only on
+arrival, physical invalidation, target invalidation, or bounded failure.
+
+The change that kills the oscillation is one rule: **while committed, the WAYPOINT is the
+steering target and the player is only the combat target.** `route_clear` stops being an exit
+condition mid-leg -- which is precisely the transition producing the 2-3 tick cycle.
+
+Reuses the existing detector, candidate generation, ordering, tie rule, deadline and arrival
+tolerance. Return home differs only in destination; no second implementation.
+
+### WHY NOT A (hysteresis on the current model)
+It still re-steers continuously against a moving target -- it would slow the oscillation, not
+remove it, and it adds a tuning knob to disguise a structural loop. Rejected on the ruling's own
+terms.
+
+### WHY NOT C YET, AND THE HONEST CAVEAT
+C is not needed for any fight-space case measured. **But scenario 4 is now REACHABLE because of
+the detection-governed pursuit ruling** -- an ambient Ooze in the east arm may chase across the
+hall, and B will grind at the void edge exactly as before.
+
+By inspection that route is *up the arm, along the strip, down the far arm* -- **two intermediate
+points**, which B cannot express and my two-leg search with perpendicular-plus-rect-centre
+candidates did not find. **A CANDIDATE-GENERATOR LIMIT AND A LEG-COUNT LIMIT LOOK IDENTICAL FROM
+OUTSIDE**, and this recon cannot fully separate them; that distinction should be settled before
+C is built, not assumed.
+
+**A cheaper answer may already be queued:** the open-roundabout authoring item removes
+unnecessary walls from that same hall. If the roundabout no longer wraps a void, scenario 4 stops
+existing and C stays unbuilt. **Recommend B now, and let Floor 1 authoring decide whether C is
+ever earned.**
+
 ## AMBIENT PURSUIT IS **DETECTION-GOVERNED** (ruled 2026-08-31 after play). Leash-hold deleted.
 
 Human play judged the v1 home-edge hold visibly artificial. Ruled: **territory does not limit
@@ -90,6 +159,63 @@ P33 was validated entirely against a stationary target, so this load was never e
 
 **NO smoothing, hysteresis or selector change applied**, per ruling: a mechanism that is
 mathematically right but reads as indecision is a design question, not a tuning job.
+
+### CORRECTION 2026-08-31 — the LIVE zigzag signature does NOT match my reproduction.
+
+The ruling session's own log (build `215e635`) was recovered before it was discarded, and it
+shows a tighter and different cycle than case B did. **My "appearance, not mechanism" conclusion
+was drawn from a reproduction whose signature does not match live play, and I am withdrawing it.**
+
+Consecutive commit/clear pairs from the real session, one ambient Ooze:
+
+```
+COMMIT waypoint (12.50, -16.31)  deadline 186942
+CLEAR  route_clear
+COMMIT waypoint (12.49, -16.23)  deadline 186944
+CLEAR  route_clear
+COMMIT waypoint (12.49, -16.11)  deadline 186947
+CLEAR  route_clear
+COMMIT waypoint (12.47, -16.03)  deadline 186949
+CLEAR  route_clear
+COMMIT waypoint (12.45, -15.95)  deadline 186951
+```
+
+**Deadlines 2-3 ticks apart. Waypoints ~0.08 apart. `route_clear` every time.**
+
+| | my case B | live session |
+|---|---|---|
+| mean commitment | 17.3 ticks | **2-3 ticks** |
+| dominant exit | route_clear (7 of 10) | route_clear, but immediately |
+| character | occasional re-planning | **sustained oscillation** |
+
+### THE MECHANISM, now identified
+A two-state oscillation with no hysteresis between them:
+
+1. direct line to the player is obstructed -> commit to a sidestep
+2. the actor steps aside; from the new position the direct line **genuinely clears** ->
+   `route_clear` fires, correctly
+3. it turns back toward the player, which walks straight back into the obstruction
+4. commit again -- 2 ticks after the last one
+
+**Every individual decision is correct.** The detector is right, the selector is right, the exit
+is right. The defect is that steps 2 and 3 form a cycle: sidestepping is exactly what makes the
+direct route look clear, and taking the direct route is exactly what re-obstructs it. Nothing in
+the design forbids that loop, because each half was validated separately against a stationary
+target where it never closes.
+
+This is a MECHANISM finding, not an appearance one. It is the shape a player reads as "following
+without approaching".
+
+### WHAT IS STILL UNKNOWN
+This log is from `215e635`, which still had the leash-hold. The hold could return a ZERO heading
+while a commitment was live, so it may have contributed. `ec82254` deleted it, and my post-fix
+case B measured a 17.3-tick mean commitment rather than 2-3.
+
+**So the honest position is: the mechanism is identified, but whether it survives on the current
+build is unmeasured.** Re-observation on `ec82254` should come before any fix is designed --
+otherwise a hysteresis knob may be built for a loop that the pursuit ruling already broke.
+
+**Still no smoothing, hysteresis or selector change applied.**
 
 ### RETURN CORNER — **not reproducible after the ruling; likely deleted by it.**
 Case C returns cleanly: 1 commit, +4.53 u, final gap 0.20. It gets home.
