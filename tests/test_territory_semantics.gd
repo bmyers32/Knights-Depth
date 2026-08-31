@@ -11,7 +11,13 @@ extends GutTest
 ##   source                                voluntary          forced displacement
 ##   floor / WALL / closed connection      cannot cross       cannot cross
 ##   hard encounter seal                   cannot cross       cannot cross
-##   ambient home territory                will not leave     MAY cross if floor-legal; returns
+##   ambient home territory                NOT A LIMIT        MAY cross; returns when disengaged
+##
+## PURSUIT IS DETECTION-GOVERNED, NOT TERRITORY-GOVERNED (ruled 2026-08-31, after play). An
+## ENGAGED ambient enemy chases anywhere physically legal. Home keeps three jobs and no more:
+## authored spawn context, acquisition association, and the destination it walks back to once
+## it disengages. Kiting an ambient enemy across open floor is an ACCEPTED consequence at this
+## floor scale, not a defect to be leashed away.
 ##
 ## SYNTHETIC FIXTURE GEOMETRY -- mechanical law only, never shipped tuning.
 
@@ -50,8 +56,10 @@ func _add_ooze(at: Vector3, role: StringName, regions: Array[Rect2], confines: b
 	sim.add_entity(ENEMY, at, 1.5, Vector3(-1, 0, 0), RADIUS)
 	sim.register_combatant(ENEMY, 500.0, &"ooze", 0, RADIUS, &"enemy")
 	sim.register_weapon(&"test_slam", 5.0, &"force", 1.9, 90.0, 0.0, 9999)
+	# Detection 12 / leash 20: large enough for ordinary pursuit, small enough that a test can
+	# walk out of engagement and observe the disengaged return.
 	sim.register_ai(ENEMY, CombatTestHelpers.single_action_repertoire(&"test_slam", 1.9, 10000),
-		at, 2.2, 1.9, 40.0, 80.0, 0, 0, 0.0, 0.0, 0, 0.0, 0, 0, 0, 45)
+		at, 2.2, 1.9, 12.0, 20.0, 0, 0, 0.0, 0.0, 0, 0.0, 0, 0, 0, 45)
 	assert_true(sim.assign_actor_encounter(ENEMY, ENCOUNTER), "sanity: bound to its site")
 	sim.debug_set_ai_active(ENEMY)
 
@@ -91,36 +99,30 @@ func test_a_bump_carries_an_ambient_actor_across_its_own_leash_and_it_returns() 
 	assert_true(sim._bounds.fits(after_bump, RADIUS), "and physical legality still holds")
 	assert_eq(sim._ai_state[ENEMY], "active", "aggro must survive being displaced")
 
-	# Movement policy is homeward, not player-ward. The player sits EAST, inside home, so an
-	# outward-pursuing actor and a homeward one would move the same way here; the discriminating
-	# case is the next test. This one proves it gets home at all.
-	_run(400)
+	# RETURN IS A DISENGAGED behaviour. While the player is still in range the actor keeps
+	# fighting -- that is the ruling. Walk far away, let engagement lapse, and only then does
+	# home become its destination.
+	sim.entities[PLAYER] = Vector3(-19.0, 0.0, 9.0)
+	_run(600)
 	assert_true(_home_bounds().fits(sim.entities[ENEMY], RADIUS),
-		"it must return to its home territory, ending at %s" % sim.entities[ENEMY])
-	assert_eq(sim._ai_state[ENEMY], "active", "and still be engaged when it arrives")
+		"a disengaged actor must walk back home, ending at %s" % sim.entities[ENEMY])
 
 
-## THE DISCRIMINATING CASE. Player OUTSIDE home, standing between the actor and its way back, so
-## outward pursuit and homeward return point in OPPOSITE directions.
-##
-## The actor is displaced out by a REAL BUMP rather than placed there: an authored spawn outside
-## its own site is refused by assign_actor_encounter (correctly -- that is a content defect), so
-## "outside home" is only ever reachable the way it happens in play.
-func test_a_player_between_the_actor_and_home_cannot_pull_it_further_out() -> void:
+## A DISENGAGED actor walks home even when the player it was chasing is the other way. This is
+## the return half of the ruling: home decides where it goes when nobody is being chased, and
+## nothing else.
+func test_a_disengaged_actor_returns_home_regardless_of_where_the_player_stands() -> void:
 	var ambient: Array[Rect2] = [HOME]
 	_arm_player(Vector3(4.0, 0.0, 0.0))
 	_add_ooze(Vector3(1.8, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
 	_bump()
 	assert_false(_home_bounds().fits(sim.entities[ENEMY], RADIUS), "sanity: the bump put it outside")
 
-	# Now put the player further out still, directly between the actor and home's edge.
-	sim.entities[PLAYER] = Vector3(-16.0, 0.0, 0.0)
-	var start_x: float = sim.entities[ENEMY].x
-	_run(200)
-	assert_gt(sim.entities[ENEMY].x, start_x,
-		"it must move HOMEWARD (+x) even though the player lies the other way (%.2f -> %.2f)"
-			% [start_x, sim.entities[ENEMY].x])
-	assert_eq(sim._ai_state[ENEMY], "active", "and must not go passive while returning")
+	# Walk out of engagement entirely, on the far side from home.
+	sim.entities[PLAYER] = Vector3(-19.0, 0.0, 9.0)
+	_run(600)
+	assert_true(_home_bounds().fits(sim.entities[ENEMY], RADIUS),
+		"a disengaged actor must return home, ending at %s" % sim.entities[ENEMY])
 
 
 ## Aggro and movement policy are SEPARATE FACTS: a returning actor is not a pacifist.
@@ -134,6 +136,7 @@ func test_a_returning_actor_is_still_a_combatant() -> void:
 	# Stand INSIDE the action's authored band (1.9), outside home, and let it act. At 2.0 the
 	# action is simply not eligible and the test would measure band arithmetic, not aggro.
 	sim.entities[PLAYER] = sim.entities[ENEMY] + Vector3(-1.5, 0.0, 0.0)
+	sim.debug_set_ai_active(ENEMY)
 	sim._next_fire_tick[ENEMY] = 0
 	var telegraphs: int = 0
 	for i in 200:
@@ -144,15 +147,36 @@ func test_a_returning_actor_is_still_a_combatant() -> void:
 	assert_gt(telegraphs, 0, "an actor outside home must still fight when the player is in reach")
 
 
-# --- VOLUNTARY MOVEMENT STILL RESPECTS THE LEASH -------------------------------------------
+# --- PURSUIT IS DETECTION-GOVERNED --------------------------------------------------------
 
-func test_an_ambient_actor_will_not_voluntarily_chase_out_of_home() -> void:
+## INVERTED 2026-08-31. This previously asserted that voluntary pursuit never leaves home -- the
+## v1 leash-hold. Human play judged that hold visibly artificial and ruled pursuit
+## detection-governed instead, so the same scenario now asserts the OPPOSITE. Kiting across open
+## floor is the accepted consequence at this scale.
+func test_an_engaged_ambient_actor_chases_out_of_its_home() -> void:
 	var ambient: Array[Rect2] = [HOME]
-	_arm_player(Vector3(-12.0, 0.0, 0.0))
-	_add_ooze(Vector3(6.0, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
-	_run(500)
-	assert_true(_home_bounds().fits(sim.entities[ENEMY], RADIUS),
-		"voluntary pursuit must never leave home, ended at %s" % sim.entities[ENEMY])
+	_arm_player(Vector3(-4.0, 0.0, 0.0))
+	_add_ooze(Vector3(3.0, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
+	_run(300)
+	assert_false(_home_bounds().fits(sim.entities[ENEMY], RADIUS),
+		"an engaged ambient enemy must follow the player out of its home, ended at %s" % sim.entities[ENEMY])
+	assert_true(sim._bounds.fits(sim.entities[ENEMY], RADIUS), "while physical legality still binds it")
+
+
+## The kiting consequence, accepted explicitly rather than tolerated silently: a player who keeps
+## backing away keeps being followed, for as long as engagement holds.
+func test_an_engaged_ambient_actor_can_be_kited_across_open_floor() -> void:
+	var ambient: Array[Rect2] = [HOME]
+	_arm_player(Vector3(6.0, 0.0, 0.0))
+	_add_ooze(Vector3(10.0, 0.0, 0.0), FloorLayers.ROLE_AMBIENT, ambient)
+	for i in 400:
+		sim.tick([] as Array[Command], DT)
+		# Retreat slowly, staying inside detection so engagement never lapses.
+		var gap: Vector3 = sim.entities[ENEMY] - sim.entities[PLAYER]
+		if gap.length() > 4.0:
+			sim.entities[PLAYER] = sim.entities[ENEMY] - gap.normalized() * 4.0
+		sim.entities[PLAYER] = Vector3(maxf(sim.entities[PLAYER].x - 0.03, -18.0), 0.0, 0.0)
+	assert_lt(sim.entities[ENEMY].x, 0.0, "it followed the kite well past its home edge")
 
 
 ## Inside its own home, away from the edge, nothing about this changes ordinary behaviour.

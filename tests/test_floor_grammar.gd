@@ -314,7 +314,7 @@ func test_debug_force_aggro_cannot_wake_a_dormant_roster() -> void:
 
 
 ## AMBIENT: no ceremony, no lock, engages naturally -- but still bounded by its territory.
-func test_an_ambient_roster_engages_without_ceremony_and_stays_in_its_territory() -> void:
+func test_an_ambient_roster_engages_without_ceremony_and_chases_where_it_likes() -> void:
 	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_AMBIENT, false)
 	_add_enemy(ENEMY_A, Vector3(6.0, 0.0, 0.0))
 	assert_false(sim._encounter_state.has(ENCOUNTER), "an ambient site has no dormant/active life")
@@ -324,10 +324,13 @@ func test_an_ambient_roster_engages_without_ceremony_and_stays_in_its_territory(
 	assert_ne(sim.entities[ENEMY_A], Vector3(6.0, 0.0, 0.0), "an ambient enemy engages on its own")
 	assert_eq(sim.debug_describe_floor()["active_confinement"], -1, "and never seals the player in")
 
-	# Now lead it away: it must refuse to follow out of its territory.
+	# UPDATED 2026-08-31: pursuit is DETECTION-governed, not territory-governed. Leading an
+	# engaged ambient enemy away now draws it out of its home -- that is the ruling, and kiting
+	# is its accepted consequence. What still binds it is PHYSICAL legality.
 	sim.entities[PLAYER] = Vector3(-12.0, 0.0, 0.0)
 	_tick(400)
-	assert_true(_in(EAST, ENEMY_A), "ambient does NOT mean whole-floor roaming, got %s" % sim.entities[ENEMY_A])
+	assert_true(sim._bounds.fits(sim.entities[ENEMY_A], 0.6),
+		"an engaged chase still obeys the floor, got %s" % sim.entities[ENEMY_A])
 
 
 ## DELIBERATELY REWRITTEN 2026-08-31 (territory split). This test previously asserted that an

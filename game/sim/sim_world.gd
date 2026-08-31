@@ -550,11 +550,16 @@ func _nearest_home_point(actor_id: int) -> Vector3:
 	var radius: float = _body_radius_for(actor_id)
 	var best: Vector3 = Vector3.ZERO
 	var best_distance: float = INF
+	# INSET BY RADIUS **PLUS THE ARRIVAL TOLERANCE**. Insetting by the radius alone puts the
+	# destination exactly on the last fitting line, so an actor that stops "close enough" stops
+	# just OUTSIDE home and never arrives. The margin is what makes arrival and being-home the
+	# same event rather than two that miss each other by a hair.
+	var margin: float = radius + _AVOID_ARRIVAL_TOLERANCE
 	for rect: Rect2 in home.rects:
-		var min_x: float = rect.position.x + radius
-		var max_x: float = rect.end.x - radius
-		var min_z: float = rect.position.y + radius
-		var max_z: float = rect.end.y - radius
+		var min_x: float = rect.position.x + margin
+		var max_x: float = rect.end.x - margin
+		var min_z: float = rect.position.y + margin
+		var max_z: float = rect.end.y - margin
 		if min_x > max_x or min_z > max_z:
 			continue  # this rect cannot hold this body at all
 		var candidate := Vector3(clampf(from.x, min_x, max_x), from.y, clampf(from.z, min_z, max_z))
@@ -2991,7 +2996,11 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		var spawn_to_player: Vector3 = player_position - spawn_position
 		spawn_to_player.y = 0.0
 		if spawn_to_player.length() > tuning.detection_radius:
-			return []  # no re-acquisition path except idle -> active (locked)
+			# DISENGAGED RETURN. Territory's third job (after authored spawn and acquisition
+			# association): once nobody is being chased, an ambient actor that has been carried
+			# or has wandered out of its home walks back. This is the ONLY place home constrains
+			# movement -- it never limits an engaged pursuit.
+			return _return_home_commands(actor_id, events)
 		_acquire_aggro(actor_id)
 		state = "active"
 
@@ -3068,24 +3077,15 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		return []
 
 	if distance_to_player < tuning.minimum_attack_distance:
-		# Backing off is voluntary movement too, so it obeys the same leash: an actor must not
-		# retreat out of its own home any more than it may chase out of it.
-		var away: Vector3 = -to_player.normalized()
-		var home: WalkableBounds = _home_territory(actor_id)
-		var here: Vector3 = entities.get(actor_id, Vector3.ZERO)
-		if home != null and home.fits(here, _body_radius_for(actor_id)) \
-				and not _step_keeps_home(here, away, home, _body_radius_for(actor_id)):
-			return []  # hold rather than back through the leash
-		return [Command.new(tick_count, actor_id, "move", {"direction": away})]
+		return [Command.new(tick_count, actor_id, "move", {"direction": -to_player.normalized()})]
 
 	if distance_to_player > tuning.preferred_attack_distance:
-		# P33 + the ambient leash: one seam for both. Ordinary pursuit unless an obstruction is
-		# detected (committed local route around it) or the actor is outside its behavioural home
-		# (steer back). A ZERO direction is a deliberate HOLD, not a missing decision.
-		var heading: Vector3 = _leashed_pursuit_direction(actor_id, player_position, events)
-		if heading == Vector3.ZERO:
-			return []
-		return [Command.new(tick_count, actor_id, "move", {"direction": heading})]
+		# PURSUIT IS DETECTION-GOVERNED, NOT TERRITORY-GOVERNED (ruled 2026-08-31 after play).
+		# An ENGAGED ambient enemy chases anywhere physically legal; its home constrains where it
+		# lives and where it returns, never how far it may follow while the fight is on. The only
+		# limits here are the real ones -- floor, wall, closed gate, seal -- applied downstream by
+		# the clamp, plus P33 routing around genuine geometry.
+		return [Command.new(tick_count, actor_id, "move", {"direction": _pursuit_direction(actor_id, player_position, events)})]
 
 	return []  # in band, weapon on cooldown: hold position and wait
 
@@ -3259,58 +3259,28 @@ func _segment_is_clear(region: WalkableBounds, from: Vector3, to: Vector3, radiu
 	return true
 
 
-## THE MOVEMENT POLICY for an ambient actor, layered OVER P33 rather than beside it.
-##
-## Two clauses, and no retained state -- every fact below is derived from the authoritative
-## position each tick, so there is no `returning` flag to fall out of sync with reality:
-##
-##   OUTSIDE HOME  the movement TARGET becomes the nearest body-valid home point. Aggro is
-##                 untouched, the actor stays a combatant, and its attacks still resolve. It
-##                 simply stops steering by the player. A player standing between the actor and
-##                 home therefore cannot pull it further out -- not by a special case, but
-##                 because outward pursuit is no longer EXPRESSIBLE: the target is the home point.
-##   INSIDE HOME   ordinary pursuit, except that a step which would carry the body out of home
-##                 is declined. Declined, never clamped: the leash shapes what the AI ASKS FOR,
-##                 and forced displacement (bump, knockback) still crosses it freely.
-##
-## V1 LIMITATION, RECORDED HONESTLY rather than dressed up: when the direct step would leave
-## home, this tries the two axis-preserving slides and otherwise HOLDS. It is not a tactical
-## repositioning system and must not grow into one to prettify the leash edge; if holding at the
-## boundary proves unsatisfying in play, that is evidence for a future ruling, not licence here.
-func _leashed_pursuit_direction(actor_id: int, player_position: Vector3, events: Array[Event]) -> Vector3:
+## Walks a disengaged ambient actor back to its home territory, through the SAME P33 detector,
+## selector and commitment that player-directed pursuit uses. Empty once it is home, or for
+## anyone with no ambient home at all -- which is every actor whose confinement is physical.
+func _return_home_commands(actor_id: int, events: Array[Event]) -> Array[Command]:
 	var home: WalkableBounds = _home_territory(actor_id)
 	if home == null:
-		return _pursuit_direction(actor_id, player_position, events)  # no leash: physical only
-
-	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
+		return []
+	var here: Vector3 = entities.get(actor_id, Vector3.ZERO)
 	var radius: float = _body_radius_for(actor_id)
-	if not home.fits(from, radius):
-		# OUTSIDE. Steer home through the SAME P33 detector/selector/commitment -- a return route
-		# blocked by real geometry is routed around by the mechanism that already exists, never
-		# by a second navigation system.
-		var home_point: Vector3 = _nearest_home_point(actor_id)
-		if home_point == Vector3.ZERO:
-			return _pursuit_direction(actor_id, player_position, events)
-		return _pursuit_direction(actor_id, home_point, events)
-
-	# INSIDE. Ordinary pursuit, then refuse to walk out of my own home.
-	var wanted: Vector3 = _pursuit_direction(actor_id, player_position, events)
-	if wanted == Vector3.ZERO or _step_keeps_home(from, wanted, home, radius):
-		return wanted
-	for slide: Vector3 in [Vector3(wanted.x, 0.0, 0.0), Vector3(0.0, 0.0, wanted.z)]:
-		if slide.length() <= 0.0001:
-			continue
-		var candidate: Vector3 = slide.normalized()
-		if _step_keeps_home(from, candidate, home, radius):
-			return candidate
-	return Vector3.ZERO  # hold: nothing useful stays home
-
-
-## Probes one body length ahead, which is the granularity at which "am I about to leave" is a
-## meaningful question for a body of that size. Deliberately not a per-tick step test: dt is not
-## available here, and tying the leash to frame timing would make it frame-rate dependent.
-func _step_keeps_home(from: Vector3, direction: Vector3, home: WalkableBounds, radius: float) -> bool:
-	return home.fits(from + direction * maxf(radius, 0.5), radius)
+	if home.fits(here, radius):
+		return []  # already home: idle means idle
+	var home_point: Vector3 = _nearest_home_point(actor_id)
+	# ARRIVAL USES THE P33 TOLERANCE, not the body radius. A radius-sized guard here stopped the
+	# actor one full body short of its own destination -- which is short of being home at all,
+	# since the destination is already inset by that radius. Same collision of two concepts the
+	# P33 arrival repair fixed, and it is the same constant precisely so they cannot diverge.
+	if home_point == Vector3.ZERO or here.distance_to(home_point) <= _AVOID_ARRIVAL_TOLERANCE:
+		return []
+	var heading: Vector3 = _pursuit_direction(actor_id, home_point, events)
+	if heading == Vector3.ZERO:
+		return []
+	return [Command.new(tick_count, actor_id, "move", {"direction": heading})]
 
 
 ## THE APPROACH DIRECTION, and the ONLY seam P33 touches. Everything below the returned vector

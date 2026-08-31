@@ -46,6 +46,66 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## AMBIENT PURSUIT IS **DETECTION-GOVERNED** (ruled 2026-08-31 after play). Leash-hold deleted.
+
+Human play judged the v1 home-edge hold visibly artificial. Ruled: **territory does not limit
+active pursuit.** While engagement holds, an ambient enemy chases anywhere physically legal.
+
+**Territory keeps exactly three jobs:** authored spawn/home context - acquisition association -
+the destination it walks back to **once disengaged**. Nothing else.
+
+Hard physical law is untouched: floor, WALL, closed gate and sealed encounter all still bind.
+**KITING IS AN ACCEPTED CONSEQUENCE** at this floor scale, recorded as a decision rather than
+tolerated silently. No speculative anti-kite constraint was added. If larger floors make it
+undesirable, that is a new evidenced question, never a reason to restore an invisible boundary.
+
+**BUMP FINDING CLOSED.** Human replay confirmed the bump crosses the former invisible edge, the
+actor stays engaged while in range, and it returns once engagement ends.
+
+**THREE TESTS WERE INVERTED, deliberately and individually** -- each had encoded the leash law:
+`test_an_ambient_actor_will_not_voluntarily_chase_out_of_home` (now asserts it DOES chase out,
+plus a new explicit kiting test so the accepted consequence is pinned rather than implied),
+`..._stays_in_its_territory` in the grammar suite (now asserts physical legality still binds),
+and `test_avoidance_cannot_leave_its_territory` (now pins a SEALED encounter, the confinement
+that genuinely outranks avoidance).
+
+## MOVING-TARGET PURSUIT + RETURN CORNER — INSTRUMENTED 2026-08-31. **Two different answers.**
+
+`tools/diagnose_moving_target_pursuit.gd`, same shipped geometry, three loads:
+
+| | detector | commits | mean commit | realigns | net progress | final gap |
+|---|---|---|---|---|---|---|
+| A stationary (validated P33 load) | 76/400 | 2 | 37.5 t | 3 | +6.43 u | 2.17 |
+| B moving player (observed load) | 177/400 | 10 (4 immediate re-entry) | 17.3 t | **22** | +5.44 u | 2.05 |
+| C return home, disengaged | 10/400 | 1 | 10.0 t | 1 | +4.53 u | **0.20** |
+
+### ZIGZAG — **APPEARANCE, not mechanism. Returned as a DESIGN FINDING, unfixed.**
+Case B realigns 7x more often than A and holds commitments half as long, but **it still arrives**
+(+5.44 u, final gap 2.05, inside attack range). The mechanism is succeeding.
+
+The cause is target motion, not a selector defect: a strafing player repeatedly changes whether
+the direct line is obstructed, so `route_clear` fires 7 times and avoidance re-enters immediately
+4 times. Commitment behaves exactly as specified -- **the world keeps invalidating its premise.**
+P33 was validated entirely against a stationary target, so this load was never exercised.
+
+**NO smoothing, hysteresis or selector change applied**, per ruling: a mechanism that is
+mathematically right but reads as indecision is a design question, not a tuning job.
+
+### RETURN CORNER — **not reproducible after the ruling; likely deleted by it.**
+Case C returns cleanly: 1 commit, +4.53 u, final gap 0.20. It gets home.
+
+**The likely explanation is that the ruling removed the cause.** The symptom was observed on
+`215e635`, where an engaged actor outside home steered *home* while the player kept it engaged
+near the corner -- home-ward and player-ward pulling against each other at a jamb. Under
+detection-governed pursuit that state no longer exists: engaged means chase, disengaged means
+return, never both. **This wants confirmation in play rather than being declared fixed.**
+
+### A HARNESS ERROR WORTH KEEPING
+Case C first ran with 40-unit detection and reported **negative** progress, which looked exactly
+like a broken return and was in fact correct pursuit: the actor had acquired the player 21 units
+away and was chasing it. Same trap as the earlier idle-Ooze reading. The tool now prints
+`ai_state`, so a case that measures the wrong mechanism says so.
+
 ## TERRITORY SPLIT — **BUILT 2026-08-31.** Behavioural leash separated from physical legality.
 
 The wedged-Ooze cause, fixed at its root. `_legal_bounds_for` now answers ONE question --

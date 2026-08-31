@@ -344,12 +344,14 @@ func test_avoidance_never_carries_an_actor_outside_legal_ground() -> void:
 			"avoidance put the body outside legal ground at %s" % sim.entities[ENEMY])
 
 
-## Territory confinement outranks avoidance: a routed enemy is still a confined enemy.
-func test_avoidance_cannot_leave_its_territory() -> void:
+## UPDATED 2026-08-31. This asserted that AMBIENT territory outranks avoidance -- overturned:
+## pursuit is detection-governed and an engaged ambient enemy routes wherever it must. What
+## still outranks avoidance is a HARD SEAL, which is what this now pins.
+func test_avoidance_cannot_leave_a_sealed_encounter() -> void:
 	_engage()
-	sim.register_encounter(0, [ARENA] as Array[Rect2], FloorLayers.ROLE_AMBIENT, false)
+	sim.register_encounter(0, [ARENA] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	assert_true(sim.assign_actor_encounter(ENEMY, 0), "sanity: bound to its site")
 	for i in 400:
 		sim.tick([] as Array[Command], DT)
 		assert_true(sim._encounter_bounds[0].fits(sim.entities[ENEMY], RADIUS),
-			"a routing enemy left its territory to %s" % sim.entities[ENEMY])
+			"a routing enemy left a SEALED encounter to %s" % sim.entities[ENEMY])
