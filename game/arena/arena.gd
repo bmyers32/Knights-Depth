@@ -613,6 +613,10 @@ func _report_events(events: Array[Event]) -> void:
 				_floor_builder.set_gate_closed(int(event.payload["connection_id"]), not bool(event.payload["open"]))
 			"floor_trigger_fired":
 				print("TRIGGER FIRED: ", event.payload)
+			"cardinal_leg_committed":
+				print("CARDINAL LEG: ", event.payload)
+			"cardinal_leg_ended":
+				print("cardinal leg ended: ", event.payload)
 			"avoidance_committed":
 				print("AVOIDANCE COMMITTED: ", event.payload)
 			"avoidance_cleared":

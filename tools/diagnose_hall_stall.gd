@@ -87,6 +87,12 @@ func _init() -> void:
 
 	print("STALL STATE  ooze=%s (r=%.2f)  player=%s  separation=%.2f" % [
 		ooze_at, radius, player_at, ooze_at.distance_to(player_at)])
+	print("   detection_radius=%.2f  leash_radius=%.2f  ai_state=%s  language=%s" % [
+		stats.detection_radius, stats.leash_radius, sim._ai_state.get(OOZE, "?"),
+		sim._ai_tuning.get(OOZE, {}).get("pursuit_language", "?")])
+	if ooze_at.distance_to(player_at) > stats.leash_radius:
+		print("   *** SEPARATION EXCEEDS LEASH: this actor DISENGAGES. Any zero movement below is")
+		print("   *** an idle enemy, NOT a selector stall. The fixture is measuring the wrong thing.")
 
 	var region: Object = sim._legal_bounds_for(OOZE)
 	print("   _legal_bounds_for -> %d rects" % region.rects.size())

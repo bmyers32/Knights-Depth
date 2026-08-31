@@ -76,6 +76,48 @@ connectivity is PATCH OVERLAP, not authored connections. And that is the precise
 aperture vocabulary can only see `_connections`, and the hall has none where it matters.** The
 route the player can see is one the selector has no word for.
 
+### CORRECTION 2026-08-31 — the "0.00 paralysis" reproduction was INVALID. Withdrawn.
+
+Instrumenting engagement state (which the fixture had not printed) shows the actor was **not
+stalled — it was disengaged**:
+
+```
+ooze (12,-22)   player (-12,-22)   separation 24.00
+detection_radius 10.00   leash_radius 18.00
+*** SEPARATION EXCEEDS LEASH: this actor DISENGAGES
+```
+
+`debug_set_ai_active` forced it active, and the leash check on the very next tick sent it
+straight back to idle. **The zero movement was an idle enemy, exactly the trap this project has
+now sprung three times** (the first Ooze recon, case C of the moving-target harness, and now
+this). The tool prints `ai_state`, separation and leash up front so the fixture cannot lie again.
+
+**WHAT SURVIVES THE CORRECTION:** `_select_avoidance_waypoint` genuinely returns NONE across the
+hall void -- that is a real vocabulary finding, measured directly rather than inferred from
+movement, and it stands.
+
+**WHAT DOES NOT:** the claim that the shipped selector paralyses an engaged Ooze in the hall.
+No engaged actor was ever measured there.
+
+### AND THE GEOMETRY SAYS THAT CASE CANNOT ARISE
+The hall void spans x(-8, 8). An Ooze in the east arm and a player across the void are therefore
+**at least ~20 units apart**, against a detection radius of 10 and a leash of 18. **A
+void-crossing pursuit is unreachable for this enemy on this floor** -- it disengages long before
+the geometry could block it.
+
+So the hall-void case is NOT the human stall, and cardinal pursuit cannot be graded against it.
+The reported symptom was an Ooze that "would not proceed farther despite facing/following the
+player", which describes an ENGAGED actor -- a state the fixture never produced.
+
+**THE STALL LOCATION IS THEREFORE STILL UNIDENTIFIED.** No screenshot reached this session. The
+honest next step is to obtain the actual location rather than to keep reconstructing candidates:
+a stall inside 10 units has a different cause than anything measured so far, and guessing again
+would repeat the error above.
+
+**CARDINAL PURSUIT IS IMPLEMENTED AND GREEN**, and its mechanism tests pass on constructed
+geometry -- but it is NOT yet demonstrated against the human's actual stall, because that stall
+has not been located.
+
 ### MODEL B, SIMULATED ON THAT EXACT STATE
 
 | policy | result |

@@ -85,6 +85,17 @@ extends Resource
 ## the waypoint is reached). The deadline exists to BOUND the behaviour, not to pace it.
 @export var avoid_commit_ticks: int = 45
 
+## THE OOZE'S MOVEMENT LANGUAGE (ruled 2026-08-31 after play: "Can it not just go south, south,
+## south until lined up, then west, west, west?"). CARDINAL_COMMITTED walks one axis at a time
+## and switches when aligned or blocked, which reads as deliberate rather than as continuous
+## diagonal correction.
+##
+## AUTHORED PER FAMILY, not branched by name in code: GAME-RULES §3 channel law gives FAMILIES
+## the baseline motion path, so a steering grammar belongs in content. Fang and Watcher keep
+## &"direct" -- their lunge, burrow and approach weave are validated identities that cardinal
+## legs would destroy.
+@export var pursuit_language: StringName = &"cardinal_committed"
+
 @export var burrow_jump_distance: float = 0.0
 @export var burrow_jump_step_distance: float = 0.0
 @export var burrow_underground_ticks: int = 0

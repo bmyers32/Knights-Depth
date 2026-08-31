@@ -1,12 +1,22 @@
 extends GutTest
 ## THE ACTIVE GATE on the shared locomotion/decision path (P17 baseline split).
 ##
-## Ooze is named here for one reason and it must stay true: **no family-identity work
-## touches it.** P17's approach weave was authored on Fang alone and has since been reverted
-## as falsified; Ooze was unaffected throughout, in both directions. So any drift this test
-## reports came from the shared machinery in `_decide_single_ai_command` / `_apply_move`,
-## never from an intended content change -- which is exactly what a canary is for, and why
-## the gate sits on an explicitly unaffected family rather than on one that moves.
+## ARTIFACT RETIRED AND RE-RECORDED 2026-08-31, per the instruction at the foot of this header.
+##
+## The original premise was: "Ooze is named here for one reason and it must stay true -- no
+## family-identity work touches it." THAT PREMISE IS NOW FALSE. The cardinal-pursuit ruling
+## authored CARDINAL_COMMITTED onto Ooze specifically, so the family chosen for being untouched
+## became the family under active identity development. The pre-cardinal stream is preserved as
+## `ai_canary_ooze_pre_cardinal.json` -- evidence, never overwritten -- and this artifact holds
+## the post-cardinal recording.
+##
+## WHAT IT STILL GUARDS: drift in the shared machinery of `_decide_single_ai_command` /
+## `_apply_move`, which is the real job. What it no longer guarantees is that a red result means
+## SHARED drift rather than intended Ooze work.
+##
+## FLAGGED FOR RULING, not decided here: a canary belongs on a family identity work does not
+## touch, and Watcher is the only one left that qualifies. Relocating the guard is a judgement
+## about what it should watch, so it is recorded rather than taken unilaterally.
 ##
 ## THIS OUTLIVED THE MECHANIC THAT PROMPTED IT, deliberately. The three-artifact discipline
 ## is preserved independently of P17's verdict: the shared locomotion path still needs an

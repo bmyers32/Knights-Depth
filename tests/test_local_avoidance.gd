@@ -589,3 +589,124 @@ func test_committed_legs_actually_advance_toward_the_target() -> void:
 		return
 	assert_gt(advancing, 0,
 		"not one of %d committed legs advanced toward the target -- that is the sideways shuffle" % total)
+
+# --- CARDINAL COMMITTED PURSUIT (ruled 2026-08-31) -----------------------------------------
+
+## THE INVARIANT IS COMMITMENT, NOT CARDINALITY. Recon falsified the tempting claim that cardinal
+## movement is oscillation-proof by construction: a per-step axis re-pick flapped onto the free
+## axis, re-read itself as aligned, switched back into the wall and looped -- 81 switches, never
+## arrived. The axis-committed version reached the target in 4 switches on identical geometry.
+## These pin the committed half, because that is the half doing the work.
+const CARD_ENEMY := 7
+
+
+func _cardinal_engage(enemy_at: Vector3, player_at: Vector3, rects: Array[Rect2]) -> void:
+	sim = SimWorld.new()
+	sim.set_damage_matrix({}, 1.5, 0.5)
+	sim.load_floor(WalkableBounds.new(rects), Vector3.ZERO)
+	sim.register_patches(rects)
+	sim.add_entity(PLAYER, player_at, 0.0, Vector3(0, 0, -1), 0.4)
+	sim.register_combatant(PLAYER, 5000.0, &"envoy", 0, 0.4, &"player")
+	sim.mark_run_persistent(PLAYER)
+	sim.add_entity(CARD_ENEMY, enemy_at, SPEED, Vector3(0, 0, -1), RADIUS)
+	sim.register_combatant(CARD_ENEMY, 500.0, &"ooze", 0, RADIUS, &"enemy")
+	sim.register_weapon(&"test_slam", 5.0, &"force", 1.9, 90.0, 0.0, 9999)
+	sim.register_ai(CARD_ENEMY, CombatTestHelpers.single_action_repertoire(&"test_slam", 1.9, 10000),
+		enemy_at, 2.2, 1.9, 60.0, 200.0, 0, 0, 0.0, 0.0, 0, 0.0, 0, 0, 0, 45, &"cardinal_committed")
+	sim._next_fire_tick[CARD_ENEMY] = 1_000_000
+	sim.debug_set_ai_active(CARD_ENEMY)
+
+
+## An L-shaped space: the direct diagonal is blocked, the cardinal route is obvious.
+func _ell() -> Array[Rect2]:
+	var rects: Array[Rect2] = [Rect2(-20.0, -6.0, 40.0, 12.0), Rect2(-20.0, -30.0, 12.0, 24.0)]
+	return rects
+
+
+func test_cardinal_pursuit_moves_along_one_axis_at_a_time() -> void:
+	_cardinal_engage(Vector3(14.0, 0.0, 0.0), Vector3(-14.0, 0.0, -20.0), _ell())
+	var headings: Dictionary = {}
+	for tick in 600:
+		sim.tick([] as Array[Command], DT)
+		var heading: Vector3 = sim._ai_cardinal_heading.get(CARD_ENEMY, Vector3.ZERO)
+		if heading != Vector3.ZERO:
+			headings[heading] = true
+			assert_true(is_zero_approx(heading.x) or is_zero_approx(heading.z),
+				"a cardinal heading must be axis-aligned, got %s" % heading)
+	assert_gt(headings.size(), 0, "it must commit to at least one cardinal leg")
+
+
+func test_cardinal_pursuit_reaches_around_a_corner() -> void:
+	_cardinal_engage(Vector3(14.0, 0.0, 0.0), Vector3(-14.0, 0.0, -20.0), _ell())
+	for tick in 900:
+		sim.tick([] as Array[Command], DT)
+	assert_lt(sim.entities[CARD_ENEMY].distance_to(sim.entities[PLAYER]), 4.0,
+		"cardinal legs must round the corner, ended at %s" % sim.entities[CARD_ENEMY])
+
+
+## THE OSCILLATION REGRESSION, TRANSLATED. Axis flapping is the cardinal form of the two-state
+## loop, and the recon proved cardinality alone does not prevent it.
+func test_cardinal_legs_do_not_flap_between_axes() -> void:
+	_cardinal_engage(Vector3(14.0, 0.0, 0.0), Vector3(-14.0, 0.0, -20.0), _ell())
+	var switches: int = 0
+	for tick in 900:
+		for event in sim.tick([] as Array[Command], DT):
+			if event.kind == "cardinal_leg_committed":
+				switches += 1
+	assert_lt(switches, 25, "axis flapping: %d legs committed for one corner" % switches)
+
+
+## A strafing player must not cause per-tick axis switching -- the leg is the navigation target,
+## the player is only the combat target.
+func test_a_strafing_player_does_not_cause_axis_flapping() -> void:
+	_cardinal_engage(Vector3(14.0, 0.0, 0.0), Vector3(-14.0, 0.0, -20.0), _ell())
+	var switches: int = 0
+	for tick in 600:
+		for event in sim.tick([] as Array[Command], DT):
+			if event.kind == "cardinal_leg_committed":
+				switches += 1
+		sim.entities[PLAYER] = Vector3(-14.0 + sin(float(tick) * 0.06) * 2.5, 0.0, -20.0)
+	assert_lt(switches, 25, "a strafing player drove %d axis commitments" % switches)
+
+
+## Identical state, identical axis.
+func test_cardinal_axis_choice_is_deterministic() -> void:
+	var chosen: Array = []
+	for attempt in 2:
+		_cardinal_engage(Vector3(14.0, 0.0, 0.0), Vector3(-14.0, 0.0, -20.0), _ell())
+		sim.tick([] as Array[Command], DT)
+		chosen.append(sim._ai_cardinal_heading.get(CARD_ENEMY, Vector3.ZERO))
+	assert_eq(chosen[0], chosen[1], "identical state must choose an identical axis")
+
+
+## Both axes blocked -> bounded deterministic failure, never jitter.
+func test_both_axes_blocked_holds_rather_than_jittering() -> void:
+	# TWO DISCONNECTED boxes: both endpoints are legal (so registration succeeds) and no route
+	# exists between them. Placing the player on unwalkable ground would have tested add_entity's
+	# refusal instead of the steering policy.
+	var boxes: Array[Rect2] = [Rect2(-3.0, -3.0, 6.0, 6.0), Rect2(30.0, 30.0, 6.0, 6.0)]
+	_cardinal_engage(Vector3(0.0, 0.0, 0.0), Vector3(33.0, 0.0, 33.0), boxes)
+	var before: Vector3 = sim.entities[CARD_ENEMY]
+	for tick in 200:
+		sim.tick([] as Array[Command], DT)
+		assert_true(sim._bounds.fits(sim.entities[CARD_ENEMY], RADIUS),
+			"a boxed-in actor must stay legal, got %s" % sim.entities[CARD_ENEMY])
+	assert_lt(before.distance_to(sim.entities[CARD_ENEMY]), 6.0, "and must not thrash around its box")
+
+
+## The alignment tolerance is a ROUTE condition and must exceed a tick of travel, or an actor
+## overshoots the aligned band every step and flaps forever. Pinned against shipped content.
+func test_alignment_tolerance_exceeds_a_tick_of_travel_for_every_family() -> void:
+	for enemy_key: StringName in [&"fang", &"ooze", &"watcher"]:
+		var stats: Resource = ContentDB.get_resource(&"enemy", enemy_key)
+		assert_gt(SimWorld._CARDINAL_ALIGN_TOLERANCE, stats.move_speed * DT,
+			"%s covers %.3f u per tick, which the alignment band must comfortably exceed" % [enemy_key, stats.move_speed * DT])
+
+
+## SCOPE: cardinal is authored on Ooze alone. Fang and Watcher keep the language their lunge,
+## burrow and approach weave were validated on.
+func test_only_the_ooze_authors_cardinal_movement() -> void:
+	assert_eq(ContentDB.get_resource(&"enemy", &"ooze").pursuit_language, &"cardinal_committed")
+	for enemy_key: StringName in [&"fang", &"watcher"]:
+		assert_eq(ContentDB.get_resource(&"enemy", enemy_key).pursuit_language, &"direct",
+			"%s must keep its validated movement language" % enemy_key)

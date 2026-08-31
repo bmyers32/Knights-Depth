@@ -18,12 +18,22 @@ extends SceneTree
 
 const SCENARIO_PATH: String = "res://tests/helpers/family_locomotion_scenario.gd"
 
-## family_key -> output fixture. Ooze is the ACTIVE canary (an explicitly unaffected
-## family). The Fang entry recorded the P17 approach weave, which was FALSIFIED and
-## reverted on 2026-08-19: its artifact is now experiment evidence and re-running this
-## against `fang` would overwrite that evidence with post-revert (straight) behaviour.
-## Left in place for the successor mechanic, which will need a freshly DATED artifact of
-## its own -- never this one overwritten.
+## family_key -> output fixture. The Fang entry recorded the P17 approach weave, which was
+## FALSIFIED and reverted on 2026-08-19: its artifact is now experiment evidence and re-running
+## this against `fang` would overwrite that evidence with post-revert (straight) behaviour.
+## Left in place for the successor mechanic, which will need a freshly DATED artifact of its own
+## -- never this one overwritten.
+##
+## THE OOZE CANARY WAS RETIRED 2026-08-31 and re-recorded, per its own instruction. Its premise
+## was "no family-identity work touches Ooze", and the cardinal-pursuit ruling authored a family
+## movement language onto exactly that family. The pre-cardinal stream is kept as
+## ai_canary_ooze_pre_cardinal.json -- evidence, never overwritten -- and this path now holds the
+## post-cardinal recording.
+##
+## OPEN QUESTION, flagged rather than decided: the canary is meant to sit on a family that
+## identity work does NOT touch, and Ooze no longer qualifies. Watcher is the remaining
+## untouched family. Relocating the guard is a judgement about what it should watch, so it is
+## recorded here for ruling instead of taken unilaterally.
 const ARTIFACTS: Dictionary = {
 	&"ooze": "res://tests/fixtures/ai_canary_ooze.json",
 	&"fang": "res://tests/fixtures/ai_baseline_p17_fang.json",
@@ -41,7 +51,26 @@ func _init() -> void:
 		return
 
 	var scenario: GDScript = load(SCENARIO_PATH)
-	for family_key in ARTIFACTS:
+	# ONE FAMILY PER RUN, named explicitly. This loop used to re-record EVERY artifact, so a run
+	# meant for the Ooze canary silently overwrote the Fang P17 baseline that this file's own
+	# comment says must never be overwritten -- caught by git diff on 2026-08-31 and restored.
+	# A tool whose safe use depends on remembering which entries it will also clobber is a trap.
+	var requested: String = ""
+	for argument in OS.get_cmdline_user_args():
+		requested = String(argument)
+	if requested.is_empty():
+		print("usage: -s tools/record_family_locomotion.gd -- <family_key>")
+		print("families: %s" % [ARTIFACTS.keys()])
+		print("NOTHING WAS WRITTEN. Naming the family is required precisely because these")
+		print("artifacts are evidence: a re-record is a deliberate act, never a side effect.")
+		quit(1)
+		return
+	if not ARTIFACTS.has(StringName(requested)):
+		push_error("record_family_locomotion: unknown family '%s'" % requested)
+		quit(1)
+		return
+
+	for family_key in [StringName(requested)]:
 		var output_path: String = ARTIFACTS[family_key]
 		var stream: Array = scenario.run(family_key)
 		if stream.is_empty():
