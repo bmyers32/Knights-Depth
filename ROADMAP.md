@@ -46,6 +46,97 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## P33 — CARDINAL STEERING RECON + COSTING, 2026-08-31. **NO CODE. Awaiting ruling.**
+
+Human replay of `69016ee`: pursuit **better overall** ("it did better when chasing me around for
+the most part"), but still visibly zig-zagging, and the Ooze **stalled** in the upper area.
+Preference stated plainly: *"Can it not just go south, south, south until lined up, then west,
+west, west?"* The frozen movement criterion is NOT satisfied. No PASS stamped.
+
+### THE STALL — REPRODUCED, and it is worse than "sluggish"
+**No screenshot reached this session**, so the location was reconstructed from the description
+(led back toward its origin; upper area) as the HALL ring. If the real stall was elsewhere this
+recon measured the wrong spot -- said here rather than quietly answering a different question.
+
+`tools/diagnose_hall_stall.gd`, Ooze at (12,-22) east arm, player at (-12,-22) west arm, straight
+across the void:
+
+```
+obstruction to player   blocked at 2.9 u
+APERTURE candidates     2, both at z = -13.5 (connection 0, back toward START -- useless here)
+selected waypoint       NONE
+NET DISPLACEMENT        0.00 u over 300 ticks
+```
+
+**Total paralysis, not slow pursuit.**
+
+**CLASSIFICATION: class 3, INEXPRESSIBLE.** Not truly blocked -- a legal route exists and is
+walked below. Not a closed-gate dead end -- the ring route needs no gate at all, because hall
+connectivity is PATCH OVERLAP, not authored connections. And that is the precise gap: **the
+aperture vocabulary can only see `_connections`, and the hall has none where it matters.** The
+route the player can see is one the selector has no word for.
+
+### MODEL B, SIMULATED ON THAT EXACT STATE
+
+| policy | result |
+|---|---|
+| per-step axis re-pick | **gave up after 81 switches**, gap 10.61 |
+| **axis-committed** | **ARRIVED after 4 switches, 148 steps** |
+
+Four legs. Literally south-then-west. On the geometry where the shipped model moves 0.00.
+
+**AND THE CRITICAL FINDING: cardinal grammar is NOT oscillation-immune by construction.** That
+hypothesis was worth holding and it is FALSE -- measured twice. A naive cardinal policy flapped
+one step onto the free axis, re-read itself as aligned, switched back into the wall, and looped:
+the same two-state oscillation P33 already fixed, wearing cardinal clothing. **Immunity comes
+from COMMITMENT, not from cardinality.** So the oscillation regression must survive translation,
+and "by construction" earns a test rather than a claim.
+
+### COMPONENT LEDGER — what B keeps, adapts, retires
+**KEPT, unchanged:**
+- body-aware legality (`fits` / `clamp_step`) -- every cardinal leg still clamps
+- `_AVOID_ARRIVAL_TOLERANCE` -- "aligned on this axis" needs exactly that tolerance, same constant
+- deadline bounding -- a cardinal leg still needs a bounded life
+- determinism discipline -- axis, direction and tie order all deterministic, no RNG
+- the aperture FACT (`_connections` + `_connection_open`) -- consumed as *which opening does my
+  blocked axis route through*, still single-source, still refusing closed gates
+- territory semantics, detection-governed pursuit, disengaged return -- untouched
+- **the committed-leg law itself** -- a cardinal leg IS a commitment; the measurement above is
+  what proves that law is the load-bearing part rather than the candidate shape
+
+**ADAPTED:**
+- candidate vocabulary: perpendicular offsets + aperture points -> axis choice (X/Z) + direction
+- exit conditions: reached / deadline / leg_invalid -> **aligned-on-axis** / blocked / deadline /
+  target invalid
+- the oscillation regression: re-expressed against AXIS FLAPPING rather than waypoint churn --
+  and it must stay red-able, per the measurement above
+
+**RETIRED:**
+- perpendicular offset generation (the sideways-only vocabulary that scored 0 advancing legs)
+- shortest-total-route ranking (nothing left to rank once the choice is an axis)
+- open: whether a waypoint POINT survives at all, or a leg becomes (axis, direction) -- an
+  implementation choice, not a design fork
+
+### SCOPE — per-family authored policy, not a universal rewrite
+Cardinal is an **Ooze** answer. The movement seam is shared, so the policy must be **authored in
+content, not branched in code**: a stats field selecting the family's steering grammar.
+
+This is not a workaround -- it is GAME-RULES §3 channel law, which already says FAMILIES own
+BASELINE MOTION PATH. Fang keeps its current language (lunge and burrow were built on committed
+displacement, and its authored approach weave is a validated family identity that cardinal legs
+would destroy); Watcher unchanged.
+
+### THE THREE MODELS
+**A. current aperture/perpendicular committed legs.** To remove the remaining zig-zag AND the
+stall it would need another candidate class for patch-overlap openings -- a third vocabulary
+bolted on because the second had a blind spot. **Not recommended.**
+**B. cardinal committed pursuit.** Solves the stall in 4 legs, matches the stated preference,
+retires more machinery than it adds. **Recommended.**
+**C. multi-waypoint routing.** Still not earned: B walks this route with no planning at all.
+
+### GATE
+Open-roundabout authoring, Floor 2 and the generator all stay held.
+
 ## APERTURE-AWARE CANDIDATES — **BUILT 2026-08-31.** Closure restored, commitment kept.
 
 ### AUDIT FIRST: no design fork
