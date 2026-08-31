@@ -40,7 +40,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P29 | Enemy action repertoire / distance-conditioned selection | **PASS / CLOSED 2026-08-18** | Frozen point `9378316`; follow-ups dispatched to P17/P28/P30/P31/P32 |
 | P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
 | P33 | Bounded local obstacle avoidance | **IMPLEMENTED 2026-08-29 · awaiting human play** | Built to the frozen spec. Measured on the real geometry: rub ticks 203 -> 0, arrival 321 -> 202 ticks. All 11 pre-registered tests green |
-| P34 | Projectile-vs-world obstruction | **BUILT, PARKED ON BRANCH `p34-projectile-world` 2026-08-30 — C-class visual gate open** | 637/637 green. One human question remains: do the corrected 5.00 thresholds read naturally? Both outcomes pre-routed | P20's projectile fence consumed by play evidence: shots pass through walls, which folded topology turns into a sequence-break risk. Design below; NO implementation |
+| P34 | Projectile-vs-world obstruction | **BUILT, PARKED ON BRANCH `p34-projectile-world` 2026-08-30 — C-class visual gate open** | 637/637 green. One human question remains: do the corrected 5.00 thresholds read naturally? Both outcomes pre-routed |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
