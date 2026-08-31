@@ -2744,6 +2744,40 @@ ONE seam — the AI's chosen movement vector. Nothing in `WalkableBounds`, `_cla
 the eight displacement seams, or the combat pipeline is touched. Pure function of sim state, so
 the M3 driver replicates it unchanged.
 
+## P33 — LIVE-PLAY FINDING 2026-08-31: **COMMITMENT COLLAPSES TO ONE TICK.** Not yet fixed.
+
+First appearance of the mechanic in real play (the ambient Ooze, during the P34 visual-check
+session). It WORKS -- no errors, no stalls, and it routed -- but it is not doing what the spec
+said, and the evidence is unambiguous:
+
+- **41 commit events for one encounter**; 38 of 41 cleared by `reached`
+- consecutive deadlines **2 ticks apart** in an unbroken run (371, 373, 375, 377, 379 ...)
+- successive waypoints **0.03 apart** in x
+
+**CAUSE, confirmed in code.** `_select_avoidance_waypoint` generates its first candidate at
+`offset = radius`, and the `reached` exit fires at `distance <= radius`. A first-offset waypoint
+therefore satisfies "reached" AT SELECTION TIME, before any movement. Commitment lasts one tick
+and `avoid_commit_ticks = 45` never matters. The mechanic degrades to a per-tick greedy sidestep.
+
+**WHY THE TESTS MISSED IT, which is the more useful half.**
+`test_commitment_prevents_per_tick_reconsideration` asserts the waypoint does not CHANGE while
+committed -- and it passes, because in that fixture the first offset does not qualify and the
+selector reaches for a larger one, so the commitment genuinely holds. Real geometry qualifies at
+the first offset. **The test proved the loop it was watching and not the one that occurs**:
+commit -> reached -> re-commit is a different cycle from commit -> waypoint mutates.
+
+**Severity: NOT Sev-1.** The measured improvement stands (rub 203 -> 0, arrival 321 -> 202) and
+that measurement was taken on the shipped behaviour, defect included. What is wrong is that the
+behaviour is not the one specified, the instrumentation is 40x noisier than it should be, and a
+commitment that never survives a tick cannot do the job commitment exists for -- it is luck that
+greedy sidestepping happens to work on this floor.
+
+**Cheapest fix, not yet applied:** separate the two radii so they cannot collide -- either start
+candidate offsets beyond the reached threshold, or make `reached` a tighter fraction of the body.
+Either is a small change, but it changes shipped behaviour and wants a ruling and a re-measure
+against the same rub-tick metric, plus a regression test written against THIS loop rather than
+the one already covered.
+
 ## AS BUILT (2026-08-29). Suite 608 -> 623.
 
 Implemented to this spec, at the one seam it named. **MEASURED ON THE REAL GEOMETRY** (the
