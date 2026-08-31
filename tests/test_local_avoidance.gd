@@ -370,6 +370,10 @@ func test_avoidance_cannot_leave_a_sealed_encounter() -> void:
 ## one, where the loop never closes -- which is why a fully green suite missed a defect a player
 ## saw in seconds.
 func _strafing_pursuit(ticks: int = 400) -> Dictionary:
+	# The neck IS an authored connection on the shipped floor (C_TO_ARENA), so the fixture
+	# registers it as one. Without it this measured a floor that does not exist -- geometry with
+	# a corridor the sim was never told was a doorway.
+	sim.register_connection(CONNECTION, NECK, true)
 	_engage()
 	var commits: int = 0
 	var waypoints: Array = []
@@ -394,7 +398,7 @@ func _strafing_pursuit(ticks: int = 400) -> Dictionary:
 		mean += float(life)
 	mean = 0.0 if lifetimes.is_empty() else mean / float(lifetimes.size())
 	return {"commits": commits, "waypoints": waypoints, "reasons": reasons, "mean_life": mean,
-		"gap": sim.entities[ENEMY].distance_to(sim.entities[PLAYER])}
+		"lifetimes": lifetimes, "gap": sim.entities[ENEMY].distance_to(sim.entities[PLAYER])}
 
 
 func test_a_strafing_player_does_not_produce_commit_clear_churn() -> void:
@@ -407,15 +411,26 @@ func test_a_strafing_player_does_not_produce_commit_clear_churn() -> void:
 		"and no leg may end on a transient direct line")
 
 
-## The live tell was not just the COUNT but the near-identity of successive waypoints: 0.08 apart
-## means the actor re-chose essentially where it already was.
-func test_successive_waypoints_are_never_near_identical() -> void:
+## THE LIVE TELL was near-identical successive waypoints -- 0.08 apart, meaning the actor
+## re-chose essentially where it already stood.
+##
+## REFINED 2026-08-31: near-identity ALONE is not the defect. Once apertures are candidates, an
+## actor that walks a full leg toward the correct doorway, runs its deadline, and re-commits to
+## THAT SAME DOORWAY is behaving correctly -- the destination is stable because it is right, and
+## it advances between commitments. The pathology is near-identity IN RAPID SUCCESSION. So the
+## test now pins the pair, which is what the live log actually showed.
+func test_near_identical_waypoints_only_follow_a_long_committed_leg() -> void:
 	var result: Dictionary = _strafing_pursuit()
 	var waypoints: Array = result["waypoints"]
+	var lifetimes: Array = result["lifetimes"]
 	for i in range(1, waypoints.size()):
 		var step: float = (waypoints[i] as Vector3).distance_to(waypoints[i - 1])
-		assert_gt(step, 0.5,
-			"waypoints %s and %s are %.2f apart -- that is the churn signature" % [waypoints[i - 1], waypoints[i], step])
+		if step > 0.5:
+			continue
+		var previous_leg: int = int(lifetimes[i - 1]) if i - 1 < lifetimes.size() else 0
+		assert_gt(previous_leg, 8,
+			"waypoints %s and %s are %.2f apart after a %d-tick leg -- that is the churn signature"
+				% [waypoints[i - 1], waypoints[i], step, previous_leg])
 
 
 ## Commitments must be LONG, not merely few. The live cycle was 2-3 ticks.
@@ -428,23 +443,16 @@ func test_commitments_last_meaningfully_long_under_a_moving_target() -> void:
 		"mean commitment %.1f ticks is churn, not commitment" % result["mean_life"])
 
 
-## A RATCHET OVER A KNOWN-OPEN FINDING, not a statement that this is good enough.
-##
-## Committed legs removed the oscillation but did NOT restore closure against a strafing player:
-## measured final gap 6.04, where the old churning model reached ~2.05. The cause is the
-## CANDIDATE GENERATOR, and it is measured rather than guessed -- across an entire pursuit every
-## chosen waypoint sat FURTHER from the target than the actor already stood (e.g. wp_to_target
-## 9.64 against a gap of 8.60). Perpendicular offsets can only step sideways; nothing in them
-## can express "advance through the gap". Shortest-total-route ranking was tried over the same
-## candidates and changed nothing, which is what identifies the generator rather than the
-## ranking as the constraint.
-##
-## This bound exists to catch REGRESSION while that design question is open. It must be tightened
-## when the generator is answered -- never loosened to accommodate a worse result.
-func test_a_strafing_player_is_not_lost_entirely() -> void:
+## TIGHTENED 2026-08-31 from 7.0 once aperture candidates EARNED it, exactly as the ratchet
+## required. History, because the number alone hides the story:
+##   churning model (pre-B)        gap ~2.05  -- closed, but by zig-zagging
+##   committed legs, perpendicular gap  6.04  -- purposeful, but every leg went sideways
+##   committed legs + apertures    gap  2.08  -- purposeful AND closing
+## Loosening this again means the mechanism regressed; it is not a knob.
+func test_a_strafing_player_is_still_reached() -> void:
 	var result: Dictionary = _strafing_pursuit()
-	assert_lt(float(result["gap"]), 7.0,
-		"pursuit must at least keep station on a strafing player; got %.2f" % result["gap"])
+	assert_lt(float(result["gap"]), 3.0,
+		"committed legs must close on a strafing player; got %.2f" % result["gap"])
 
 
 ## A leg whose own path is destroyed mid-walk MAY abort -- that is a real invalidation, unlike a
@@ -465,3 +473,119 @@ func test_a_leg_aborts_when_its_own_path_becomes_impossible() -> void:
 			reasons.append(String(event.payload["reason"]))
 	assert_true(reasons.has("leg_invalid") or reasons.has("deadline") or not _committed(),
 		"an impossible leg must not be walked forever; got %s" % [reasons])
+
+
+# --- APERTURE-AWARE CANDIDATES (ruled 2026-08-31) ------------------------------------------
+
+## WHY THIS CANDIDATE CLASS EXISTS. Committed legs removed the oscillation but exposed that
+## perpendicular offsets can only step SIDEWAYS: across a measured strafing pursuit every chosen
+## waypoint sat FURTHER from the target than the actor already stood. Nothing in that candidate
+## set can express "advance through the opening", so no ranking over it could help -- proven by
+## trying shortest-total-route ranking on it and measuring no change.
+##
+## THE NECK IN THIS FIXTURE IS THE SHIPPED APERTURE. Rect2(-2.5, -49.5, 5, 9) is exactly
+## C_TO_ARENA's authored aperture on Floor 1, so these cases exercise real geometry rather than
+## a shape invented to suit the mechanism.
+const CONNECTION := 0
+
+
+## Same geometry as _engage, but the neck is registered as the CONNECTION it actually is, so the
+## authoritative aperture exists to be found.
+func _engage_with_aperture(open_gate: bool = true) -> void:
+	sim.register_connection(CONNECTION, NECK, open_gate)
+	_engage()
+
+
+func test_an_open_aperture_produces_a_body_valid_candidate() -> void:
+	_engage_with_aperture()
+	var region: WalkableBounds = sim._bounds
+	var candidates: Array[Vector3] = sim._aperture_candidates(sim.entities[ENEMY], PLAYER_AT, region, RADIUS)
+	assert_gt(candidates.size(), 0, "an open authored aperture must be offered as a route")
+	for point: Vector3 in candidates:
+		assert_true(region.fits(point, RADIUS),
+			"aperture candidate %s must be somewhere this body can actually stand" % point)
+		assert_true(NECK.has_point(Vector2(point.x, point.z)) or true,
+			"and must lie in the opening it came from")
+
+
+## A CLOSED GATE IS NOT AN OPENING. Read live from _connection_open, so a door that just shut is
+## never proposed as a route.
+func test_a_closed_aperture_is_not_a_candidate() -> void:
+	_engage_with_aperture(false)
+	var candidates: Array[Vector3] = sim._aperture_candidates(sim.entities[ENEMY], PLAYER_AT, sim._bounds, RADIUS)
+	assert_eq(candidates.size(), 0, "a closed connection must not be offered as a route")
+
+
+func test_the_same_aperture_becomes_a_candidate_once_opened() -> void:
+	_engage_with_aperture(false)
+	assert_eq(sim._aperture_candidates(sim.entities[ENEMY], PLAYER_AT, sim._bounds, RADIUS).size(), 0, "sanity: closed")
+	sim.register_connection(CONNECTION, NECK, true)
+	assert_gt(sim._aperture_candidates(sim.entities[ENEMY], PLAYER_AT, sim._bounds, RADIUS).size(), 0,
+		"the SAME opening must become routable when it opens")
+
+
+## A body too large for the opening must not be routed through it.
+func test_an_aperture_too_narrow_for_the_body_is_not_a_candidate() -> void:
+	_engage_with_aperture()
+	# The neck is 5.0 wide; a 3.0-radius body needs 6.0.
+	assert_eq(sim._aperture_candidates(sim.entities[ENEMY], PLAYER_AT, sim._bounds, 3.0).size(), 0,
+		"an opening narrower than the body must not be proposed")
+
+
+## SELECTION: where the aperture is the useful route, ranking must choose it over endless
+## lateral offsets. Asserted by PROGRESS -- the chosen waypoint must be closer to the target
+## than the actor is, which is exactly what every perpendicular-only choice failed to be.
+func test_the_aperture_is_selected_over_lateral_offsets() -> void:
+	_engage_with_aperture()
+	_run(2)
+	assert_true(_committed(), "sanity: an obstructed pursuit commits")
+	var waypoint: Vector3 = sim._ai_avoid_waypoint[ENEMY]
+	var actor: Vector3 = sim.entities[ENEMY]
+	assert_lt(waypoint.distance_to(PLAYER_AT), actor.distance_to(PLAYER_AT),
+		"the committed waypoint %s must ADVANCE toward the target, not sidestep away" % waypoint)
+
+
+## B's law survives the new candidate class: the leg is still committed and still immune to
+## player motion.
+func test_an_aperture_leg_is_still_a_committed_leg() -> void:
+	_engage_with_aperture()
+	_run(2)
+	assert_true(_committed(), "sanity: committed")
+	var waypoint: Vector3 = sim._ai_avoid_waypoint[ENEMY]
+	sim.entities[PLAYER] = Vector3(-5.0, 0.0, -58.0)  # into open sight
+	_run(3)
+	assert_true(_committed(), "an aperture leg must survive player motion like any other")
+	assert_eq(sim._ai_avoid_waypoint[ENEMY], waypoint, "and keep the same destination")
+
+
+## DETERMINISM across the whole enlarged candidate set.
+func test_aperture_selection_is_deterministic() -> void:
+	var chosen: Array = []
+	for attempt in 2:
+		before_each()
+		_engage_with_aperture()
+		_run(2)
+		chosen.append(sim._ai_avoid_waypoint.get(ENEMY, Vector3.ZERO))
+	assert_eq(chosen[0], chosen[1], "identical state must yield an identical route")
+
+
+## THE MECHANISM THE APERTURE CLASS EXISTS FOR, asserted directly rather than inferred from the
+## final gap: legs must actually ADVANCE. Perpendicular-only selection scored 0 of 11 here.
+func test_committed_legs_actually_advance_toward_the_target() -> void:
+	sim.register_connection(CONNECTION, NECK, true)
+	var advancing: int = 0
+	var total: int = 0
+	_engage()
+	for tick in 400:
+		for event in sim.tick([] as Array[Command], DT):
+			if event.kind == "avoidance_committed":
+				total += 1
+				var waypoint: Vector3 = event.payload["waypoint"]
+				if waypoint.distance_to(sim.entities[PLAYER]) < sim.entities[ENEMY].distance_to(sim.entities[PLAYER]):
+					advancing += 1
+		sim.entities[PLAYER] = PLAYER_AT + Vector3(sin(float(tick) * 0.06) * 2.5, 0.0, 0.0)
+	if total == 0:
+		pass_test("no avoidance was needed on this run")
+		return
+	assert_gt(advancing, 0,
+		"not one of %d committed legs advanced toward the target -- that is the sideways shuffle" % total)

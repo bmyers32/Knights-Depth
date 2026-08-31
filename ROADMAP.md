@@ -46,6 +46,60 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## APERTURE-AWARE CANDIDATES — **BUILT 2026-08-31.** Closure restored, commitment kept.
+
+### AUDIT FIRST: no design fork
+`_connections` (aperture geometry) + `_connection_open` (gate state) already own "where is the
+traversable opening", including open/closed. Route-finding **consumes** that fact; it builds no
+private copy and never touches presentation meshes -- the same single-source rule P34 set for
+walls. Nothing new was authored, and no new state was added.
+
+### RE-CERTIFICATION, same strafing case, same geometry
+
+| | perpendicular only | **with apertures** |
+|---|---|---|
+| commits | 11 | **4** |
+| legs that ADVANCE toward the target | **0 of 11** | **3 of 4** |
+| mean commitment | 34.9 t | **39.8 t** |
+| `route_clear` exits | 0 | **0** |
+| final gap | 6.04 | **2.08** |
+
+Closure is restored to the pre-B churning model's level (~2.05) **while keeping everything B
+won**: no mid-leg `route_clear`, ~40-tick commitments, purposeful straight legs.
+
+Leg trace, with apertures: `(-1.05,-49.5)` ADVANCES, same again ADVANCES, one sideways,
+`(1.05,-43.0)` ADVANCES to within 1.10 of the target. Against perpendicular-only, where all
+eleven legs were sideways.
+
+**RATCHET TIGHTENED 7.0 -> 3.0**, as it was written to be. It is not a knob: loosening it again
+means the mechanism regressed.
+
+### THREE IMPLEMENTATION ERRORS, each found by measurement rather than reasoning
+1. **Target-side point only.** The first version clamped only the target into the aperture. When
+   the target already stands *inside* the opening that returns the target's own position, whose
+   leg IS the blocked direct line -- so no aperture candidate ever qualified and the class did
+   nothing. Fixed by offering the point nearest the ACTOR as well.
+2. **Insetting both axes.** An aperture deliberately OVERLAPS the spaces it joins, so insetting
+   its long axis pushed the entry point deep inside the corridor, unreachable in a straight line
+   from beside the mouth. Only the WIDTH must clear the body; `region.fits()` judges the rest
+   against the real union.
+3. **A fixture that did not match the shipped floor.** The strafing test registered the neck as a
+   patch but never as the CONNECTION it actually is on Floor 1, so it measured a floor where the
+   sim had never been told a doorway existed.
+
+### ONE TEST REFINED RATHER THAN SATISFIED
+`test_successive_waypoints_are_never_near_identical` began failing on `(-1.05,-49.5)` twice --
+but that is an actor walking a full 40-tick leg toward the correct doorway, running its deadline,
+and re-committing to that same doorway while advancing 8.57 -> 7.77. **Near-identity alone is not
+the defect; near-identity IN RAPID SUCCESSION is**, which is what the live log showed. The test
+now pins the pair. Weakening it to pass would have hidden the real signature.
+
+### SCENARIO 4 / OPTION C
+Still gated, and now honestly gateable: committed-leg routing finally has an adequate candidate
+vocabulary, so a surviving failure would mean something. Re-cost after the open-roundabout
+authoring, against real revised geometry -- not against the perpendicular-only generator that
+made a generator weakness look like leg-count insufficiency.
+
 ## P33 OPTION B — **BUILT 2026-08-31.** Oscillation removed; a NEW finding took its place.
 
 `route_clear` is no longer an exit. While committed, the **waypoint is the steering target and

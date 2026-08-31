@@ -3210,32 +3210,85 @@ func _select_avoidance_waypoint(actor_id: int, target: Vector3) -> Vector3:
 		return Vector3.ZERO
 	var forward: Vector3 = span.normalized()
 	var perpendicular := Vector3(-forward.z, 0.0, forward.x)
-	# CANDIDATE GENERATION AND ORDERING ARE UNCHANGED, deliberately (ruled: preserve unless
-	# implementation evidence proves otherwise).
+	# TWO CANDIDATE CLASSES, ranked together by TOTAL ROUTE LENGTH.
 	#
-	# Shortest-total-route selection WAS tried here and measured: it changed nothing. Every
-	# perpendicular candidate sits the same `offset` from the actor and barely alters the
-	# distance to the target, so minimising |from -> wp| + |wp -> target| still lands on a
-	# sideways point. That is evidence about the GENERATOR, not the selection rule -- these
-	# candidates cannot express "advance through the gap", so no ranking over them can. Recorded
-	# in ROADMAP as the open question; not papered over with a ranking that does not help.
+	# APERTURES FIRST, because they are the only candidates that can express "advance THROUGH the
+	# opening". Perpendicular offsets can only step sideways, and committed legs made that visible:
+	# every waypoint chosen from them sat FURTHER from the target than the actor already stood
+	# (measured, eleven legs in a row), turning honest commitment into a slow lateral shuffle.
+	#
+	# Shortest-total-route ranking was tried over perpendicular candidates ALONE and changed
+	# nothing -- they all sit the same `offset` away and barely alter distance-to-target, so there
+	# was nothing for a ranking to prefer. The ranking was never wrong; the candidate set was
+	# empty of anything worth ranking. With apertures in it, |from -> wp| + |wp -> target| now
+	# genuinely favours routing through a doorway over shuffling beside a wall.
+	#
+	# Deterministic throughout: apertures enumerated in sorted connection-id order, then
+	# perpendicular offsets ascending right-before-left; strict improvement, so ties keep the
+	# earlier candidate. Identical state yields an identical route.
+	var candidates: Array[Vector3] = _aperture_candidates(from, target, region, radius)
 	var cap: float = float(_ai_tuning.get(actor_id, {}).get("detection_radius", 0.0))
 	var offset: float = radius
 	while offset <= cap:
-		var right: Vector3 = from + perpendicular * offset
-		var left: Vector3 = from - perpendicular * offset
-		var right_ok: bool = _waypoint_qualifies(actor_id, right, target, region, radius)
-		var left_ok: bool = _waypoint_qualifies(actor_id, left, target, region, radius)
-		if right_ok and left_ok:
-			var right_gap: float = right.distance_to(target)
-			var left_gap: float = left.distance_to(target)
-			return left if left_gap < right_gap - 0.0001 else right
-		if right_ok:
-			return right
-		if left_ok:
-			return left
+		candidates.append(from + perpendicular * offset)
+		candidates.append(from - perpendicular * offset)
 		offset += radius * _AVOID_SAMPLE_FRACTION
-	return Vector3.ZERO
+
+	var best: Vector3 = Vector3.ZERO
+	var best_route: float = INF
+	for candidate: Vector3 in candidates:
+		if not _waypoint_qualifies(actor_id, candidate, target, region, radius):
+			continue
+		var route: float = from.distance_to(candidate) + candidate.distance_to(target)
+		if route < best_route - 0.0001:
+			best_route = route
+			best = candidate
+	return best
+
+
+## AUTHORITATIVE OPENINGS, from the structure that already owns them: _connections holds the
+## aperture geometry and _connection_open holds the gate state. Route-finding CONSUMES that fact
+## -- it does not rediscover doorways from presentation meshes, and keeps no private copy of
+## them, the same single-source rule P34 established for walls.
+##
+## A CLOSED GATE IS NOT AN OPENING, read live rather than cached, so a route through a door that
+## just shut is never proposed.
+##
+## TWO POINTS PER OPENING: the body-valid spot nearest the ACTOR, and the one nearest the TARGET.
+## Never the geometric centre -- route to somewhere the pursuer can actually stand.
+##
+## The near point is what "advance THROUGH the opening" needs. A first version offered only the
+## target-side point, which is useless in the common case: when the target already stands inside
+## the aperture, clamping it returns the target's own position, whose leg IS the blocked direct
+## line -- so the candidate never qualified and the aperture class did nothing at all.
+func _aperture_candidates(from: Vector3, target: Vector3, region: WalkableBounds, radius: float) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	if region == null:
+		return out
+	var connection_ids: Array = _connections.keys()
+	connection_ids.sort()  # determinism: never let Dictionary order reach a route
+	for connection_id: int in connection_ids:
+		if not bool(_connection_open.get(connection_id, false)):
+			continue
+		var aperture: Rect2 = _connections[connection_id]["aperture"]
+		# INSET THE WIDTH ONLY. An aperture deliberately OVERLAPS the spaces it joins, so its
+		# long axis runs into open ground on both sides -- insetting that axis too pushes the
+		# entry point deep inside the corridor, where the body can no longer be reached in a
+		# straight line from beside the mouth. Measured: it made every aperture candidate fail
+		# qualification, so the class contributed nothing. Only the WIDTH must clear the body;
+		# region.fits() judges the rest against the real union.
+		var narrow_is_x: bool = aperture.size.x <= aperture.size.y
+		var min_x: float = aperture.position.x + (radius if narrow_is_x else 0.0)
+		var max_x: float = aperture.end.x - (radius if narrow_is_x else 0.0)
+		var min_z: float = aperture.position.y + (0.0 if narrow_is_x else radius)
+		var max_z: float = aperture.end.y - (0.0 if narrow_is_x else radius)
+		if min_x > max_x or min_z > max_z:
+			continue  # this body does not fit through this opening at all
+		for anchor: Vector3 in [from, target]:
+			var point := Vector3(clampf(anchor.x, min_x, max_x), 0.0, clampf(anchor.z, min_z, max_z))
+			if region.fits(point, radius) and not out.has(point):
+				out.append(point)
+	return out
 
 
 ## A waypoint is only useful if the actor can both REACH it and GO ON from it. Checking only the
