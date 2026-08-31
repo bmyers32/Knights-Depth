@@ -40,7 +40,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P29 | Enemy action repertoire / distance-conditioned selection | **PASS / CLOSED 2026-08-18** | Frozen point `9378316`; follow-ups dispatched to P17/P28/P30/P31/P32 |
 | P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
 | P33 | Bounded local obstacle avoidance | **IMPLEMENTED 2026-08-29 · awaiting human play** | Built to the frozen spec. Measured on the real geometry: rub ticks 203 -> 0, arrival 321 -> 202 ticks. All 11 pre-registered tests green |
-| P34 | Projectile-vs-world obstruction | **DESIGN RETURNED 2026-08-29, AWAITING REVIEW** | P20's projectile fence consumed by play evidence: shots pass through walls, which folded topology turns into a sequence-break risk. Design below; NO implementation |
+| P34 | Projectile-vs-world obstruction | **BUILT, PARKED ON BRANCH `p34-projectile-world` 2026-08-30 — C-class visual gate open** | 637/637 green. One human question remains: do the corrected 5.00 thresholds read naturally? Both outcomes pre-routed |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
@@ -2929,7 +2929,40 @@ closed.** The four rulings, as accepted:
 4. **Does the ambient-convexity constraint interact with this?** A convex territory has no
    internal walls, so ambient enemies gain no new cover. Worth confirming before assuming.
 
-**NOTHING IS IMPLEMENTED.** The swept-collision core is untouched pending this review.
+## AS BUILT — PARKED, NOT LANDED (2026-08-30). Branch `p34-projectile-world`. Suite 623 -> 637.
+
+Everything in this design is implemented and green. It is deliberately NOT on main: the
+migration gate produced a C-class perceptual question that geometry cannot answer.
+
+**THE CLOSED ENUM, after auditing all four termination paths.** Breakable impact and actor
+impact are completely explained by their own authoritative hit events, which already carry the
+projectile id and already retire the tracer; floor unload emits nothing. So exactly two reasons
+have real consumers: `{lifetime, world}`. `projectile_expired` means "ceased to exist and no
+other event explains why". Broadening it to every termination was considered and REJECTED --
+presentation's uniform "any event carrying my projectile_id retires me" rule would fire twice
+for one shot. Membership AND count are pinned by test.
+
+**MIGRATION LEDGER** (`tools/compare_wall_migration.gd` reproduces the old sampler and diffs it):
+- boundary agreement 11000/11360 points (96.83%)
+- missing walls: **none**
+- doubled/overlapping segments: **4 pairs found and FIXED** by merging collinear runs (45 -> 41
+  segments). A mechanical defect, resolved without a gate -- coverage identical.
+- wall/ledge treatment: correct, no segment on any ledge edge
+- gates: `_build_connection` untouched, unchanged by construction
+- **openings: 6.00 -> 5.00 uniformly across all 8 mouths.** The old sampler quantised to 1.0
+  spans and probed 0.5 beyond, so it drew every threshold 1.0 WIDER than the corridor the sim
+  actually permits. The canonical renderer shows the real aperture. This is the C-class item.
+
+A first run of the opening report also showed patches 8 and 9 changing to 24.00/12.00. Those are
+the LEDGE patches and it was an artifact of the report forgetting to skip them; corrected before
+the ledger was trusted.
+
+**IF THE THRESHOLDS READ NATURALLY** -> classify B with the ledger line, land unchanged.
+**IF THEY READ TOO CONSTRICTED** -> do NOT restore 6.00 rendering, which would knowingly
+reinstall the disagreement. Widen the AUTHORED aperture, let both consumers inherit it, re-run
+the clearance validator (a 6.0 aperture is EXPECTED to satisfy the widest-body law but must be
+proven, not assumed), re-baseline the golden fixture under the dated-reason rule, re-run the
+suite and the migration comparison.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

@@ -71,6 +71,131 @@ func all_rects() -> Array[Rect2]:
 	return rects
 
 
+## THE ONE AUTHORITATIVE WALL REPRESENTATION (P34). Both consumers read THIS -- the sim for
+## projectile obstruction, presentation for rendering -- so a wall cannot exist for one and not
+## the other. Presentation may tessellate a segment for drawing; it must never rediscover
+## whether or where a wall is.
+##
+## EXACT, not sampled. FloorBuilder used to sample each edge in 1.0 spans because it was drawing
+## scenery and approximation was free; the sim needs the real thing, and two derivations of one
+## fact is exactly the drift a single source exists to prevent.
+##
+## A segment is one axis-aligned run of solid boundary:
+##   axis      &"x" -- a line at x = at, spanning z in [min, max]
+##             &"z" -- a line at z = at, spanning x in [min, max]
+##   outward   which way is NOT walkable (-1 / +1 along the axis normal), so presentation can
+##             place a wall's thickness outside the floor rather than guessing
+##   elevation the patch's own height, for rendering only
+##
+## LEDGE PATCHES CONTRIBUTE NOTHING. That is the whole content of the wall/ledge distinction:
+## the sim will not stop a shot at an open edge, and presentation will not draw one, from the
+## same authored fact. Movement legality is unaffected either way -- it never came from here.
+func solid_segments() -> Array[Dictionary]:
+	var rects: Array[Rect2] = all_rects()
+	var segments: Array[Dictionary] = []
+	for patch in patches:
+		if patch.boundary_style == &"ledge":
+			continue
+		_segments_of(patch.rect, patch.elevation, rects, segments)
+	# Aperture SIDES are walls like any other: a corridor has flanks. Whether the corridor is
+	# passable is a gate question (connection state), never a static-geometry one.
+	for connection in connections:
+		_segments_of(connection.aperture, 0.0, rects, segments)
+	return _merge_collinear(segments)
+
+
+## Overlapping patches produce the SAME outer wall more than once -- the hall's west face is
+## contributed by the strip and by the arm, overlapping wherever they overlap. Coincident
+## geometry is a rendering defect (two boxes in one place) and pointless work for the sweep, so
+## collinear runs sharing a line are unioned into one. Coverage is identical either way; this
+## only removes duplicates.
+static func _merge_collinear(segments: Array[Dictionary]) -> Array[Dictionary]:
+	var grouped: Dictionary = {}
+	for segment in segments:
+		var key: String = "%s|%.4f|%.1f|%.4f" % [segment["axis"], segment["at"], segment["outward"], segment["elevation"]]
+		if not grouped.has(key):
+			grouped[key] = []
+		grouped[key].append(segment)
+	var keys: Array = grouped.keys()
+	keys.sort()  # determinism: never let Dictionary order reach the output
+	var merged: Array[Dictionary] = []
+	for key: String in keys:
+		var runs: Array = grouped[key]
+		runs.sort_custom(func(a, b): return float(a["min"]) < float(b["min"]))
+		var current: Dictionary = {}
+		for run: Dictionary in runs:
+			if current.is_empty():
+				current = run.duplicate()
+				continue
+			if float(run["min"]) <= float(current["max"]) + 0.0001:
+				current["max"] = maxf(float(current["max"]), float(run["max"]))
+			else:
+				merged.append(current)
+				current = run.duplicate()
+		if not current.is_empty():
+			merged.append(current)
+	return merged
+
+
+static func _segments_of(rect: Rect2, elevation: float, rects: Array[Rect2], out: Array[Dictionary]) -> void:
+	# WEST edge: solid wherever the strip immediately west of it is not walkable.
+	_emit(out, &"x", rect.position.x, -1.0, elevation,
+		_uncovered_span(rect.position.y, rect.end.y, rects, true, rect.position.x, -1.0))
+	_emit(out, &"x", rect.end.x, 1.0, elevation,
+		_uncovered_span(rect.position.y, rect.end.y, rects, true, rect.end.x, 1.0))
+	_emit(out, &"z", rect.position.y, -1.0, elevation,
+		_uncovered_span(rect.position.x, rect.end.x, rects, false, rect.position.y, -1.0))
+	_emit(out, &"z", rect.end.y, 1.0, elevation,
+		_uncovered_span(rect.position.x, rect.end.x, rects, false, rect.end.y, 1.0))
+
+
+## The parts of an edge with no walkable ground on its far side, as exact intervals.
+##
+## The neighbour test is written for a point an epsilon OUTSIDE the edge, which is what decides
+## whether a wall belongs there. Rects that merely touch the edge from outside DO cover it --
+## abutting ground is still ground -- while the edge's own rect never covers its own outside.
+static func _uncovered_span(low: float, high: float, rects: Array[Rect2], vertical: bool, at: float, outward: float) -> Array:
+	var open_intervals: Array = [[low, high]]
+	for other: Rect2 in rects:
+		var near: float = other.position.x if vertical else other.position.y
+		var far: float = other.end.x if vertical else other.end.y
+		var covers: bool = (near <= at and far > at) if outward > 0.0 else (near < at and far >= at)
+		if not covers:
+			continue
+		var other_low: float = other.position.y if vertical else other.position.x
+		var other_high: float = other.end.y if vertical else other.end.x
+		var remaining: Array = []
+		for interval: Array in open_intervals:
+			remaining.append_array(_subtract_interval(interval, other_low, other_high))
+		open_intervals = remaining
+		if open_intervals.is_empty():
+			break
+	return open_intervals
+
+
+static func _subtract_interval(interval: Array, cut_low: float, cut_high: float) -> Array:
+	var low: float = interval[0]
+	var high: float = interval[1]
+	if cut_high <= low or cut_low >= high:
+		return [interval]
+	var out: Array = []
+	if cut_low > low:
+		out.append([low, cut_low])
+	if cut_high < high:
+		out.append([cut_high, high])
+	return out
+
+
+static func _emit(out: Array[Dictionary], axis: StringName, at: float, outward: float, elevation: float, spans: Array) -> void:
+	for span: Array in spans:
+		if float(span[1]) - float(span[0]) <= 0.0001:
+			continue  # a zero-length run is not a wall
+		out.append({
+			"axis": axis, "at": at, "min": float(span[0]), "max": float(span[1]),
+			"outward": outward, "elevation": elevation,
+		})
+
+
 ## Just the ground, without any aperture. This is what the sim registers as the permanent
 ## spatial layer; connections are registered separately because their contribution comes and
 ## goes with their state.

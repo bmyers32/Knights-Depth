@@ -741,6 +741,46 @@ rather than as a missing rule, because nothing in the code names the absent conc
 seed//layout invariants will tempt the same collapse. **Cross-reference:** the sibling entry
 on right-representation-deletes-rules -- the deletion is the reward, the audit is the price.
 
+### Shrink a human gate to the question evidence cannot answer
+
+**Incident (P34 wall-migration gate, 2026-08-29/30):** presentation stopped sampling walls and
+began reading the same canonical segments the sim uses. The migration was routed through a
+pre-declared A/B/C checklist. Automation found two observable differences and they were NOT
+equal in kind: four doubled/overlapping segments -- a mechanical defect, fixed on the spot
+without asking anyone -- and a uniform narrowing of every rendered threshold from 6.00 to the
+authoritative 5.00, which touched *apparent openings*. Geometry could prove the new number was
+the correct one and that no wall was lost; it could not prove that eight doorways reading
+tighter still communicate the same route. That last question, and only that question, went to a
+human -- as a brief look at a few thresholds, not a playtest.
+
+**Mechanism:** a verification gate has a natural gravity toward its largest available form. Left
+unshaped, "a human should check this" becomes "run the whole playtest", which is expensive
+enough that it gets deferred, and deferral is how unverified changes ship. The counter-move is
+to decompose the finding first: resolve mechanically whatever is mechanically resolvable, prove
+with evidence whatever evidence can carry, and escalate only the irreducible remainder. The
+remainder is usually much smaller than the finding that produced it -- here, one perceptual
+question out of an eight-item checklist.
+
+**The second half is framing.** A shrunken gate is still worthless if it asks the wrong
+question. "Does this look narrower than before?" is unanswerable: the old rendering is not on
+screen and memory is not a comparator. The answerable form is absolute -- "do these openings
+read as passages you would walk toward?" -- judged on what exists now. The measured delta is
+provenance explaining why the gate fired; it is not the thing being judged, and putting it in
+front of the reviewer would bias the answer it exists to obtain.
+
+**Failure if ignored:** either the gate inflates into a full playtest and the change stalls, or
+-- worse -- the implementer, facing a gate too expensive to invoke, quietly self-clears a
+perceptual question with geometric evidence that cannot reach it, and a floor ships
+communicating different spatial meaning while every automated check stays green.
+
+**Applies elsewhere:** every representation migration where presentation and sim converge on one
+fact; art and camera passes where "equivalent" is a perceptual claim; any future C-class
+classification under the migration rider; and the M2 procedural-assembly work, where generated
+floors will produce far more of these than an authored one ever could. **Cross-reference:** the
+pre-registration entries -- deciding the routes for both possible answers BEFORE asking is what
+keeps a narrow gate narrow instead of reopening the design.
+
+
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
 (no incident produced them) and NOT law yet. Governance ladder — the only path to
