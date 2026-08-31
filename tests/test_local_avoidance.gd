@@ -77,25 +77,29 @@ func _committed() -> bool:
 	return sim._ai_avoid_waypoint.has(ENEMY)
 
 
-## Runs a pursuit and reports {arrived_tick, rub_ticks, committed} -- the recon's own metrics, so
-## the mechanic is judged on the same measurement that condemned the baseline.
+## Runs a pursuit and reports {arrived_tick, rub_ticks, committed, reasons} -- the recon's own
+## metrics, so the mechanic is judged on the same measurement that condemned the baseline.
 func _pursue(commit_ticks: int, ticks: int = 600) -> Dictionary:
 	_engage(ENEMY_START, PLAYER_AT, commit_ticks)
 	var full_step: float = SPEED * DT
 	var arrived: int = -1
 	var rub: int = 0
 	var committed: int = 0
+	var reasons: Dictionary = {}
 	for tick in ticks:
 		var before: Vector3 = sim.entities[ENEMY]
 		for event in sim.tick([] as Array[Command], DT):
 			if event.kind == "avoidance_committed":
 				committed += 1
+			elif event.kind == "avoidance_cleared":
+				var reason: String = String(event.payload["reason"])
+				reasons[reason] = int(reasons.get(reason, 0)) + 1
 		var moved: float = before.distance_to(sim.entities[ENEMY])
 		if arrived < 0 and moved < full_step * 0.5:
 			rub += 1
 		if arrived < 0 and sim.entities[ENEMY].distance_to(PLAYER_AT) < 2.5:
 			arrived = tick
-	return {"arrived": arrived, "rub": rub, "committed": committed}
+	return {"arrived": arrived, "rub": rub, "committed": committed, "reasons": reasons}
 
 
 # --- 1 & 11: the literal case, and PROOF THE CHAIN FIRED ---------------------------------
@@ -128,6 +132,57 @@ func test_avoidance_strictly_beats_the_baseline_on_both_measures() -> void:
 	var without: Dictionary = _pursue(0)
 	assert_lt(int(with_avoidance["rub"]), int(without["rub"]), "fewer ticks lost to the wall")
 	assert_lt(int(with_avoidance["arrived"]), int(without["arrived"]), "and it gets there sooner")
+
+
+# --- THE REAL LOOP: commitment must actually survive (2026-08-31 regression) ---------------
+
+## THE DEFECT THIS PINS. The first candidate offset is one body radius; the old `reached` test
+## accepted `<= body_radius`, so a freshly chosen waypoint qualified as reached on the very next
+## evaluation. Commitment lasted ONE TICK and avoid_commit_ticks never mattered -- live play
+## showed 41 commits in one encounter, 38 cleared as "reached", deadlines two ticks apart.
+##
+## THE EXISTING OSCILLATION TEST DID NOT CATCH THIS, and could not: it asserts the waypoint does
+## not CHANGE while committed, which was true. `commit -> reached -> re-commit` is a different
+## cycle from `commit -> waypoint mutates`. This watches the cycle that actually occurred.
+func test_a_freshly_selected_waypoint_is_not_instantly_reached() -> void:
+	_engage()
+	_run(2)
+	assert_true(_committed(), "sanity: an obstructed pursuit commits")
+	var waypoint: Vector3 = sim._ai_avoid_waypoint[ENEMY]
+	var gap: float = sim.entities[ENEMY].distance_to(waypoint)
+
+	_run(1)
+	assert_true(_committed(),
+		"the tick after selection must STILL be committed -- a minimum-offset waypoint %.2f away must not read as already reached" % gap)
+
+
+## The whole-pursuit shape, in the recon's own currency. A per-tick greedy sidestep produces
+## commits by the dozen; a real commitment produces a handful.
+func test_commitment_does_not_churn_across_a_whole_pursuit() -> void:
+	var result: Dictionary = _pursue(COMMIT_TICKS)
+	assert_lt(int(result["committed"]), 8,
+		"a committed route must not be re-chosen dozens of times (pre-fix live play: 41 in one encounter)")
+
+
+## THE SEMANTICALLY CORRECT EXIT should dominate: a commitment ends because avoidance is no
+## longer NEEDED, not because the actor drifted a body-width from its own waypoint.
+func test_route_clear_dominates_successful_avoidance() -> void:
+	var result: Dictionary = _pursue(COMMIT_TICKS)
+	var reasons: Dictionary = result["reasons"]
+	var clear: int = int(reasons.get("route_clear", 0))
+	var reached: int = int(reasons.get("reached", 0))
+	assert_gt(clear, reached,
+		"route_clear must dominate on the observed corner; got %s" % reasons)
+
+
+## The arrival tolerance must stay strictly below the smallest first candidate offset, which IS
+## the smallest authored body radius. Pinned against shipped content rather than derived, so
+## authoring a small enemy fails loudly instead of silently resurrecting the collision.
+func test_arrival_tolerance_stays_below_every_authored_body() -> void:
+	for enemy_key: StringName in [&"fang", &"ooze", &"watcher"]:
+		var stats: Resource = ContentDB.get_resource(&"enemy", enemy_key)
+		assert_lt(SimWorld._AVOID_ARRIVAL_TOLERANCE, stats.combat_radius,
+			"%s body %.2f is not larger than the arrival tolerance -- a selected waypoint would read as instantly reached" % [enemy_key, stats.combat_radius])
 
 
 # --- 2: the opposite side has no route and is not selected -------------------------------

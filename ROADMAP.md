@@ -2785,7 +2785,32 @@ ONE seam — the AI's chosen movement vector. Nothing in `WalkableBounds`, `_cla
 the eight displacement seams, or the combat pipeline is touched. Pure function of sim state, so
 the M3 driver replicates it unchanged.
 
-## P33 — LIVE-PLAY FINDING 2026-08-31: **COMMITMENT COLLAPSES TO ONE TICK.** Not yet fixed.
+## P33 — COMMITMENT DEFECT **FIXED 2026-08-31.** Churn 41 -> 2 commits.
+
+Arrival predicate repaired, selector untouched. Measured on the same literal geometry:
+
+| | commits | rub ticks | arrives | exit reasons |
+|---|---|---|---|---|
+| before the fix | **41** | 0 | 202 | 38 x reached |
+| after the fix | **2** | 0 | 205 | 1 route_clear, 1 deadline |
+| baseline (avoidance off) | 0 | 203 | 321 | -- |
+
+`route_clear` now appears as an exit, which is the semantically correct one: a commitment ends
+because avoidance is no longer NEEDED, not because the actor drifted a body-width from its own
+waypoint. Arrival moved 202 -> 205 ticks (0.1 s), noise against the 321 baseline it beats.
+
+**THE FIX:** `_AVOID_ARRIVAL_TOLERANCE = 0.25`, an absolute distance chosen against the game's
+SCALE (corridors 5.00 wide, bodies 1.7-2.9 across), replacing the body-radius test. Deliberately
+NOT derived from the radius even though it was available -- "how big am I" and "am I standing on
+it" are different concepts, and conflating them WAS the defect. The invariant (tolerance < the
+smallest authored body radius, hence < the smallest possible first offset) is pinned by test
+against shipped content, so authoring a small enemy fails loudly instead of silently
+resurrecting the collision.
+
+Four regressions added, including the one that pins the original defect directly: after selecting
+a minimum-offset waypoint, the next tick must still be committed.
+
+### The finding, as recorded before the fix
 
 First appearance of the mechanic in real play (the ambient Ooze, during the P34 visual-check
 session). It WORKS -- no errors, no stalls, and it routed -- but it is not doing what the spec

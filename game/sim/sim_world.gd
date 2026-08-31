@@ -3011,6 +3011,21 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 ## fine enough that a body cannot tunnel across a gap narrower than itself, which is the only
 ## way this detector could lie by omission.
 const _AVOID_SAMPLE_FRACTION: float = 0.5
+## WAYPOINT ARRIVAL TOLERANCE -- "close enough to the waypoint to consider it reached", and
+## nothing else. It is deliberately NOT derived from the body radius even though the radius is
+## right there: those are different concepts, and conflating them is exactly the defect this
+## replaced. The first candidate offset IS one body radius, so a radius-sized arrival test
+## accepted a freshly chosen waypoint immediately -- commit, reached, reselect, every tick,
+## with avoid_commit_ticks never mattering (live evidence: 41 commits in one encounter, 38 of
+## them cleared as "reached", deadlines two ticks apart).
+##
+## 0.25 is an absolute distance chosen against this game's SCALE, not against any actor:
+## corridors are 5.00 wide and bodies are 1.7-2.9 across, so a quarter unit is unambiguously
+## standing on the spot. The invariant it must satisfy -- tolerance < the smallest authored body
+## radius, hence < the smallest possible first offset -- is PINNED BY TEST against shipped
+## content rather than enforced by deriving it, so authoring a small enemy fails loudly instead
+## of silently resurrecting the collision.
+const _AVOID_ARRIVAL_TOLERANCE: float = 0.25
 
 
 # --- P34: PROJECTILE TERMINATION PROVENANCE ----------------------------------------------
@@ -3178,7 +3193,7 @@ func _pursuit_direction(actor_id: int, target: Vector3, events: Array[Event]) ->
 		var reason: String = ""
 		if tick_count >= int(_ai_avoid_deadline.get(actor_id, 0)):
 			reason = "deadline"
-		elif from.distance_to(waypoint) <= _body_radius_for(actor_id):
+		elif from.distance_to(waypoint) <= _AVOID_ARRIVAL_TOLERANCE:
 			reason = "reached"
 		elif _direct_route_obstruction(actor_id, target).is_empty():
 			reason = "route_clear"
