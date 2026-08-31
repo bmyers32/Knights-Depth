@@ -40,7 +40,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P29 | Enemy action repertoire / distance-conditioned selection | **PASS / CLOSED 2026-08-18** | Frozen point `9378316`; follow-ups dispatched to P17/P28/P30/P31/P32 |
 | P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
 | P33 | Bounded local obstacle avoidance | **IMPLEMENTED 2026-08-29 · awaiting human play** | Built to the frozen spec. Measured on the real geometry: rub ticks 203 -> 0, arrival 321 -> 202 ticks. All 11 pre-registered tests green |
-| P34 | Projectile-vs-world obstruction | **BUILT, PARKED ON BRANCH `p34-projectile-world` 2026-08-30 — C-class visual gate open** | 637/637 green. One human question remains: do the corrected 5.00 thresholds read naturally? Both outcomes pre-routed |
+| P34 | Projectile-vs-world obstruction | **LANDED 2026-08-31 · migration classified B** | Human gate PASSED ("they read naturally"). One authored WALL/LEDGE fact shared by sim + presentation; shots stop on walls and closed gates, pass open ledges |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
@@ -2929,10 +2929,19 @@ closed.** The four rulings, as accepted:
 4. **Does the ambient-convexity constraint interact with this?** A convex territory has no
    internal walls, so ambient enemies gain no new cover. Worth confirming before assuming.
 
-## AS BUILT — PARKED, NOT LANDED (2026-08-30). Branch `p34-projectile-world`. Suite 623 -> 637.
+## LANDED 2026-08-31 — MIGRATION CLASSIFIED **B**. Suite 623 -> 637.
 
-Everything in this design is implemented and green. It is deliberately NOT on main: the
-migration gate produced a C-class perceptual question that geometry cannot answer.
+**HUMAN VISUAL GATE PASSED (Breon):** *"Yes, they read naturally."*
+
+**DIFFERENCE LEDGER (the B-class record):**
+> openings — opening-width check — the old sampler rendered 6.00 against authoritative 5.00
+> walkability; the canonical renderer displays the actual 5.00 aperture uniformly across all 8
+> mouths; human inspection found the passages still read naturally and did not reduce apparent
+> traversability or route readability.
+
+Every other checklist item was A. The four doubled/overlapping segment pairs found during
+migration were fixed mechanically rather than escalated -- the gate consumed only the one
+question evidence could not reach.
 
 **THE CLOSED ENUM, after auditing all four termination paths.** Breakable impact and actor
 impact are completely explained by their own authoritative hit events, which already carry the
