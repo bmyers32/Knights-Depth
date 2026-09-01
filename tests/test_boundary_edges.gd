@@ -147,24 +147,26 @@ func test_presentation_and_sim_read_the_same_boundary_fact() -> void:
 
 # --- 7: the shipped roundabout ---------------------------------------------------------------
 
-## THE AUTHORED RESULT: the hall opens outward while the void stays solid. Exactly four
-## void-facing spans survive, and nothing on the outer perimeter does.
-func test_the_authored_roundabout_is_open_outside_and_solid_around_the_void() -> void:
+## THE AUTHORED RESULT, updated 2026-09-01: the roundabout is now FULLY open. The void-facing
+## ring came off with the outer perimeter, because it was protecting a content law the human
+## rejected -- ranged probing of the crate across the void is intentional.
+##
+## The capability this file exists for is unchanged and still exercised by the fixtures above;
+## what changed is that the SHIPPED floor no longer needs a mixed-side patch. Recorded plainly:
+## per-edge overrides currently have NO authored consumer, and Floor 2 either gives them one or
+## they retire under the same zero-consumer rule that retired the `switch` interactable.
+func test_the_authored_roundabout_is_fully_open() -> void:
 	var plan: FloorPlan = DepthGenerator.generate(0, 1)
-	var void_facing: int = 0
 	for segment in plan.solid_segments():
 		var at: float = float(segment["at"])
-		var outward: float = float(segment["outward"])
-		if segment["axis"] == &"x" and absf(absf(at) - 8.0) < 0.01 and absf(at * outward + 8.0) < 0.01:
-			void_facing += 1
-		elif segment["axis"] == &"z" and (absf(at + 16.0) < 0.01 or absf(at + 28.0) < 0.01):
-			void_facing += 1
-		# The outer perimeter must contribute nothing.
-		assert_false(segment["axis"] == &"x" and absf(absf(at) - 16.0) < 0.01,
-			"the hall's outer side wall at x=%.1f should have been opened" % at)
-		assert_false(segment["axis"] == &"z" and (absf(at + 12.0) < 0.01 or absf(at + 34.0) < 0.01),
-			"the hall's outer %s wall should have been opened" % ("north" if at > -20.0 else "south"))
-	assert_eq(void_facing, 4, "all four void-facing sides must remain solid")
+		var vertical: bool = segment["axis"] == &"x"
+		# No hall boundary of any kind survives -- outer perimeter or void ring.
+		assert_false(vertical and (absf(absf(at) - 16.0) < 0.01 or absf(absf(at) - 8.0) < 0.01)
+				and float(segment["min"]) > -34.5 and float(segment["max"]) < -11.5,
+			"hall boundary at x=%.1f should be open" % at)
+		assert_false(not vertical and (absf(at + 12.0) < 0.01 or absf(at + 16.0) < 0.01
+				or absf(at + 28.0) < 0.01 or absf(at + 34.0) < 0.01),
+			"hall boundary at z=%.1f should be open" % at)
 
 
 # --- 8: determinism ---------------------------------------------------------------------------

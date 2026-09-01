@@ -40,6 +40,8 @@ extends SceneTree
 ##   2026-09-01  RE-BASELINED for per-edge boundary styles: patches gained four optional side
 ##               overrides and the hall roundabout now authors an open outer perimeter with a
 ##               solid void-facing interior. Schema + authoring migration. Hand-inspected.
+##   2026-09-01  RE-BASELINED again: the roundabout's void-facing ring was opened by human ruling,
+##               so the hall is fully ledged. Authoring change only. Hand-inspected.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the

@@ -50,6 +50,25 @@ func _walk_to(arena: Node3D, target: Vector3, max_ticks: int = 1500) -> bool:
 	return arena.sim.entities[envoy_id].distance_to(target) < 1.2
 
 
+## Cycles the shipped loadout until a projectile weapon is equipped, driving the real
+## switch_weapon Command rather than reaching into sim state.
+func _switch_to_the_wand(arena: Node3D) -> Array[Event]:
+	var envoy_id: int = _envoy(arena)
+	var events: Array[Event] = []
+	for attempt in 4:
+		events.append_array(arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "switch_weapon", {})] as Array[Command], DT))
+		var probe: Array[Event] = arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": Vector3(0, 0, -1)})] as Array[Command], DT)
+		events.append_array(probe)
+		for event in probe:
+			if event.kind == "projectile_fired":
+				for i in 30:
+					events.append_array(arena.sim.tick([] as Array[Command], DT))
+				return events
+		for i in 30:
+			events.append_array(arena.sim.tick([] as Array[Command], DT))
+	return events
+
+
 ## Walks onto an authored plate region, COLLECTING events, because occupancy is evaluated every
 ## tick: by the time the walk returns, whatever the plate does has already happened.
 func _step_onto(arena: Node3D, region: Rect2, tolerance: float = 0.6) -> Array[Event]:
@@ -352,3 +371,67 @@ func test_a_ledge_edge_bounds_the_envoy_without_rendering_a_wall() -> void:
 	var position: Vector3 = arena.sim.entities[_envoy(arena)]
 	assert_true(arena.sim._bounds.fits(position, arena.envoy.stats.combat_radius),
 		"the Envoy walked off an unwalled ledge to %s" % position)
+
+
+# --- RANGED BREAKABLE PROBING (human ruling 2026-09-01) -------------------------------------
+
+## THE NEWLY-INTENTIONAL BEHAVIOUR: with the roundabout's void ring opened, the crate can be shot
+## from across the hall. Ruled acceptable and preferable -- walking the whole ring only to learn a
+## breakable was empty is friction without discovery.
+##
+## THE THING THAT MUST STILL HOLD is progression. Breaking the crate only REVEALS the plate; the
+## route is opened by STANDING on it, so remote destruction saves a wasted walk without skipping
+## the floor. This asserts exactly that, because "you can now shoot it" would be a cheap win if it
+## quietly bypassed the beat it belongs to.
+func test_shooting_the_crate_across_the_void_reveals_but_does_not_bypass() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = _envoy(arena)
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_SOUTH)), "into the hall")
+
+	# THE SHIPPED LOADOUT STARTS ON THE SWORD. Shooting means switching to the wand first, the
+	# way a player does -- a bare "attack" here would swing at empty air and prove nothing.
+	var events: Array[Event] = _switch_to_the_wand(arena)
+	var crate: Vector3 = _plan(arena).breakables[0].position
+	for shot in 30:
+		var aim: Vector3 = (crate - arena.sim.entities[envoy_id]).normalized()
+		events.append_array(arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim})] as Array[Command], DT))
+		for i in 8:
+			events.append_array(arena.sim.tick([] as Array[Command], DT))
+		if arena.sim._breakables.is_empty():
+			break
+
+	assert_true(arena.sim._breakables.is_empty(), "the crate must be reachable by shot across the void")
+	assert_true(_kinds(events).has("floor_trigger_enabled"), "and destroying it still reveals the plate")
+
+	# THE PROGRESSION IS NOT SKIPPED: revealing is not opening.
+	assert_false(_open(arena, L.C_TO_APPROACH), "revealing the plate must NOT open the route")
+	_step_onto(arena, L.HIDDEN_PLATE_REGION)
+	assert_true(_open(arena, L.C_TO_APPROACH), "standing on it is still what opens the way")
+
+
+## And the route that follows remains fully walkable after a remote reveal -- deterministically,
+## not merely on the tick it happened.
+func test_the_floor_still_completes_after_a_remote_crate_kill() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = _envoy(arena)
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HALL_SOUTH)))
+	_switch_to_the_wand(arena)
+	var crate: Vector3 = _plan(arena).breakables[0].position
+	for shot in 30:
+		var aim: Vector3 = (crate - arena.sim.entities[envoy_id]).normalized()
+		arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim})] as Array[Command], DT)
+		for i in 8:
+			arena.sim.tick([] as Array[Command], DT)
+		if arena.sim._breakables.is_empty():
+			break
+	assert_true(arena.sim._breakables.is_empty(), "sanity: destroyed remotely")
+
+	_step_onto(arena, L.HIDDEN_PLATE_REGION)
+	assert_true(_walk_to(arena, _approach_hold()), "through the route it opened")
+	_step_onto_the_plate(arena)
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_ARENA)), "into the fight")
+	_kill_the_roster(arena)
+	assert_true(_walk_to(arena, _patch_centre(arena, L.P_HIGH)), "onto the high ground")
+	_step_onto(arena, L.EXIT_PLATE_REGION)
+	assert_true(arena.sim.debug_describe_floor()["floor_complete"],
+		"the whole floor must still complete after a remote reveal")

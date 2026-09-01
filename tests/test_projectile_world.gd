@@ -214,10 +214,22 @@ func test_the_same_connection_open_lets_the_shot_through() -> void:
 
 # --- 9: no sequence-breaking shot ----------------------------------------------------------
 
-## THE MOTIVATING DEFECT, on the SHIPPED floor rather than a fixture: the crate sits across the
-## void from the hall, and before P34 it could be destroyed from ground the player had not
-## walked. Folded topology is what makes that a progression bug and not a curiosity.
-func test_the_shipped_floor_cannot_be_sequence_broken_through_a_wall() -> void:
+## RETIRED AS A FLOOR-1 ASSERTION 2026-09-01 — human ruling, recorded rather than silently
+## weakened.
+##
+## This once asserted that the concealed crate could not be shot across the hall void. That
+## content law is FALSIFIED: making a player walk the whole ring only to learn a breakable was
+## empty is friction without discovery, so ranged probing across that void is now INTENTIONAL.
+##
+## THE MECHANIC IS NOT REOPENED. What changed is one floor's authored expectation, not P34: WALL
+## still blocks, LEDGE still does not, canonical segments remain the shared truth, and
+## nearest-impact/tie semantics are untouched. Those are pinned by the fixture tests above, which
+## is where the mechanic always belonged -- this test was really asserting an AUTHORING decision
+## while wearing a mechanic's name.
+##
+## It survives, rewritten, as the thing still worth guarding: a WALL on the shipped floor still
+## stops a shot. The hall no longer supplies one, so it asks the arena instead.
+func test_a_shipped_wall_still_stops_a_shot() -> void:
 	var plan: FloorPlan = DepthGenerator.generate(0, 1)
 	sim = SimWorld.new()
 	sim.set_damage_matrix({}, 1.5, 0.5)
@@ -229,22 +241,25 @@ func test_the_shipped_floor_cannot_be_sequence_broken_through_a_wall() -> void:
 	var crate: BreakablePlan = plan.breakables[0]
 	sim.register_breakable(crate.breakable_id, crate.position, crate.radius, crate.durability)
 
-	# Stand in the hall's south strip, across the VOID from the crate down the west arm.
-	var from := Vector3(0.0, 0.0, -14.0)
+	# Stand deep in the ARENA and shoot at the far wall: solid geometry the floor still authors.
+	var from := Vector3(-10.0, 0.0, -60.0)
 	sim.add_entity(SHOOTER, from, 0.0, Vector3(0, 0, -1))
 	sim.register_combatant(SHOOTER, 999.0, &"envoy", 0, 0.0, &"player")
 	sim.register_gun(&"test_gun", 10.0, &"force", 30.0, 600, 0.2, 0.0, 1)
 	sim.set_equipped_weapon(SHOOTER, &"test_gun")
 
-	var aim: Vector3 = (crate.position - from).normalized()
 	var events: Array[Event] = sim.tick(
-		[Command.new(sim.tick_count, SHOOTER, "attack", {"aim": aim})] as Array[Command], DT)
+		[Command.new(sim.tick_count, SHOOTER, "attack", {"aim": Vector3(-1, 0, 0)})] as Array[Command], DT)
 	for i in 120:
 		events.append_array(sim.tick([] as Array[Command], DT))
 
-	assert_false(_kinds(events).has("breakable_hit"),
-		"the crate must not be reachable through the void wall -- that is the sequence break")
-	assert_true(sim._breakables.has(crate.breakable_id), "and must still be standing")
+	var reason: String = ""
+	for event in events:
+		if event.kind == "projectile_expired":
+			reason = String(event.payload.get("reason", ""))
+	assert_eq(reason, "world", "a shot into the arena's west wall must still be stopped by the world")
+	assert_true(sim._breakables.has(crate.breakable_id),
+		"and nothing behind that wall is touched")
 
 
 # --- RIDER 1: the closed termination-reason enum -------------------------------------------

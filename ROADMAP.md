@@ -46,6 +46,45 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## FLOOR 1 — **CLOSED 2026-09-01.**
+
+### THE FINAL AUTHORING RULING
+Ranged probing of the crate across the void is **acceptable and preferable**: walking the whole
+ring only to learn a breakable was empty is friction without discovery. The old content law --
+"the crate must not be shootable across the void" -- is FALSIFIED.
+
+**The void ring came off.** The roundabout is now fully open: outer perimeter AND void-facing
+interior. The void needs no wall to read as a void; it is a hole, and an open edge shows it. No
+blocker was added elsewhere, nothing relocated, no hidden occlusion invented.
+
+### THE MECHANIC IS NOT REOPENED
+P34 stands untouched: WALL blocks, LEDGE does not, canonical segments remain the shared truth,
+nearest-impact and tie semantics unchanged. **What changed was one floor's authored expectation.**
+
+### THE RETIRED TEST, and what replaced it
+`test_the_shipped_floor_cannot_be_sequence_broken_through_a_wall` was really asserting an
+AUTHORING decision while wearing a mechanic's name. Retired with its dated reason rather than
+weakened, and rewritten as `test_a_shipped_wall_still_stops_a_shot` -- the hall no longer supplies
+a wall, so it asks the arena instead.
+
+**Two new tests pin what actually matters now**, because "you can shoot it" would be a cheap win
+if it quietly skipped the beat it belongs to:
+- shooting the crate across the void reveals the plate but does **NOT** open the route -- standing
+  on it still does
+- the whole floor still completes after a remote reveal, end to end
+
+### ONE THING RECORDED HONESTLY
+**Per-edge boundary overrides now have NO authored consumer.** They were built for the mixed-side
+roundabout, and the ruling removed the mix. The capability is validated and its fixture tests
+stand, but by the same zero-consumer rule that retired the `switch` interactable, **Floor 2 either
+gives them a consumer or they retire.** Flagged rather than quietly kept.
+
+### FLOOR 1 STATUS — ALL CLOSED
+P33 movement quality PASS · door-control response landed · per-edge vocabulary validated · outer
+perimeter open · central void open · ranged probing accepted · floor grammar PASS · P34 closed.
+
+**Next: Floor 2, hand-authored.**
+
 ## PER-EDGE BOUNDARY STYLE + OPEN ROUNDABOUT — **BUILT 2026-09-01.**
 
 The falsified assumption was granularity, not direction. `boundary_style` gained four optional

@@ -216,11 +216,11 @@
 			"surface": "stone"
 		},
 		{
-			"boundary_east": "ledge",
-			"boundary_north": "ledge",
+			"boundary_east": "",
+			"boundary_north": "",
 			"boundary_south": "",
-			"boundary_style": "wall",
-			"boundary_west": "ledge",
+			"boundary_style": "ledge",
+			"boundary_west": "",
 			"elevation": 0.0,
 			"patch_id": 1,
 			"rect": {
@@ -235,8 +235,8 @@
 			"boundary_east": "",
 			"boundary_north": "",
 			"boundary_south": "",
-			"boundary_style": "wall",
-			"boundary_west": "ledge",
+			"boundary_style": "ledge",
+			"boundary_west": "",
 			"elevation": 0.0,
 			"patch_id": 2,
 			"rect": {
@@ -248,10 +248,10 @@
 			"surface": "stone"
 		},
 		{
-			"boundary_east": "ledge",
+			"boundary_east": "",
 			"boundary_north": "",
 			"boundary_south": "",
-			"boundary_style": "wall",
+			"boundary_style": "ledge",
 			"boundary_west": "",
 			"elevation": 0.0,
 			"patch_id": 3,
@@ -264,11 +264,11 @@
 			"surface": "stone"
 		},
 		{
-			"boundary_east": "ledge",
+			"boundary_east": "",
 			"boundary_north": "",
-			"boundary_south": "ledge",
-			"boundary_style": "wall",
-			"boundary_west": "ledge",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
 			"elevation": 0.0,
 			"patch_id": 4,
 			"rect": {

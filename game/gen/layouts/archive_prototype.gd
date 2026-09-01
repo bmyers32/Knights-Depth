@@ -126,22 +126,22 @@ static func _spatial(plan: FloorPlan) -> void:
 	# "void object" -- it is simply ground nobody laid, which is the whole reason irregular
 	# silhouettes are free in a union-of-patches model.
 	_patch(plan, P_START, Rect2(-7.0, -6.0, 14.0, 6.0), 0.0, &"stone")
-	# THE ROUNDABOUT, authored per side (2026-09-01). The human wanted this space to stop feeling
-	# boxed in; the VOID must stay solid because P34's progression protection depends on it -- the
-	# concealed crate sits across that hole and must not be shootable from the hall.
+	# THE ROUNDABOUT — FULLY OPEN (human ruling 2026-09-01). Both walls came off: the outer
+	# perimeter so the space stops feeling boxed in, and the VOID-FACING RING because it was
+	# protecting a rejected content assumption.
 	#
-	# So the ring is opened OUTWARD and kept solid INWARD:
-	#   outer perimeter          -> ledge, and the space reads as open
-	#   void-facing interior     -> wall, and the hole reads as a real separation
-	# Patch-level style could not say both, which is precisely what falsified it.
-	_patch(plan, P_HALL_SOUTH, Rect2(-16.0, -16.0, 32.0, 4.0), 0.0, &"stone", &"wall",
-		{"north": &"ledge", "east": &"ledge", "west": &"ledge"})  # south faces the void
-	_patch(plan, P_HALL_WEST, Rect2(-16.0, -30.0, 8.0, 16.0), 0.0, &"stone", &"wall",
-		{"west": &"ledge"})  # east faces the void
-	_patch(plan, P_HALL_EAST, Rect2(8.0, -30.0, 8.0, 16.0), 0.0, &"stone", &"wall",
-		{"east": &"ledge"})  # west faces the void
-	_patch(plan, P_HALL_NORTH, Rect2(-16.0, -34.0, 32.0, 6.0), 0.0, &"stone", &"wall",
-		{"south": &"ledge", "east": &"ledge", "west": &"ledge"})  # north faces the void
+	# The old law was "the concealed crate must not be shootable across the void". FALSIFIED by
+	# ruling: making a player walk the whole ring only to learn a breakable was empty is friction
+	# without discovery. Shooting across the hole is now intentional -- and progression is
+	# untouched by it, because breaking the crate only REVEALS the plate; you still have to walk
+	# the west arm and stand on it.
+	#
+	# The void needs no wall to read as a void: it is a hole in the floor, and an open edge shows
+	# it. No blocker was added elsewhere, nothing was relocated, no hidden occlusion invented.
+	_patch(plan, P_HALL_SOUTH, Rect2(-16.0, -16.0, 32.0, 4.0), 0.0, &"stone", &"ledge")
+	_patch(plan, P_HALL_WEST, Rect2(-16.0, -30.0, 8.0, 16.0), 0.0, &"stone", &"ledge")
+	_patch(plan, P_HALL_EAST, Rect2(8.0, -30.0, 8.0, 16.0), 0.0, &"stone", &"ledge")
+	_patch(plan, P_HALL_NORTH, Rect2(-16.0, -34.0, 32.0, 6.0), 0.0, &"stone", &"ledge")
 	_patch(plan, P_APPROACH, Rect2(-6.0, -42.0, 12.0, 6.0), 0.0, &"stone")
 	# Arena keeps the dimensions VALIDATED BY PLAY as a combat room (30 x 20).
 	_patch(plan, P_ARENA, Rect2(-15.0, -68.0, 30.0, 20.0), 0.0, &"arena")
