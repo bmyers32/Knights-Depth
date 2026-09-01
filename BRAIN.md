@@ -781,6 +781,40 @@ pre-registration entries -- deciding the routes for both possible answers BEFORE
 keeps a narrow gate narrow instead of reopening the design.
 
 
+### Prove the mechanism is live before reading its output
+
+**Incident (P33 stall recons, 2026-08-29 to 09-01):** four diagnostics in a row produced precise,
+correct numbers answering a question nobody asked. An Ooze that looked stuck was IDLE, 24 units
+outside its detection radius. A "return home" case was DISENGAGED and actually chasing. A
+clearance probe measured the whole floor when an enemy is bounded by its territory. And a stall
+reported as *0.00 units over 400 ticks* was measuring **a corpse** -- the 30 HP Envoy had died
+mid-run, and "no living player: enemies stop acting entirely" is a locked law, so the actor
+correctly did nothing. Every one of those numbers was accurate. Every one supported a false
+verdict, and two of them reached a written finding before being caught.
+
+**Mechanism:** a diagnostic asks "what did the actor do?" when the load-bearing question is "was
+the thing I am testing even running?". Output exists either way, and zero is the most dangerous
+value there is, because zero is exactly what a real defect looks like. Worse, the precondition
+drifts: the fourth failure had a precondition check that asserted liveness **at t=0** and the
+player died later, so the guard passed and the run still lied.
+
+**Failure if ignored:** correct instrumentation produces a confident wrong classification, and the
+fix that follows is designed for a mechanism that was never exercised -- in this case an entire
+steering model was promoted on evidence from geometry the enemy could not reach.
+
+**The discipline:** assert the precondition IN the tool, CONTINUOUSLY, and make it refuse to
+render a verdict rather than leaving the reader to notice. Print the gating facts -- state,
+separation, thresholds, liveness -- before any output that could be read as a result. If the
+mechanism is not live, fail loudly.
+
+**Applies elsewhere:** every AI diagnostic; every performance measurement (is the code path hot?);
+every "this fix worked" claim after a change (did the case still reproduce beforehand?); and the
+M2 generator work, where a floor that fails to produce a feature and a floor where the feature was
+never requested look identical from the outside. **Cross-reference:** the sibling entry on a
+scanner never proven to fail -- both are the same demand, that an instrument be shown capable of
+reporting the answer you are not hoping for.
+
+
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
 (no incident produced them) and NOT law yet. Governance ladder — the only path to

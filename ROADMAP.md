@@ -46,6 +46,59 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## EAST-LANE STALL RECON 2026-09-01 — **NOT A NAVIGATION DEFECT on this reconstruction.**
+
+**THE SCREENSHOT DID NOT REACH THIS SESSION.** It reached the review seat; no image is in this
+context. Worked from the description instead -- "long right-hand vertical lane near the upper
+section, Ooze immediately north of the Envoy in apparently continuous traversable space" -- mapped
+to authored geometry rather than pixels: **P_HALL_EAST**, `Rect2(8,-30,8,16)`, northern end.
+
+### THE FOURTH INSTRUMENTATION FAILURE, and this one nearly shipped a verdict
+The first run of this recon reported **0.00 u over 400 ticks, 0 legs committed** -- a textbook
+stall. It was measuring **a corpse**. The 30 HP Envoy died to the Ooze mid-measurement, and *"no
+living player: enemies stop acting entirely"* is a locked law, so the actor correctly did nothing.
+
+The precondition check I had already added did not catch it, because **it asserted state only at
+t=0** and the player died later. The tool now overrides player health every tick and asserts
+`_find_living_player_id()`, not merely `ai_state`.
+
+Four instances now, all the same shape: **idle actor / disengaged actor / wrong legality region /
+dead player.** Each produced perfectly accurate numbers answering a different question.
+
+### WITH ENGAGEMENT AND LIVENESS BOTH PROVEN
+```
+moves on 91/400 ticks    net 1.45 u    legs committed 0    final gap 1.90
+```
+It settles at **exactly `minimum_attack_distance` (1.90)** and holds, windup active, attacking on
+cadence. **Cardinal never engages because the gap almost never exceeds `preferred` (2.20).**
+
+**CLASSIFICATION: the movement-band hold, which is the shipped AI law** -- movement preference
+governs approach only, and an actor inside the band holds. A slow enemy planted at attack range
+between slow swings READS as stuck without being stuck.
+
+**CAVEAT, stated rather than buried:** this is the reconstruction, not the screenshot. If the real
+frame had a materially larger gap, the mechanism there is different and this recon does not cover
+it. The mapping is a hypothesis from a description.
+
+### CONSEQUENCE FOR THE CARDINAL RULING
+The evidence that promoted cardinal steering was the cross-void case, since withdrawn as
+unreachable. This recon does not replace it: **no navigation failure was found at the described
+location.** If the movement-band hold is what the human saw, the lever is the attack/movement band
+(content), not the steering grammar.
+
+## WATCHER CANARY AUDIT — **DOES NOT QUALIFY.**
+The ruling asked whether Watcher can host the replacement untouched-family canary. It cannot:
+P33 authored `avoid_commit_ticks = 45` onto Watcher, so local avoidance is LIVE for it. It is not
+a family that current navigation work leaves alone.
+
+No family currently qualifies: Ooze has cardinal, Fang has burrow plus avoidance, Watcher has
+avoidance. Establishing the canary on Watcher would repeat the exact mistake that invalidated the
+Ooze one.
+
+**OPTION, not taken:** author `avoid_commit_ticks = 0` on Watcher -- "absence is off" restores its
+pre-P33 straight-line pursuit and makes it genuinely untouched. That is a behaviour decision about
+a shipped family, so it is returned for ruling rather than made here.
+
 ## P33 — CARDINAL STEERING RECON + COSTING, 2026-08-31. **NO CODE. Awaiting ruling.**
 
 Human replay of `69016ee`: pursuit **better overall** ("it did better when chasing me around for
