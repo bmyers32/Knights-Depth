@@ -46,6 +46,48 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## ATTACK-BAND HOLD — **MECHANISM IDENTIFIED 2026-09-01.** Not obstacle navigation.
+
+`tools/diagnose_attack_band_hold.gd`, on an open plain where nothing can be blamed on geometry,
+preconditions asserted every tick:
+
+| case | translation | ticks moving | telegraphs |
+|---|---|---|---|
+| **player STRAFES at band distance** | **0.00 u over 600 ticks** | **0 / 600** | 8 |
+| player RETREATS (control) | 11.80 u | 236 / 600 | 8 |
+
+**The Ooze is completely planted for twenty seconds while facing and attacking.** Pursuit itself
+is healthy -- the control chases correctly.
+
+### WHY
+The authored band is `minimum 1.90 .. preferred 2.20` -- **0.30 units wide** -- and movement
+preference governs APPROACH ONLY: an actor inside the band holds. **It is a DISTANCE band, so
+lateral motion is invisible to it.** A player circling at ~2.0 stays inside it forever, and the
+Ooze never translates.
+
+That is precisely the reported symptom -- *"facing/following the player while barely moving"* --
+and it is a COMBAT LOCOMOTION / READABILITY question, not obstacle routing. No steering grammar
+would have changed it: the actor never asks for a route because it never wants to move.
+
+### COSTED OPTIONS, none taken
+1. **Keep planted.** Zero cost. Defensible as Ooze character -- a slow blob that plants and swings
+   -- but a human has now read it as broken once, which is evidence against.
+2. **Lateral matching (smallest mechanical change).** While in band, translate to hold relative
+   position when the target has lateral velocity. Keeps the distance law untouched; adds a
+   movement clause inside the band rather than a new steering vocabulary. This is the option that
+   actually addresses the observation.
+3. **Band tuning -- REJECTED BY ANALYSIS, not by taste.** Widening or narrowing 1.90-2.20 cannot
+   help: a distance band is blind to lateral motion at ANY width, so a circling player stays
+   inside whatever band exists. Recording the reason so it is not retried.
+4. **Attack cadence (content).** Windup 30 ticks + 55-tick interval means roughly one swing per
+   2.8 s; standing still between slow swings is what reads as idle rather than menacing. Inside
+   the M1 numeric fence, so it is a human call, not a change to propose here.
+
+### CONSEQUENCE FOR P33
+The frozen movement criterion stays OPEN, and this finding narrows what remains: the original
+rapid zig-zag was real and was structurally fixed; the cross-void stall was invalid evidence; the
+east-lane "stall" is this band hold. **No navigation defect is currently outstanding.**
+
 ## EAST-LANE STALL RECON 2026-09-01 — **NOT A NAVIGATION DEFECT on this reconstruction.**
 
 **THE SCREENSHOT DID NOT REACH THIS SESSION.** It reached the review seat; no image is in this
