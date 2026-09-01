@@ -134,6 +134,36 @@
 		},
 		{
 			"confines_player": false,
+			"encounter_id": 2,
+			"regions": [
+				{
+					"d": 16.0,
+					"w": 8.0,
+					"x": -16.0,
+					"z": -30.0
+				},
+				{
+					"d": 4.0,
+					"w": 32.0,
+					"x": -16.0,
+					"z": -16.0
+				}
+			],
+			"role": "optional",
+			"roster": [
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": -12.0,
+						"y": 0.0,
+						"z": -17.0
+					}
+				}
+			],
+			"spawn_at_floor_load": false
+		},
+		{
+			"confines_player": false,
 			"encounter_id": 1,
 			"regions": [
 				{
@@ -338,6 +368,10 @@
 				{
 					"kind": "open_connection",
 					"target_id": 1
+				},
+				{
+					"kind": "activate_encounter",
+					"target_id": 2
 				}
 			],
 			"kind": "region_entered",

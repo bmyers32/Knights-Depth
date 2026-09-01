@@ -161,7 +161,9 @@ func test_only_the_ambient_roster_is_present_before_anything_is_triggered() -> v
 		else:
 			present += 1
 	assert_eq(present, 1, "exactly the ambient territory is inhabited at load")
-	assert_eq(absent, 3, "the mandatory roster is registered but has not been summoned")
+	# 4 = the 3-strong mandatory roster plus the single door-control response, which likewise
+	# waits registered-but-absent until the hidden plate opens the way.
+	assert_eq(absent, 4, "the deferred rosters are registered but have not been summoned")
 
 
 # --- TRAVERSAL AND COMMITMENT -----------------------------------------------------------

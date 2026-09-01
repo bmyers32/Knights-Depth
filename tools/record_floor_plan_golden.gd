@@ -33,6 +33,10 @@ extends SceneTree
 ##               authored FOOTPRINT shrank 3.2 -> 2.0 with its mesh, so it reads as a local
 ##               discovered control rather than a commitment plate. Geometry change only; no
 ##               mechanic, schema or effect changed. Hand-inspected before commit.
+##   2026-09-01  RE-BASELINED for the door-control response beat: the hidden plate now also
+##               activates E_PLATE_RESPONSE, an OPTIONAL non-sealing encounter that arrives when
+##               the route opens. Authoring change built entirely from existing primitives.
+##               Hand-inspected before commit.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the

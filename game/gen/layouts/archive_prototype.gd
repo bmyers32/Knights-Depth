@@ -76,6 +76,8 @@ const C_TO_END := 4
 # Encounter ids
 const E_ARENA := 0
 const E_EAST_AMBIENT := 1
+## The door-control response: a small, UNSEALED arrival when the hidden plate opens the way.
+const E_PLATE_RESPONSE := 2
 
 # Trigger ids
 const T_COMMIT := 0
@@ -169,8 +171,12 @@ static func _progression(plan: FloorPlan) -> void:
 	_trigger(plan, T_CRATE, FloorLayers.TRIGGER_BREAKABLE_DESTROYED, Rect2(), B_CRATE, [
 		FloorLayers.effect(FloorLayers.EFFECT_ENABLE_TRIGGER, T_HIDDEN_PLATE),
 	])
+	# THE DOOR-CONTROL BEAT: opening the way is answered. One authored record, two effects, no new
+	# machinery -- the audit found the beat already expressible as trigger + connection effect +
+	# encounter activation, so nothing was built for it.
 	_trigger(plan, T_HIDDEN_PLATE, FloorLayers.TRIGGER_REGION, HIDDEN_PLATE_REGION, -1, [
 		FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, C_TO_APPROACH),
+		FloorLayers.effect(FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, E_PLATE_RESPONSE),
 	], false, true)
 	# THE PARTY PLATE -- the whole reference sequence as ONE authored record. Reading these
 	# three lines tells you everything standing on it does; splitting them across gate, spawn
@@ -244,6 +250,19 @@ static func _encounters(plan: FloorPlan) -> void:
 		{"enemy_key": &"watcher", "position": Vector3(0.0, 0.0, -63.0)},
 	]
 	plan.encounters.append(arena)
+
+	# THE DOOR-CONTROL RESPONSE. OPTIONAL and explicitly NOT sealing: solving the floor draws
+	# attention, but the player may still walk away up the route they just opened. `confines_player
+	# = false` is what keeps this a pressure beat rather than a second arena, and
+	# `spawn_at_floor_load = false` is what makes it ARRIVE rather than having been waiting.
+	var response := EncounterSite.new()
+	response.encounter_id = E_PLATE_RESPONSE
+	response.regions = [plan.patch_by_id(P_HALL_WEST).rect, plan.patch_by_id(P_HALL_SOUTH).rect]
+	response.role = FloorLayers.ROLE_OPTIONAL
+	response.confines_player = false
+	response.spawn_at_floor_load = false
+	response.roster = [{"enemy_key": &"fang", "position": Vector3(-12.0, 0.0, -17.0)}]
+	plan.encounters.append(response)
 
 	# AMBIENT. No activation ceremony and no lock: it inhabits the east column and fights if you
 	# cross it. Territory is authored as a UNION and may span patches -- binding it to the single

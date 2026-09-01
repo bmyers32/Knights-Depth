@@ -39,12 +39,84 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P27 | Multi-hit / attack-instance model | PROPOSED | Re-hit eligibility as a separate question from global health i-frames; incl. cross-attacker suppression |
 | P29 | Enemy action repertoire / distance-conditioned selection | **PASS / CLOSED 2026-08-18** | Frozen point `9378316`; follow-ups dispatched to P17/P28/P30/P31/P32 |
 | P30 | Wand commitment/reward mechanic | **NEAR-TERM (weapon docket)** | Broadened 2026-08-17; charge vs consecutive-hit empowerment — evaluate before implementing |
-| P33 | Bounded local obstacle avoidance | **IMPLEMENTED 2026-08-29 · awaiting human play** | Built to the frozen spec. Measured on the real geometry: rub ticks 203 -> 0, arrival 321 -> 202 ticks. All 11 pre-registered tests green |
+| P33 | Ooze movement quality | **PASS 2026-09-01 · closed** | Built to the frozen spec. Measured on the real geometry: rub ticks 203 -> 0, arrival 321 -> 202 ticks. All 11 pre-registered tests green |
 | P34 | Projectile-vs-world obstruction | **LANDED 2026-08-31 · migration classified B** | Human gate PASSED ("they read naturally"). One authored WALL/LEDGE fact shared by sim + presentation; shots stop on walls and closed gates, pass open ledges |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
+
+## FLOOR 1 AUTHORING 2026-09-01 — door beat LANDED; roundabout BLOCKED on a real fork.
+
+### DOOR-CONTROL ENEMY RESPONSE — **built with existing primitives, nothing new**
+The audit found the beat already expressible, so nothing was built for it:
+`TRIGGER_REGION` (the revealed plate) -> `EFFECT_OPEN_CONNECTION` + `EFFECT_ACTIVATE_ENCOUNTER`.
+
+`E_PLATE_RESPONSE` is **OPTIONAL**, `confines_player = false`, `spawn_at_floor_load = false` --
+so solving the floor draws a single Fang into the west arm as pressure, and the player may still
+walk away up the route they just opened. It arrives rather than having been waiting.
+
+**A FALSIFICATION GUARD FIRED, and it was right to.** "No encounter may activate by geometry" is
+the multi-room slice's falsified rule made unrepresentable, and it blocked this beat. The law's
+own wording was always *"unless it was authored deliberately"* while the test implemented a
+blanket ban. **REFINED, in both copies:** the exemption is not "party plates only" but *anything
+the player can SEE and must deliberately stand on* -- and a second test now pins the other half,
+that an activation claiming the exemption must ACTUALLY draw a plate, so flipping the flag cannot
+silently buy one. **An invisible region trigger starting a fight is still banned**, which is the
+ban that ever mattered.
+
+### OPEN ROUNDABOUT — **NOT APPLIED. Design fork, measured.**
+Ledging the four hall patches was tried and **reopens the P34 sequence break**: with the void's
+edges no longer solid, the crate becomes shootable from across the hall. Two tests went red,
+correctly.
+
+**THE CAUSE IS GRANULARITY.** `boundary_style` is **per-patch**, and every hall patch touches BOTH
+the outer perimeter -- where "boxed in" comes from -- and the void, where the projectile protection
+comes from. One flag cannot open one and keep the other.
+
+**OPTIONS, none taken:**
+1. **Per-edge boundary style.** Solves it exactly: outer edges ledge, void edges wall. It is a
+   real capability addition, not the "authoring change, not a new mechanic" the ruling scoped.
+2. **Split the hall into outer and inner bands** so the styles can differ per patch. Authoring
+   only, but it changes walkable geometry to work around a schema limit -- and the seams would be
+   invisible to the player while being load-bearing for anyone reading the layout later.
+3. **Accept the sequence break.** Rejected: P34 exists to close it.
+4. **Ledge elsewhere** (approach, arena) where no void is involved. A partial win that does not
+   touch the region the ruling actually named.
+
+Returned for ruling rather than guessed, because option 1 exceeds the authorized scope and option
+2 trades a schema problem for a geometry problem.
+
+## P33 MOVEMENT QUALITY — **PASS (Breon, 2026-09-01).** Arc closed.
+
+Replay of `bab167d`, verbatim:
+> "The chase went well. Slime chased me all around, didn't look bad — just some inefficient
+> movements as it zigs before approaching, sometimes looking like it's retreating a little bit.
+> I approve of that for now."
+
+Rendered against the frozen criterion:
+> "When the Ooze has to go around something, it looks like it picked somewhere to go and goes
+> there, rather than changing its mind back and forth."
+
+### ACCEPTED V1 IMPERFECTION — recorded as accepted, not as an open failure
+Pursuit may take an inefficient initial zig, which can momentarily read as a slight retreat before
+the approach. **Human explicitly approves it for now.** Do NOT optimise this further merely because
+a mathematically shorter route exists. Reopen only if Floor 2 or larger-floor play produces a
+materially worse manifestation.
+
+### THE ARC, closed
+| finding | disposition |
+|---|---|
+| original rapid zig-zag | real |
+| mid-leg `route_clear` oscillation | identified, structurally removed |
+| cardinal steering promotion | withdrawn after invalid recon evidence |
+| east-lane apparent navigation stall | reclassified as attack-band hold |
+| attack-band absolute hold | proven mechanically |
+| lateral attack-band tracking | implemented |
+| final normal-play chase | **human-approved** |
+
+Historical mechanisms that are no longer active are NOT reopened merely because later movement
+looks imperfect. `bab167d` is the accepted v1 movement baseline.
 
 ## BOUNDED LATERAL MATCHING — **BUILT 2026-09-01.** The band hold answered.
 

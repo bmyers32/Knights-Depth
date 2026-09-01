@@ -105,12 +105,15 @@ func test_the_committed_fixture_describes_a_sane_floor() -> void:
 	# implying combat ("you walked into the room, so fight"), while a plate is an authored object
 	# you must deliberately stand on, with the whole party. Occupancy is the input either way;
 	# what changed is that one is implied by a room and the other is authored as a thing.
+	# REFINED 2026-09-01 alongside its sibling in test_depth_generator.gd: the exemption is not
+	# "party plates only" but "anything the player can SEE and must deliberately stand on".
+	# An INVISIBLE region trigger starting a fight is still the falsified rule and still banned.
 	for trigger in triggers:
-		if String(trigger["kind"]) != "region_entered":
+		if String(trigger["kind"]) != "region_entered" or bool(trigger["renders_as_plate"]):
 			continue
 		for effect in trigger["effects"]:
 			assert_ne(String(effect["kind"]), "activate_encounter",
-				"trigger %d starts a fight by walking into a region" % int(trigger["trigger_id"]))
+				"trigger %d starts a fight from an INVISIBLE region" % int(trigger["trigger_id"]))
 
 	# --- ENCOUNTER + INTERACTION.
 	var roles: Dictionary = {}

@@ -239,16 +239,37 @@ func test_the_floor_has_both_a_triggered_encounter_and_an_ambient_one() -> void:
 	assert_true(ambient[0].spawn_at_floor_load, "ambient enemies are simply there")
 
 
-## NO ENCOUNTER MAY ACTIVATE BY GEOMETRY. This is the falsified rule made unrepresentable: no
-## region trigger anywhere may carry an activation effect unless it was authored deliberately,
-## and this floor authors none -- every fight starts from an act.
-func test_no_encounter_activates_merely_because_a_region_was_entered() -> void:
+## NO ENCOUNTER MAY ACTIVATE BY GEOMETRY. The falsified rule -- "you entered the room, therefore
+## fight" -- stays unrepresentable: an INVISIBLE region trigger may never carry an activation.
+##
+## REFINED 2026-09-01, when the door-control beat first tripped this. The law's own wording was
+## always "unless it was authored deliberately", and the test implemented it as a blanket ban.
+## A trigger that RENDERS AS A PLATE is not geometry implying combat -- it is an authored object
+## the player can see and must deliberately stand on, which is the same distinction that already
+## exempts group_occupancy in the golden fixture's sanity check.
+##
+## The ban that matters is unchanged and still enforced below: a trigger with NO visible plate --
+## the one-way commitment, or any future invisible volume -- cannot start a fight.
+func test_no_encounter_activates_merely_because_an_invisible_region_was_entered() -> void:
+	for trigger in _plan().triggers:
+		if trigger.kind != FloorLayers.TRIGGER_REGION or trigger.renders_as_plate:
+			continue
+		for effect in trigger.effects:
+			assert_ne(effect["kind"], FloorLayers.EFFECT_ACTIVATE_ENCOUNTER,
+				"trigger %d starts a fight from an INVISIBLE region -- exactly what the multi-room slice falsified" % trigger.trigger_id)
+
+
+## And the other half of the refinement: an activation attached to a plate must ACTUALLY have a
+## plate. Without this, flipping renders_as_plate would silently buy an exemption.
+func test_every_region_activation_is_attached_to_a_visible_plate() -> void:
 	for trigger in _plan().triggers:
 		if trigger.kind != FloorLayers.TRIGGER_REGION:
 			continue
 		for effect in trigger.effects:
-			assert_ne(effect["kind"], FloorLayers.EFFECT_ACTIVATE_ENCOUNTER,
-				"trigger %d starts a fight by walking into a region -- exactly what the multi-room slice falsified" % trigger.trigger_id)
+			if effect["kind"] == FloorLayers.EFFECT_ACTIVATE_ENCOUNTER:
+				assert_true(trigger.renders_as_plate,
+					"trigger %d activates an encounter but draws nothing the player could stand on" % trigger.trigger_id)
+				assert_gt(trigger.region.get_area(), 0.0, "and a plate needs somewhere to stand")
 
 
 func test_every_spawn_stands_inside_the_site_that_owns_it() -> void:
