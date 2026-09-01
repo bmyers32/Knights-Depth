@@ -46,6 +46,70 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## FLOOR 2 — PRE-BUILD MEASUREMENTS 2026-09-01. All four returns clean.
+
+### 1. SIGHTLINE — measured with the shipped camera, not with trigonometry
+`tools/measure_floor2_sightline.gd` projects the destination through the real FollowCamera
+(offset `(0,12,12)`, 45-degree pitch, fov 75, edge clamp fed the draft extent, real 1152x1152
+viewport) via `unproject_position`.
+
+| from | target | screen position |
+|---|---|---|
+| COMMONS north edge | JUNCTION centre | **19% down — VISIBLE** |
+| COMMONS north edge | TERRACE centre | 11% down |
+| COMMONS, 8 u back | JUNCTION centre | 15% down |
+| OVERLOOK (entry) | COMMONS far edge + ROUTE B mouth | **10% down — VISIBLE** |
+| OVERLOOK (entry) | JUNCTION / TERRACE | **top 1-5% — MARGINAL, not usable** |
+
+**THE BEAT HOLDS, but not where the draft first put it.** The Junction seen across the gap from
+the Commons is comfortably in the upper third. The OVERLOOK cannot carry a view of the Terrace --
+that sits on the horizon as a smear. **Adjusted:** the overlook's job is the establishing view of
+the COMMONS AND THE FORK (both clearly visible at 10%); visible-before-reachable lives entirely
+at the Commons/gap. No camera mechanic added.
+
+**A MEASUREMENT ERROR CAUGHT BEFORE IT CONDEMNED THE LAYOUT.** The first run reported everything
+OFF-SCREEN. Cause: I fed the .tscn's nine basis floats to `Transform3D(x_axis, y_axis, z_axis,
+origin)`, which reads them as COLUMNS while the scene file lists them row-wise -- building the
+TRANSPOSE, a camera aimed at the sky. The tool now sets the pitch as a rotation and REFUSES to
+measure unless its forward vector points down and forward.
+
+### 2. PURSUIT — the paper argument withdrawn and replaced with a route measurement
+`tools/probe_floor2_pursuit.gd`, two questions kept apart because they answer differently:
+
+**A. How far does an engaged Ooze follow?** Engagement ends at **tick 334**, one leg into the
+route, with **zero stall ticks while engaged**. The **LEASH** ends the chase -- an authored law,
+not incidental geometry. The prior "the gap is wider than the acquisition radius" claim is
+withdrawn: it was never the operative mechanism.
+
+**B. Does the fork transit itself stall?** With the Ooze anchored beside the mouth so the leash
+cannot end the run first: it follows through the aperture and all the way down Route B, ending
+1.99 from the player, with **0 stall ticks while it wanted to move.** The draft geometry is
+compatible with accepted v1 locomotion.
+
+**A FIFTH INSTRUMENTATION CATCH.** The transit probe first reported a 916-tick "MATERIAL STALL" --
+which was the ATTACK-BAND HOLD beside a stationary player, i.e. correct behaviour. The metric now
+counts a stall only while the actor is outside its attack band and therefore actually wants to
+move.
+
+### 3. ROUTE A VALUE — the fork is behaviourally meaningful
+Adopted, with one geometric change that makes it TRUE rather than asserted: **the party-sync plate
+sits at the JUNCTION'S WEST END.**
+
+- **Route B (open)** enters the junction at its EAST end -- a long walk west to the destination.
+- **Route A (gated)** drops in beside it.
+
+So the psychology runs: first traversal takes the open east route and meets the Vault temptation;
+the Commons control then opens A as a genuine **shortcut**, paid for with the local non-sealing
+response it triggers. No new reward system, no drops -- purely spatial value, which is what the
+deferred economy allows.
+
+### 4. PLATE SIZES — expressible in authored data today
+A plate's footprint IS its trigger region (`FloorTrigger.region`), so size is already authored
+data and needs no schema change. Floor 2 carries the Floor 1 convention:
+- **small** (about 2x2): Commons control, Vault opt-in -- local, single-actor
+- **large** (about 4x4): Junction party-sync, Terrace exit -- party synchronisation and floor
+  transition
+
 ## FLOOR 1 — **CLOSED 2026-09-01.**
 
 ### THE FINAL AUTHORING RULING
