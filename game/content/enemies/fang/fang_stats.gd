@@ -162,10 +162,6 @@ extends Resource
 ## the waypoint is reached). The deadline exists to BOUND the behaviour, not to pace it.
 @export var avoid_commit_ticks: int = 45
 
-## Movement language. &"direct" keeps this family's validated steering exactly as it was; see
-## OozeStats for why this is authored per family rather than branched in code.
-@export var pursuit_language: StringName = &"direct"
-
 @export var burrow_jump_distance: float = 0.0
 
 ## Displacement per tick during the jump. 0.35 = 10.5 u/s, covering the 4.0 in ~12 ticks.

@@ -188,14 +188,6 @@ var _combat_absent: Dictionary = {}
 ## Only what the behaviour consumes. The committed SIDE is deliberately absent: it is derivable
 ## from the waypoint's position relative to the actor-to-target line, and a stored field that
 ## duplicates a derivable fact is a second truth waiting to disagree.
-## CARDINAL COMMITTED PURSUIT (ruled 2026-08-31). Per-actor AI state, floor lifetime, filed with
-## the rest of the _ai_* family for the same reason they are.
-##
-## The heading IS the leg -- one of +/-X or +/-Z -- so axis and direction are one field rather
-## than two, and the deadline bounds it exactly as an avoidance leg is bounded. Whether a leg is
-## a PROGRESS leg or a DETOUR is derived from the heading against the target, never stored.
-var _ai_cardinal_heading: Dictionary = {}   # actor_id -> Vector3, the committed cardinal leg
-var _ai_cardinal_deadline: Dictionary = {}  # actor_id -> int, absolute tick the leg lapses
 var _ai_avoid_waypoint: Dictionary = {}  # actor_id -> Vector3, the committed local target
 var _ai_avoid_deadline: Dictionary = {}  # actor_id -> int, absolute tick the commitment lapses
 var _ai_burrow: Dictionary = {}                # actor_id -> resolved config
@@ -412,8 +404,6 @@ const STATE_SCOPES: Dictionary = {
 	"_ai_last_in_close_band": SCOPE_FLOOR,
 	"_ai_last_frustration_commit": SCOPE_FLOOR,
 	"_ai_close_band": SCOPE_FLOOR,
-	"_ai_cardinal_heading": SCOPE_FLOOR,
-	"_ai_cardinal_deadline": SCOPE_FLOOR,
 	"_ai_avoid_waypoint": SCOPE_FLOOR,
 	"_ai_avoid_deadline": SCOPE_FLOOR,
 	"_ai_burrow": SCOPE_FLOOR,
@@ -1336,7 +1326,7 @@ func register_shield(actor_id: int, meter_max: float, regen_per_tick: float, bre
 ## (engagement-spacing fix) bound the band an engaged enemy tries to hold: farther
 ## than preferred -> approach, closer than minimum -> back away, inside the band ->
 ## stop. Since P29 they govern MOVEMENT ONLY; attack eligibility is the action band.
-func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0, burrow_jump_distance: float = 0.0, burrow_jump_step_distance: float = 0.0, burrow_underground_ticks: int = 0, burrow_emergence_radius: float = 0.0, burrow_emergence_retry_ticks: int = 0, burrow_reacquisition_ticks: int = 0, burrow_cooldown_ticks: int = 0, avoid_commit_ticks: int = 0, pursuit_language: StringName = &"direct") -> void:
+func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: Vector3, preferred_attack_distance: float, minimum_attack_distance: float, detection_radius: float, leash_radius: float, engagement_delay_ticks: int = 0, close_frustration_ticks: int = 0, burrow_jump_distance: float = 0.0, burrow_jump_step_distance: float = 0.0, burrow_underground_ticks: int = 0, burrow_emergence_radius: float = 0.0, burrow_emergence_retry_ticks: int = 0, burrow_reacquisition_ticks: int = 0, burrow_cooldown_ticks: int = 0, avoid_commit_ticks: int = 0) -> void:
 	# The TERMINAL band is the one with the largest max_range — the only band that
 	# includes its own maximum (see _select_action). Derived, never authored, so content
 	# cannot accidentally declare two terminals or none.
@@ -1370,7 +1360,6 @@ func register_ai(actor_id: int, repertoire: Array[Dictionary], spawn_position: V
 		"engagement_delay_ticks": engagement_delay_ticks,
 		"close_frustration_ticks": close_frustration_ticks,
 		"avoid_commit_ticks": avoid_commit_ticks,
-		"pursuit_language": pursuit_language,
 	}
 	# The CLOSE band: the innermost action that is not itself frustration-gated. Derived
 	# from authored bands, never from a separate "close range" number, so the proximity test
@@ -3356,121 +3345,11 @@ func _return_home_commands(actor_id: int, events: Array[Event]) -> Array[Command
 	return [Command.new(tick_count, actor_id, "move", {"direction": heading})]
 
 
-# --- CARDINAL COMMITTED PURSUIT -----------------------------------------------------------
-## ALIGNMENT TOLERANCE -- a ROUTE condition, deliberately NOT the body radius even though the
-## radius is right there. Same separation the arrival-tolerance repair established: physical
-## extent and navigational "close enough on this axis" are different questions, and conflating
-## them is what produced one-tick commitments last time.
-##
-## It must comfortably exceed one tick of travel, or an actor overshoots the aligned band every
-## step and flaps between axes forever. Shipped enemies move at most 3.0 u/s = 0.1 u per tick, so
-## 0.5 is five steps of margin. Pinned against shipped content by test.
-const _CARDINAL_ALIGN_TOLERANCE: float = 0.5
-## How far ahead a leg is probed for legality. One body length: the granularity at which "can I
-## keep going this way" is a meaningful question for a body of that size.
-const _CARDINAL_PROBE: float = 1.0
-
-
-## AXIS-COMMITTED CARDINAL PURSUIT. "South, south, south until lined up, then west, west, west."
-##
-## THE INVARIANT IS COMMITMENT, NOT CARDINALITY. Recon falsified the tempting claim that cardinal
-## movement is oscillation-proof by construction: a per-step axis re-pick flapped onto the free
-## axis, re-read itself as aligned, switched back into the wall and looped -- the same two-state
-## failure P33 already fixed, in cardinal clothing (81 switches, never arrived). The axis-committed
-## version reached the target in 4 switches on the identical geometry. Cardinality is the steering
-## VOCABULARY; commitment is what prevents indecision.
-func _cardinal_pursuit_direction(actor_id: int, target: Vector3, events: Array[Event]) -> Vector3:
-	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
-	var region: WalkableBounds = _legal_bounds_for(actor_id)
-	var radius: float = _body_radius_for(actor_id)
-
-	if _ai_cardinal_heading.has(actor_id):
-		var heading: Vector3 = _ai_cardinal_heading[actor_id]
-		var reason: String = _cardinal_leg_ended(actor_id, heading, from, target, region, radius)
-		if reason.is_empty():
-			return heading
-		_ai_cardinal_heading.erase(actor_id)
-		_ai_cardinal_deadline.erase(actor_id)
-		events.append(Event.new(tick_count, "cardinal_leg_ended", {"actor_id": actor_id, "reason": reason}))
-
-	var chosen: Vector3 = _choose_cardinal_leg(from, target, region, radius)
-	if chosen == Vector3.ZERO:
-		return Vector3.ZERO  # bounded failure: nothing legal on either axis, hold rather than jitter
-	_ai_cardinal_heading[actor_id] = chosen
-	_ai_cardinal_deadline[actor_id] = tick_count + maxi(int(_ai_tuning.get(actor_id, {}).get("avoid_commit_ticks", 0)), 1)
-	events.append(Event.new(tick_count, "cardinal_leg_committed", {"actor_id": actor_id, "heading": chosen}))
-	return chosen
-
-
-## Why a leg is over, or "" to keep walking it.
-##
-## A PROGRESS LEG (heading points at the target on its own axis) ends when ALIGNED on that axis.
-## A DETOUR LEG (committed because the useful axis was blocked) must NOT use alignment: it is
-## usually aligned already, which is precisely how a naive policy ends the detour instantly and
-## walks back into the wall. A detour ends when the axis it was avoiding becomes free again.
-## Both are derived from the heading, so neither needs a stored flag.
-func _cardinal_leg_ended(actor_id: int, heading: Vector3, from: Vector3, target: Vector3, region: WalkableBounds, radius: float) -> String:
-	if tick_count >= int(_ai_cardinal_deadline.get(actor_id, 0)):
-		return "deadline"
-	if region != null and not region.fits(from + heading * _CARDINAL_PROBE, radius):
-		return "blocked"
-	var on_x: bool = absf(heading.x) > 0.0
-	var delta: float = (target.x - from.x) if on_x else (target.z - from.z)
-	var step: float = heading.x if on_x else heading.z
-	# A leg is PROGRESS when it points the way the target lies on its own axis.
-	if signf(delta) == signf(step):
-		return "aligned" if absf(delta) <= _CARDINAL_ALIGN_TOLERANCE else ""
-	# DETOUR: hold it until the axis this leg was avoiding is walkable again.
-	var other: Vector3 = Vector3(0.0, 0.0, signf(target.z - from.z)) if on_x else Vector3(signf(target.x - from.x), 0.0, 0.0)
-	if other == Vector3.ZERO:
-		return ""
-	return "route_freed" if region == null or region.fits(from + other * _CARDINAL_PROBE, radius) else ""
-
-
-## Deterministic leg choice: the axis with the greater remaining separation first, X before Z on
-## an exact tie, and each axis tried toward the target before any detour is considered.
-func _choose_cardinal_leg(from: Vector3, target: Vector3, region: WalkableBounds, radius: float) -> Vector3:
-	var dx: float = target.x - from.x
-	var dz: float = target.z - from.z
-	var x_first: bool = absf(dx) >= absf(dz)  # tie -> X, an authored convention, not a preference
-	var ordered: Array[Vector3] = []
-	var toward_x := Vector3(signf(dx), 0.0, 0.0)
-	var toward_z := Vector3(0.0, 0.0, signf(dz))
-	if x_first:
-		if absf(dx) > _CARDINAL_ALIGN_TOLERANCE:
-			ordered.append(toward_x)
-		if absf(dz) > _CARDINAL_ALIGN_TOLERANCE:
-			ordered.append(toward_z)
-	else:
-		if absf(dz) > _CARDINAL_ALIGN_TOLERANCE:
-			ordered.append(toward_z)
-		if absf(dx) > _CARDINAL_ALIGN_TOLERANCE:
-			ordered.append(toward_x)
-	for heading: Vector3 in ordered:
-		if heading != Vector3.ZERO and (region == null or region.fits(from + heading * _CARDINAL_PROBE, radius)):
-			return heading
-	# Both useful axes blocked: DETOUR. Perpendicular to the axis we most wanted, +1 before -1.
-	var detour_on_x: bool = not x_first
-	for option: float in [1.0, -1.0]:
-		var heading: Vector3 = Vector3(option, 0.0, 0.0) if detour_on_x else Vector3(0.0, 0.0, option)
-		if region == null or region.fits(from + heading * _CARDINAL_PROBE, radius):
-			return heading
-	return Vector3.ZERO
-
-
 ## THE APPROACH DIRECTION, and the ONLY seam P33 touches. Everything below the returned vector
 ## -- the clamp, WalkableBounds, all eight displacement seams, the combat pipeline -- is
 ## untouched: avoidance changes what the AI ASKS FOR, never what legality permits.
 func _pursuit_direction(actor_id: int, target: Vector3, events: Array[Event]) -> Vector3:
 	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
-	# FAMILY MOVEMENT LANGUAGE, authored in content rather than branched by family name here.
-	# GAME-RULES §3 channel law already gives FAMILIES the baseline motion path, so a per-family
-	# steering grammar is canon-aligned rather than a special case. Ooze authors CARDINAL_COMMITTED;
-	# Fang and Watcher keep the validated language their lunge, burrow and approach weave were
-	# built on.
-	if _ai_tuning.get(actor_id, {}).get("pursuit_language", &"direct") == &"cardinal_committed":
-		return _cardinal_pursuit_direction(actor_id, target, events)
-
 	var direct: Vector3 = target - from
 	direct.y = 0.0
 	direct = direct.normalized()
