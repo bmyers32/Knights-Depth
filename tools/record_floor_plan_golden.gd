@@ -37,6 +37,9 @@ extends SceneTree
 ##               activates E_PLATE_RESPONSE, an OPTIONAL non-sealing encounter that arrives when
 ##               the route opens. Authoring change built entirely from existing primitives.
 ##               Hand-inspected before commit.
+##   2026-09-01  RE-BASELINED for per-edge boundary styles: patches gained four optional side
+##               overrides and the hall roundabout now authors an open outer perimeter with a
+##               solid void-facing interior. Schema + authoring migration. Hand-inspected.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the

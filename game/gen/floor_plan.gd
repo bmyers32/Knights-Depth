@@ -94,14 +94,46 @@ func solid_segments() -> Array[Dictionary]:
 	var rects: Array[Rect2] = all_rects()
 	var segments: Array[Dictionary] = []
 	for patch in patches:
-		if patch.boundary_style == &"ledge":
-			continue
-		_segments_of(patch.rect, patch.elevation, rects, segments)
+		_segments_of_patch(patch, rects, segments)
 	# Aperture SIDES are walls like any other: a corridor has flanks. Whether the corridor is
 	# passable is a gate question (connection state), never a static-geometry one.
 	for connection in connections:
 		_segments_of(connection.aperture, 0.0, rects, segments)
-	return _merge_collinear(segments)
+	return _merge_collinear(_solid_only(_reject_style_conflicts(segments)))
+
+
+## CONFLICT DETECTION, not precedence. Two overlapping patches can both own the same surviving
+## exterior span; if they disagree about its style there is no honest winner, so this FAILS
+## LOUDLY rather than resolving by array order. If it never fires, the condition genuinely cannot
+## arise under the current derivation -- which is the other half of what the ruling asked.
+static func _reject_style_conflicts(segments: Array[Dictionary]) -> Array[Dictionary]:
+	for a in range(segments.size()):
+		for b in range(a + 1, segments.size()):
+			var first: Dictionary = segments[a]
+			var second: Dictionary = segments[b]
+			if first["style"] == second["style"]:
+				continue
+			if first["axis"] != second["axis"] or absf(float(first["at"]) - float(second["at"])) > 0.0001:
+				continue
+			if absf(float(first["outward"]) - float(second["outward"])) > 0.0001:
+				continue
+			var overlap: float = minf(float(first["max"]), float(second["max"])) - maxf(float(first["min"]), float(second["min"]))
+			if overlap > 0.0001:
+				push_error(("FloorPlan: conflicting boundary styles on one span -- %s vs %s on axis %s at %.2f, "
+					+ "overlapping %.2f. Two patches disagree about the same exterior edge; author them to agree "
+					+ "rather than relying on a precedence rule, because there is none.")
+					% [first["style"], second["style"], first["axis"], first["at"], overlap])
+	return segments
+
+
+## A LEDGE contributes no solid boundary -- no wall mesh, and nothing for a projectile to meet.
+## Movement legality is untouched either way: it never came from here.
+static func _solid_only(segments: Array[Dictionary]) -> Array[Dictionary]:
+	var solid: Array[Dictionary] = []
+	for segment in segments:
+		if segment["style"] != &"ledge":
+			solid.append(segment)
+	return solid
 
 
 ## Overlapping patches produce the SAME outer wall more than once -- the hall's west face is
@@ -137,15 +169,32 @@ static func _merge_collinear(segments: Array[Dictionary]) -> Array[Dictionary]:
 	return merged
 
 
+## Emits EVERY surviving exterior side of a patch, each tagged with its effective style. Ledge
+## sides are emitted too, then dropped after conflict detection -- suppressing them here would
+## make a ledge silently lose to an overlapping patch's wall, which is exactly the invented
+## precedence rule the ruling forbids.
+static func _segments_of_patch(patch: WalkablePatch, rects: Array[Rect2], out: Array[Dictionary]) -> void:
+	var rect: Rect2 = patch.rect
+	var elevation: float = patch.elevation
+	_emit(out, &"x", rect.position.x, -1.0, elevation, patch.edge_style(&"west"),
+		_uncovered_span(rect.position.y, rect.end.y, rects, true, rect.position.x, -1.0))
+	_emit(out, &"x", rect.end.x, 1.0, elevation, patch.edge_style(&"east"),
+		_uncovered_span(rect.position.y, rect.end.y, rects, true, rect.end.x, 1.0))
+	_emit(out, &"z", rect.position.y, -1.0, elevation, patch.edge_style(&"south"),
+		_uncovered_span(rect.position.x, rect.end.x, rects, false, rect.position.y, -1.0))
+	_emit(out, &"z", rect.end.y, 1.0, elevation, patch.edge_style(&"north"),
+		_uncovered_span(rect.position.x, rect.end.x, rects, false, rect.end.y, 1.0))
+
+
 static func _segments_of(rect: Rect2, elevation: float, rects: Array[Rect2], out: Array[Dictionary]) -> void:
 	# WEST edge: solid wherever the strip immediately west of it is not walkable.
-	_emit(out, &"x", rect.position.x, -1.0, elevation,
+	_emit(out, &"x", rect.position.x, -1.0, elevation, &"wall",
 		_uncovered_span(rect.position.y, rect.end.y, rects, true, rect.position.x, -1.0))
-	_emit(out, &"x", rect.end.x, 1.0, elevation,
+	_emit(out, &"x", rect.end.x, 1.0, elevation, &"wall",
 		_uncovered_span(rect.position.y, rect.end.y, rects, true, rect.end.x, 1.0))
-	_emit(out, &"z", rect.position.y, -1.0, elevation,
+	_emit(out, &"z", rect.position.y, -1.0, elevation, &"wall",
 		_uncovered_span(rect.position.x, rect.end.x, rects, false, rect.position.y, -1.0))
-	_emit(out, &"z", rect.end.y, 1.0, elevation,
+	_emit(out, &"z", rect.end.y, 1.0, elevation, &"wall",
 		_uncovered_span(rect.position.x, rect.end.x, rects, false, rect.end.y, 1.0))
 
 
@@ -186,13 +235,13 @@ static func _subtract_interval(interval: Array, cut_low: float, cut_high: float)
 	return out
 
 
-static func _emit(out: Array[Dictionary], axis: StringName, at: float, outward: float, elevation: float, spans: Array) -> void:
+static func _emit(out: Array[Dictionary], axis: StringName, at: float, outward: float, elevation: float, style: StringName, spans: Array) -> void:
 	for span: Array in spans:
 		if float(span[1]) - float(span[0]) <= 0.0001:
 			continue  # a zero-length run is not a wall
 		out.append({
 			"axis": axis, "at": at, "min": float(span[0]), "max": float(span[1]),
-			"outward": outward, "elevation": elevation,
+			"outward": outward, "elevation": elevation, "style": style,
 		})
 
 
@@ -265,6 +314,8 @@ func to_dict() -> Dictionary:
 			"patch_id": patch.patch_id, "rect": _rect(patch.rect),
 			"elevation": _snap(patch.elevation), "surface": String(patch.surface),
 			"boundary_style": String(patch.boundary_style),
+			"boundary_north": String(patch.boundary_north), "boundary_south": String(patch.boundary_south),
+			"boundary_east": String(patch.boundary_east), "boundary_west": String(patch.boundary_west),
 		})
 	var connection_dicts: Array = []
 	for connection in connections:

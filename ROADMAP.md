@@ -46,6 +46,46 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## PER-EDGE BOUNDARY STYLE + OPEN ROUNDABOUT — **BUILT 2026-09-01.**
+
+The falsified assumption was granularity, not direction. `boundary_style` gained four optional
+per-side overrides (`north`/`south`/`east`/`west`), defaulting to the patch style:
+
+    effective_edge_style = side_override if authored else boundary_style
+
+**AXIS NAMING IS STATED, not guessed:** NORTH is the max-z side, SOUTH min-z, EAST max-x, WEST
+min-x. Deliberately narrow -- four sides of a rectangle, no polygon metadata, no material system.
+
+**SPLITTING PATCHES WAS REJECTED**, per ruling: walkable patches describe walkable SPACE, boundary
+style describes boundary SEMANTICS, and neither may impersonate the other.
+
+### THE AUTHORED RESULT
+Exactly four spans survive as solid, and they are precisely the void-facing ones:
+```
+x = -8.0  z[-28..-16]  outward +1     west arm, facing the void
+x =  8.0  z[-28..-16]  outward -1     east arm, facing the void
+z = -16.0 x[ -8..  8]  outward -1     south strip, facing the void
+z = -28.0 x[ -8..  8]  outward +1     north strip, facing the void
+```
+Every outer perimeter wall is gone. **The hall opens outward; the hole stays a hole.** Canonical
+segments 41 -> 35, and the P34 sequence-break test is green: the concealed crate is still
+unreachable across the void.
+
+### CONFLICT: DETECTED, NOT RESOLVED
+The ruling forbade inventing a precedence rule. Ledge spans are therefore emitted and only
+dropped AFTER conflict detection -- suppressing them earlier would make a ledge silently lose to
+an overlapping patch's wall, which IS a precedence rule. Overlapping spans that disagree on style
+`push_error` naming both. It does not fire on the shipped floor, which is the other half of what
+was asked: the condition genuinely does not arise under the current derivation.
+
+### SINGLE SOURCE UNCHANGED
+Overrides feed the same canonical exact-segment derivation both consumers read. FloorBuilder
+needed NO change, which is the proof: presentation never re-decides where a wall belongs.
+
+### AWAITING THE NARROW HUMAN CHECK
+> Does the first circulation area feel less unnecessarily boxed-in while the void still reads as
+> a meaningful solid separation? And does shooting through the protected void remain impossible?
+
 ## FLOOR 1 AUTHORING 2026-09-01 — door beat LANDED; roundabout BLOCKED on a real fork.
 
 ### DOOR-CONTROL ENEMY RESPONSE — **built with existing primitives, nothing new**

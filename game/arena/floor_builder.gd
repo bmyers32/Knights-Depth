@@ -178,6 +178,9 @@ func _build_patch(patch: WalkablePatch) -> void:
 ## LEDGE patches emit no segments at all (FloorPlan), so they render no wall and stop no shot,
 ## from the same authored fact. Movement legality is untouched either way -- it never came from
 ## these meshes.
+## PER-EDGE STYLES (2026-09-01) need no change here, which is the point: FloorPlan already
+## excludes ledge spans from the canonical segments, so presentation keeps consuming ONE derived
+## truth and never re-decides where a wall belongs.
 func build_walls(plan: FloorPlan) -> void:
 	for segment in plan.solid_segments():
 		_build_wall_segment(segment)

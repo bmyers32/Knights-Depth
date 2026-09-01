@@ -126,10 +126,22 @@ static func _spatial(plan: FloorPlan) -> void:
 	# "void object" -- it is simply ground nobody laid, which is the whole reason irregular
 	# silhouettes are free in a union-of-patches model.
 	_patch(plan, P_START, Rect2(-7.0, -6.0, 14.0, 6.0), 0.0, &"stone")
-	_patch(plan, P_HALL_SOUTH, Rect2(-16.0, -16.0, 32.0, 4.0), 0.0, &"stone")
-	_patch(plan, P_HALL_WEST, Rect2(-16.0, -30.0, 8.0, 16.0), 0.0, &"stone")
-	_patch(plan, P_HALL_EAST, Rect2(8.0, -30.0, 8.0, 16.0), 0.0, &"stone")
-	_patch(plan, P_HALL_NORTH, Rect2(-16.0, -34.0, 32.0, 6.0), 0.0, &"stone")
+	# THE ROUNDABOUT, authored per side (2026-09-01). The human wanted this space to stop feeling
+	# boxed in; the VOID must stay solid because P34's progression protection depends on it -- the
+	# concealed crate sits across that hole and must not be shootable from the hall.
+	#
+	# So the ring is opened OUTWARD and kept solid INWARD:
+	#   outer perimeter          -> ledge, and the space reads as open
+	#   void-facing interior     -> wall, and the hole reads as a real separation
+	# Patch-level style could not say both, which is precisely what falsified it.
+	_patch(plan, P_HALL_SOUTH, Rect2(-16.0, -16.0, 32.0, 4.0), 0.0, &"stone", &"wall",
+		{"north": &"ledge", "east": &"ledge", "west": &"ledge"})  # south faces the void
+	_patch(plan, P_HALL_WEST, Rect2(-16.0, -30.0, 8.0, 16.0), 0.0, &"stone", &"wall",
+		{"west": &"ledge"})  # east faces the void
+	_patch(plan, P_HALL_EAST, Rect2(8.0, -30.0, 8.0, 16.0), 0.0, &"stone", &"wall",
+		{"east": &"ledge"})  # west faces the void
+	_patch(plan, P_HALL_NORTH, Rect2(-16.0, -34.0, 32.0, 6.0), 0.0, &"stone", &"wall",
+		{"south": &"ledge", "east": &"ledge", "west": &"ledge"})  # north faces the void
 	_patch(plan, P_APPROACH, Rect2(-6.0, -42.0, 12.0, 6.0), 0.0, &"stone")
 	# Arena keeps the dimensions VALIDATED BY PLAY as a combat room (30 x 20).
 	_patch(plan, P_ARENA, Rect2(-15.0, -68.0, 30.0, 20.0), 0.0, &"arena")
@@ -141,13 +153,17 @@ static func _spatial(plan: FloorPlan) -> void:
 	_patch(plan, P_END, Rect2(-6.0, -98.0, 12.0, 6.0), 2.0, &"high", &"ledge")
 
 
-static func _patch(plan: FloorPlan, patch_id: int, rect: Rect2, elevation: float, surface: StringName, boundary_style: StringName = &"wall") -> void:
+static func _patch(plan: FloorPlan, patch_id: int, rect: Rect2, elevation: float, surface: StringName, boundary_style: StringName = &"wall", side_overrides: Dictionary = {}) -> void:
 	var patch := WalkablePatch.new()
 	patch.patch_id = patch_id
 	patch.rect = rect
 	patch.elevation = elevation
 	patch.surface = surface
 	patch.boundary_style = boundary_style
+	patch.boundary_north = side_overrides.get("north", &"")
+	patch.boundary_south = side_overrides.get("south", &"")
+	patch.boundary_east = side_overrides.get("east", &"")
+	patch.boundary_west = side_overrides.get("west", &"")
 	plan.patches.append(patch)
 
 

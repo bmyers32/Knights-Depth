@@ -33,6 +33,39 @@ var surface: StringName = &"stone"
 ##   &"ledge"  open edge -- no wall mesh, still mechanically bounded
 var boundary_style: StringName = &"wall"
 
+## PER-SIDE OVERRIDES, added 2026-09-01 because patch granularity was FALSIFIED by authoring: the
+## hall wants an open outer perimeter AND a solid void-facing interior, and both belong to the
+## same rectangle. One flag cannot say two things.
+##
+## DELIBERATELY NARROW -- four axis-aligned sides of a rectangle, nothing more. Not polygon edge
+## metadata, not a material system, not generalized boundary components. The consumer is
+## rectangular WalkablePatch boundary semantics and that is all this serves.
+##
+## AXIS NAMING, stated so it cannot be guessed wrong: NORTH is the MAX-z side (toward the floor's
+## entrance, up-screen), SOUTH the MIN-z side, EAST the MAX-x side, WEST the MIN-x side.
+##
+## Empty means "inherit boundary_style":
+##     effective_edge_style = side_override if authored else boundary_style
+##
+## SPLITTING PATCHES TO FAKE THIS WAS REJECTED. Walkable patches describe walkable SPACE; boundary
+## style describes boundary SEMANTICS. Making one impersonate the other would leave geometry seams
+## whose only purpose is to compensate for missing vocabulary.
+var boundary_north: StringName = &""
+var boundary_south: StringName = &""
+var boundary_east: StringName = &""
+var boundary_west: StringName = &""
+
+
+## The style that actually governs one side.
+func edge_style(side: StringName) -> StringName:
+	var override: StringName = &""
+	match String(side):
+		"north": override = boundary_north
+		"south": override = boundary_south
+		"east": override = boundary_east
+		"west": override = boundary_west
+	return boundary_style if override == &"" else override
+
 
 func centre() -> Vector3:
 	return Vector3(rect.position.x + rect.size.x * 0.5, 0.0, rect.position.y + rect.size.y * 0.5)
