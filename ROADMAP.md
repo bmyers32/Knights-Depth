@@ -46,6 +46,63 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
 
+## BOUNDED LATERAL MATCHING — **BUILT 2026-09-01.** The band hold answered.
+
+Option 2 as ruled. The absolute in-band hold is replaced by: maintain radial attack spacing while
+allowing bounded TANGENTIAL movement to follow a laterally moving target.
+
+| case | before | after |
+|---|---|---|
+| **player circling at band distance** | 0.00 u, **0/600** ticks | **2.21 u, 377/600 ticks** |
+| player retreating (control) | 11.80 u, 236/600 | **11.80 u, 236/600 — unchanged** |
+| telegraphs, both cases | 8 | **8 — unchanged** |
+| gap while tracking | — | 2.05, still inside 1.90-2.20 |
+
+**THE SEMANTIC SPLIT is the design.** Radial motion belongs to the approach/retreat law and is
+untouched; only the tangential component -- the part of the target's motion perpendicular to the
+actor->target line -- gives an actor already at fighting distance a reason to reposition. A test
+asserts directly that purely radial target motion produces NO tracking.
+
+**NOT VELOCITY COPYING.** Only the DIRECTION of the tangential component is taken; the actor then
+moves at its own `move_speed` under its own legality, so a fast player still out-runs a slow blob.
+Mirroring velocity would have erased the family character this is meant to preserve.
+
+**ONE FIELD**, `_ai_band_last_target` -- the sim stores positions, not velocities, so seeing that
+a target MOVED requires one remembered position. Per-actor AI state, floor lifetime, filed with
+the `_ai_*` family. No smoothing machinery: one frame differenced. If that proves jittery in play
+it becomes an evidenced question, not a pre-emptive filter.
+
+### BLOCKED LATERAL TRACK — EXPECTED BEHAVIOUR, recorded so it is not re-reported as a stall
+P33 avoidance is deliberately NOT blended into band tracking. **A player who strafes the Ooze into
+a wall's shadow will see it stop tracking -- planted again, legitimately this time, with a visible
+wall explaining it.** That is the intended v1 result, not a defect; ordinary pursuit resumes only
+when the normal distance conditions require it.
+
+### HELD, per ruling
+Attack cadence (~2.8 s per swing) is a SECONDARY OBSERVATION, not a tuning item -- it sits inside
+the M1 numeric fence and is reconsidered only if the Ooze still feels inert now that it visibly
+tracks. Band width stays 1.90-2.20: **it was never the defect**, and no width fixes a distance
+band's blindness to lateral motion.
+
+## P33 EVIDENCE LEDGER (quoted verbatim into the criterion's record)
+
+The frozen criterion stays OPEN. Every prior "failure" turned out to be a different mechanism
+than the sentence was judging, which is why it stayed open this long:
+
+| finding | disposition |
+|---|---|
+| rapid zig-zag | **real, structurally addressed** |
+| cardinal promotion | **withdrawn after invalid recon evidence** |
+| apparent east-lane navigation stall | **reclassified as attack-band hold** |
+| attack-band hold | **now proven mechanically, and fixed** |
+
+> "When the Ooze has to go around something, it looks like it picked somewhere to go and goes
+> there, rather than changing its mind back and forth."
+
+The next replay judges the COMPLETE shipped behaviour -- ordinary pursuit, obstacle behaviour
+where encountered, attack-band locomotion, disengage and return -- and only then is
+PASS/ITERATE rendered.
+
 ## ATTACK-BAND HOLD — **MECHANISM IDENTIFIED 2026-09-01.** Not obstacle navigation.
 
 `tools/diagnose_attack_band_hold.gd`, on an open plain where nothing can be blamed on geometry,

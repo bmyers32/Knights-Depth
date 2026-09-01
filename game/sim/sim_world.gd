@@ -188,6 +188,10 @@ var _combat_absent: Dictionary = {}
 ## Only what the behaviour consumes. The committed SIDE is deliberately absent: it is derivable
 ## from the waypoint's position relative to the actor-to-target line, and a stored field that
 ## duplicates a derivable fact is a second truth waiting to disagree.
+## BAND LATERAL TRACKING. The target's position as of this actor's last decision -- the only way
+## to see that the target MOVED, since the sim stores positions and not velocities. Per-actor AI
+## state, floor lifetime, filed with the rest of the _ai_* family.
+var _ai_band_last_target: Dictionary = {}  # actor_id -> Vector3
 var _ai_avoid_waypoint: Dictionary = {}  # actor_id -> Vector3, the committed local target
 var _ai_avoid_deadline: Dictionary = {}  # actor_id -> int, absolute tick the commitment lapses
 var _ai_burrow: Dictionary = {}                # actor_id -> resolved config
@@ -404,6 +408,7 @@ const STATE_SCOPES: Dictionary = {
 	"_ai_last_in_close_band": SCOPE_FLOOR,
 	"_ai_last_frustration_commit": SCOPE_FLOOR,
 	"_ai_close_band": SCOPE_FLOOR,
+	"_ai_band_last_target": SCOPE_FLOOR,
 	"_ai_avoid_waypoint": SCOPE_FLOOR,
 	"_ai_avoid_deadline": SCOPE_FLOOR,
 	"_ai_burrow": SCOPE_FLOOR,
@@ -3087,7 +3092,15 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 		# the clamp, plus P33 routing around genuine geometry.
 		return [Command.new(tick_count, actor_id, "move", {"direction": _pursuit_direction(actor_id, player_position, events)})]
 
-	return []  # in band, weapon on cooldown: hold position and wait
+	# IN BAND. Radial distance is satisfied, so approach is done -- but the old law held position
+	# ABSOLUTELY, and a distance band is blind to lateral motion. Measured consequence: a player
+	# circling at band distance produced 0.00 units of translation over 600 ticks while the Ooze
+	# faced and attacked, which reads as "following me but stuck". Tangential tracking is the
+	# answer to exactly that, and only that.
+	var tracking: Vector3 = _band_tracking_direction(actor_id, player_position)
+	if tracking == Vector3.ZERO:
+		return []  # stationary target, or nothing legal: hold, as before
+	return [Command.new(tick_count, actor_id, "move", {"direction": tracking})]
 
 
 # --- P33: BOUNDED LOCAL OBSTACLE AVOIDANCE ----------------------------------------------
@@ -3095,6 +3108,10 @@ func _decide_single_ai_command(actor_id: int, player_id: int, events: Array[Even
 ## fine enough that a body cannot tunnel across a gap narrower than itself, which is the only
 ## way this detector could lie by omission.
 const _AVOID_SAMPLE_FRACTION: float = 0.5
+## Below this, a target counts as stationary and the actor holds. Deliberately smaller than one
+## tick of player travel so ordinary strafing registers, and large enough that float noise in a
+## standing target cannot make an actor drift.
+const _BAND_TRACK_EPSILON: float = 0.001
 ## WAYPOINT ARRIVAL TOLERANCE -- "close enough to the waypoint to consider it reached", and
 ## nothing else. It is deliberately NOT derived from the body radius even though the radius is
 ## right there: those are different concepts, and conflating them is exactly the defect this
@@ -3343,6 +3360,40 @@ func _return_home_commands(actor_id: int, events: Array[Event]) -> Array[Command
 	if heading == Vector3.ZERO:
 		return []
 	return [Command.new(tick_count, actor_id, "move", {"direction": heading})]
+
+
+## BOUNDED LATERAL MATCHING inside the attack band (ruled 2026-09-01).
+##
+## THE SEMANTIC SPLIT is the whole design: the RADIAL component governs distance and is already
+## handled by the approach/retreat clauses; only the TANGENTIAL component -- the part of the
+## target's motion perpendicular to the actor->target line -- gives an actor at valid attack range
+## a reason to reposition. Extracting it keeps "stay at my fighting distance" and "follow you
+## around" as separate laws instead of collapsing them into a chase.
+##
+## NOT VELOCITY COPYING. Only the DIRECTION of the tangential component is taken; the actor then
+## moves at its OWN move_speed under its OWN legality, so a fast player out-runs a slow blob
+## exactly as before. Mirroring the target's velocity would have erased the family's character,
+## which is the thing this is supposed to preserve.
+##
+## NO SMOOTHING MACHINERY. One frame of remembered target position, differenced. If that proves
+## jittery in play it becomes an evidenced question, not a pre-emptive filter.
+func _band_tracking_direction(actor_id: int, target: Vector3) -> Vector3:
+	var previous: Vector3 = _ai_band_last_target.get(actor_id, target)
+	_ai_band_last_target[actor_id] = target
+	var motion: Vector3 = target - previous
+	motion.y = 0.0
+	if motion.length() <= _BAND_TRACK_EPSILON:
+		return Vector3.ZERO  # a stationary target must not make the actor wander
+	var from: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	var radial: Vector3 = target - from
+	radial.y = 0.0
+	if radial.length() <= 0.0001:
+		return Vector3.ZERO
+	radial = radial.normalized()
+	var tangential: Vector3 = motion - radial * motion.dot(radial)
+	if tangential.length() <= _BAND_TRACK_EPSILON:
+		return Vector3.ZERO  # target moved straight at or away from us: that is the radial law's job
+	return tangential.normalized()
 
 
 ## THE APPROACH DIRECTION, and the ONLY seam P33 touches. Everything below the returned vector
