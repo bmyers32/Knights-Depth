@@ -152,9 +152,13 @@ func test_presentation_and_sim_read_the_same_boundary_fact() -> void:
 ## rejected -- ranged probing of the crate across the void is intentional.
 ##
 ## The capability this file exists for is unchanged and still exercised by the fixtures above;
-## what changed is that the SHIPPED floor no longer needs a mixed-side patch. Recorded plainly:
-## per-edge overrides currently have NO authored consumer, and Floor 2 either gives them one or
-## they retire under the same zero-consumer rule that retired the `switch` interactable.
+## what changed is that FLOOR 1 no longer needs a mixed-side patch.
+##
+## THE ZERO-CONSUMER QUESTION IS NOW CLOSED (2026-09-02): Floor 2's Vault is the first shipped
+## consumer -- solid on its inward sides so the optional fight cannot be farmed by shooting in
+## from the gallery, LEDGE on its exposed map-facing side, one rectangle with two meanings. The
+## override vocabulary therefore survives the same rule that retired the `switch` interactable,
+## on evidence rather than on anticipation. Asserted in tests/test_floor2.gd.
 func test_the_authored_roundabout_is_fully_open() -> void:
 	var plan: FloorPlan = DepthGenerator.generate(0, 1)
 	for segment in plan.solid_segments():

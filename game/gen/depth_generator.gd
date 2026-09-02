@@ -31,7 +31,13 @@ static func generate(seed: int, depth: int) -> FloorPlan:
 	plan.floor_seed = derive_floor_seed(seed, depth)
 	plan.stratum_id = stratum.stratum_id
 	plan.authored_layout = true
-	ArchivePrototypeLayout.build(plan)
+	# TWO AUTHORED FLOORS, selected by DEPTH. Not a layout framework -- a two-entry decision, per
+	# §1.4: copy twice before abstracting. When procedural assembly returns it replaces this body,
+	# not the signature.
+	if depth >= 2:
+		ArchiveRoundaboutLayout.build(plan)
+	else:
+		ArchivePrototypeLayout.build(plan)
 	return plan
 
 

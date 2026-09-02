@@ -13,10 +13,13 @@ extends SceneTree
 
 ## Draft Floor 2 coordinates under review.
 const COMMONS := Rect2(-26.0, -46.0, 52.0, 28.0)
-const JUNCTION := Rect2(-10.0, -70.0, 20.0, 8.0)
-const TERRACE := Rect2(-8.0, -82.0, 16.0, 12.0)
-## Union of every draft patch -- what set_floor_extent would receive.
-const FLOOR_EXTENT := Rect2(-30.0, -82.0, 72.0, 80.0)
+## FINAL AUTHORED COORDINATES (re-measured after the layout moved during implementation --
+## the junction widened to the full span and the terrace shifted west to sit beyond the
+## party-sync plate, so the earlier reading could not simply be assumed to survive).
+const JUNCTION := Rect2(-30.0, -71.0, 60.0, 10.0)
+const TERRACE := Rect2(-28.0, -83.0, 16.0, 12.0)
+## Union of every authored patch -- what set_floor_extent receives.
+const FLOOR_EXTENT := Rect2(-30.0, -83.0, 74.0, 81.0)
 
 
 func _init() -> void:
