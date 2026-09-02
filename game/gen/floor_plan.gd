@@ -387,6 +387,7 @@ func _snap(value: float) -> float:
 func validate() -> void:
 	_reject_unnamed_connection_patches()
 	_reject_bypassable_gates()
+	_reject_misoriented_gate_barriers()
 
 
 ## A connection that does not name the patches it joins cannot be checked by anything above,
@@ -466,3 +467,41 @@ func _is_closable(connection_id: int) -> bool:
 static func _touches(a: Rect2, b: Rect2) -> bool:
 	return a.position.x <= b.end.x and b.position.x <= a.end.x \
 			and a.position.y <= b.end.y and b.position.y <= a.end.y
+
+
+## THE GATE BARRIER MUST LIE ACROSS TRAVEL, not along it (added 2026-09-02, same firing).
+##
+## SimWorld._gate_segment derives a closed gate's solid line from the aperture's PROPORTIONS,
+## assuming travel runs along the aperture's longer dimension -- true for a CORRIDOR-shaped
+## aperture, false for a DOORWAY-shaped one that is wider than it is deep. Floor 2 authored a
+## 10x5 mouth between two patches separated along z, so the sim placed the barrier along the
+## travel direction instead of across it. A shot fired straight at the shut gate ran PARALLEL to
+## its own barrier and passed through untouched, while presentation drew the box across the
+## opening -- the picture and the rule disagreed, which is exactly what P34 forbids.
+##
+## DETECTION, NOT REPAIR, and deliberately not a change to the aperture heuristic: the honest
+## fix is to derive the barrier from the patches a connection joins rather than from its shape,
+## and that changes the sim/gen registration contract. Until that is ruled on, this makes the
+## latent mismatch loud instead of silent.
+func _reject_misoriented_gate_barriers() -> void:
+	for connection in connections:
+		if not _is_closable(connection.connection_id):
+			continue
+		var a: WalkablePatch = patch_by_id(connection.patch_ids.x)
+		var b: WalkablePatch = patch_by_id(connection.patch_ids.y)
+		if a == null or b == null:
+			continue
+		# The patches are disjoint (guaranteed above), so exactly one axis carries the gap, and
+		# that axis IS the direction of travel through the gate.
+		var travel_is_z: bool = a.rect.end.y < b.rect.position.y or b.rect.end.y < a.rect.position.y
+		var aperture: Rect2 = connection.aperture
+		# Restating SimWorld._gate_segment's rule rather than importing it: sim/ must not be
+		# imported by gen/, and a second copy that silently drifts is worse than no check, so the
+		# rule is named here explicitly and tested against the sim in tests/test_gate_integrity.gd.
+		var barrier_is_across_z: bool = aperture.size.y >= aperture.size.x
+		if travel_is_z != barrier_is_across_z:
+			push_error(("FloorPlan: connection %d is a %.0fx%.0f aperture joining patches separated along %s, so "
+				+ "the barrier the sim derives lies ALONG the direction of travel rather than across it -- a shot "
+				+ "at the shut gate runs parallel to its own barrier and passes through. Author the aperture "
+				+ "longer in the travel direction than across it.")
+				% [connection.connection_id, aperture.size.x, aperture.size.y, "z" if travel_is_z else "x"])

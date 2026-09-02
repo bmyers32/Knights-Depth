@@ -149,9 +149,13 @@ static func _progression(plan: FloorPlan) -> void:
 	_connect(plan, C_DESCEND, P_OVERLOOK, P_RAMP, Rect2(-2.5, -11.5, 5.0, 3.0), true)
 	_connect(plan, C_RAMP, P_RAMP, P_CONCOURSE, Rect2(-2.5, -19.5, 5.0, 3.0), true)
 	# THE GATED SHORTCUT. Closed until the Concourse control is stood on.
-	_connect(plan, C_TO_A, P_CONCOURSE, P_ROUTE_A, Rect2(-27.0, -49.5, 10.0, 5.0), false)
+	# DEEPER THAN WIDE, deliberately. The sim derives a closed gate's solid barrier from the
+	# aperture's proportions, so a mouth wider than it is deep gets a barrier lying ALONG the
+	# direction of travel -- shots then run parallel to it and pass through the shut gate.
+	_connect(plan, C_TO_A, P_CONCOURSE, P_ROUTE_A, Rect2(-24.5, -50.0, 5.0, 6.0), false)
 	# THE OPEN ROUTE, and the floor's natural first traversal.
-	_connect(plan, C_TO_B, P_CONCOURSE, P_ROUTE_B, Rect2(17.0, -49.5, 10.0, 5.0), true)
+	# Shaped to match its twin, so the fork reads as one choice with two answers.
+	_connect(plan, C_TO_B, P_CONCOURSE, P_ROUTE_B, Rect2(19.5, -50.0, 5.0, 6.0), true)
 	# The Vault's mouth: open, because the encounter inside is opt-in rather than gated.
 	# Spans the standoff so it overlaps BOTH -- route B ends at x=30, the vault starts at x=32.
 	_connect(plan, C_VAULT, P_ROUTE_B, P_VAULT, Rect2(28.5, -56.5, 5.0, 5.0), true)

@@ -151,3 +151,69 @@ func test_floor_two_route_a_cannot_be_entered_without_the_control() -> void:
 			break
 		arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "move", {"direction": direction.normalized()})] as Array[Command], 1.0 / 30.0)
 	assert_false(bool(arena.sim._connection_open[L.C_TO_A]), "and the gate was shut the whole time")
+
+
+# --- 5: THE BARRIER MUST LIE ACROSS TRAVEL -----------------------------------------------------
+
+## A DOORWAY-SHAPED aperture (wider than deep) between patches separated along z gets a barrier
+## running ALONG the travel direction. A shot then runs parallel to its own barrier and passes
+## through the shut gate, while presentation draws the box across the opening -- the picture and
+## the rule disagreeing, which P34 forbids. Floor 2 shipped exactly this.
+func test_a_doorway_wider_than_it_is_deep_is_reported() -> void:
+	var plan: FloorPlan = _two_room_plan(2.0)
+	plan.connections[0].aperture = Rect2(-6.0, -1.5, 12.0, 5.0)  # 12 wide, 5 deep; travel is z
+	plan.validate()
+	assert_push_error("lies ALONG the direction of travel")
+
+
+func test_a_corridor_deeper_than_it_is_wide_passes() -> void:
+	var plan: FloorPlan = _two_room_plan(2.0)
+	plan.connections[0].aperture = Rect2(-2.5, -1.5, 5.0, 5.0)
+	plan.validate()
+	assert_push_error_count(0)
+
+
+## THE GUARD RESTATES SimWorld._gate_segment's rule from gen/, because gen/ must not import sim/.
+## A second copy that silently drifts is worse than no check, so the two are pinned together
+## here: shoot at a shut gate the guard accepts, and at one it rejects, and require the sim to
+## agree with the guard both times.
+func test_the_guard_and_the_sim_agree_about_which_gates_stop_a_shot() -> void:
+	for deep: bool in [true, false]:
+		var near := Rect2(-10.0, -10.0, 20.0, 10.0)
+		var far := Rect2(-10.0, 2.0, 20.0, 10.0)
+		var aperture: Rect2 = Rect2(-2.5, -1.5, 5.0, 5.0) if deep else Rect2(-6.0, -1.5, 12.0, 5.0)
+		var plan := FloorPlan.new()
+		plan.patches.append(_patch(0, near))
+		plan.patches.append(_patch(1, far))
+		plan.connections.append(_connection(0, 0, 1, aperture, false))
+
+		var sim := SimWorld.new()
+		sim.set_damage_matrix({}, 1.5, 0.5)
+		var rects: Array[Rect2] = [near, far]
+		sim.load_floor(WalkableBounds.new(rects), Vector3.ZERO)
+		sim.register_patches(rects)
+		sim.register_solid_segments(plan.solid_segments())
+		sim.register_connection(0, aperture, false)
+		sim.add_entity(0, Vector3(0.0, 0.0, -3.0), 0.0, Vector3(0, 0, 1), 0.0)
+		sim.register_combatant(0, 999.0, &"envoy", 0, 0.0, &"player")
+		sim.add_entity(1, Vector3(0.0, 0.0, 5.0), 0.0)
+		sim.register_combatant(1, 100.0, &"fang", 0, 0.9, &"enemy")
+		sim.register_gun(&"g", 10.0, &"force", 30.0, 600, 0.2, 0.0, 1)
+		sim.set_equipped_weapon(0, &"g")
+
+		var hit: bool = false
+		for event in sim.tick([Command.new(sim.tick_count, 0, "attack", {"aim": Vector3(0, 0, 1)})] as Array[Command], 1.0 / 30.0):
+			hit = hit or event.kind == "hit"
+		for i in 90:
+			for event in sim.tick([] as Array[Command], 1.0 / 30.0):
+				hit = hit or event.kind == "hit"
+		if deep:
+			assert_false(hit, "the shape the guard ACCEPTS must really stop a shot")
+		else:
+			assert_true(hit, "and the shape it REJECTS must really leak one -- otherwise the guard is superstition")
+
+
+func test_both_authored_floors_have_correctly_oriented_barriers() -> void:
+	for depth in [1, 2]:
+		DepthGenerator.generate(0, depth)
+		assert_push_error_count(0, "authored floor at depth %d must have no misoriented gate barrier" % depth)
