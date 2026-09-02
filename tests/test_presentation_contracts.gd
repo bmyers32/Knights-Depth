@@ -85,7 +85,13 @@ func test_projectile_tracer_exposes_its_launch_contract() -> void:
 #     _physics_process -> _report_events -> envoy.clear_charge_ready() -> set_active()
 
 func _instantiate_arena() -> Node3D:
-	var arena: Node3D = add_child_autofree(load("res://game/arena/arena.tscn").instantiate())
+	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+	# DEPTH IS PINNED, never inherited from the boot scene. These assertions are about the
+	# ARCHIVE PROTOTYPE specifically, so the floor they mean is stated rather than assumed --
+	# the scene's boot depth is a handoff pointer that moves whenever a human is being handed
+	# a different floor to play.
+	arena.depth = 1
+	add_child_autofree(arena)
 	assert_not_null(arena, "the real arena scene must instantiate")
 	return arena
 
@@ -104,6 +110,11 @@ func _instantiate_arena_containing(family: StringName) -> Node3D:
 			present = true
 	assert_true(present, "the authored floor no longer contains a '%s'" % family)
 	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+	# DEPTH IS PINNED, never inherited from the boot scene. These assertions are about the
+	# ARCHIVE PROTOTYPE specifically, so the floor they mean is stated rather than assumed --
+	# the scene's boot depth is a handoff pointer that moves whenever a human is being handed
+	# a different floor to play.
+	arena.depth = 1
 	add_child_autofree(arena)
 	assert_not_null(arena, "the real arena scene must instantiate")
 	return arena

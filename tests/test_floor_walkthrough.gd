@@ -17,6 +17,11 @@ const L = preload("res://game/gen/layouts/archive_prototype.gd")
 
 func _boot() -> Node3D:
 	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+	# DEPTH IS PINNED, never inherited from the boot scene. These assertions are about the
+	# ARCHIVE PROTOTYPE specifically, so the floor they mean is stated rather than assumed --
+	# the scene's boot depth is a handoff pointer that moves whenever a human is being handed
+	# a different floor to play.
+	arena.depth = 1
 	add_child_autofree(arena)
 	# The floor is a long walk with a real fight in it; survivability keeps a TRAVERSAL test
 	# measuring traversal. Never a balance claim.

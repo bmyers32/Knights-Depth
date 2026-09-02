@@ -8,6 +8,7 @@
 
 [node name="Arena" type="Node3D"]
 script = ExtResource("1_script")
+depth = 2
 
 [node name="FloorBuilder" type="Node3D" parent="."]
 script = ExtResource("7_floor_builder")
