@@ -814,6 +814,33 @@ never requested look identical from the outside. **Cross-reference:** the siblin
 scanner never proven to fail -- both are the same demand, that an instrument be shown capable of
 reporting the answer you are not hoping for.
 
+### Before inventing presentation, check whether an earlier milestone already shipped a member of it
+**Incident (2026-09-02).** Floor 2's iteration needed exit/zone-transition presentation. The
+obvious move was to design one. The ruling instead required an audit first -- and the audit found
+M1 already ships the whole dialect: a group-occupancy exit plate whose mesh IS the trigger region,
+prominence DERIVED from `trigger.kind` rather than authored twice, and a gold end-marker pillar
+standing inside it. Designing fresh would have produced a second exit dialect one milestone early,
+competing with the one already tested.
+
+**Why it generalises.** A newly generalised mechanic almost always has a concrete ancestor. The
+earlier milestone shipped ONE member of the family and called it something specific, so a search
+for the general name finds nothing and the ancestor stays invisible. Absence of the abstraction is
+not absence of the implementation.
+
+**The discipline:** before authoring presentation for a generalised mechanic, name its concrete
+members and search for THOSE. Then state explicitly: what is inherited unchanged, what is
+consciously evolved and why. Never parallel-invent silently.
+
+**The other half:** the audit also has to report what does NOT exist, or it becomes an argument for
+reuse only. It found no elevator anywhere in code -- three source comments explicitly rule it out
+of scope -- and found that winning a floor produces LESS feedback than dying (a `print()` versus an
+overlay). Both are real gaps. Recording them as gaps, rather than quietly filling them, is what
+keeps the audit honest.
+
+**Applies elsewhere:** M3 netcode (the offline driver is the ancestor of the networked one); M4
+save/load (the golden-fixture serializer already round-trips a FloorPlan); any "we need a general
+X" where a specific X already shipped.
+
 
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
