@@ -154,66 +154,116 @@ func test_floor_two_route_a_cannot_be_entered_without_the_control() -> void:
 
 
 # --- 5: THE BARRIER MUST LIE ACROSS TRAVEL -----------------------------------------------------
-
-## A DOORWAY-SHAPED aperture (wider than deep) between patches separated along z gets a barrier
-## running ALONG the travel direction. A shot then runs parallel to its own barrier and passes
-## through the shut gate, while presentation draws the box across the opening -- the picture and
-## the rule disagreeing, which P34 forbids. Floor 2 shipped exactly this.
-func test_a_doorway_wider_than_it_is_deep_is_reported() -> void:
-	var plan: FloorPlan = _two_room_plan(2.0)
-	plan.connections[0].aperture = Rect2(-6.0, -1.5, 12.0, 5.0)  # 12 wide, 5 deep; travel is z
-	plan.validate()
-	assert_push_error("lies ALONG the direction of travel")
-
-
-func test_a_corridor_deeper_than_it_is_wide_passes() -> void:
-	var plan: FloorPlan = _two_room_plan(2.0)
-	plan.connections[0].aperture = Rect2(-2.5, -1.5, 5.0, 5.0)
-	plan.validate()
-	assert_push_error_count(0)
+#
+# THE DEFECT. The sim used to infer a closed gate's barrier orientation from the APERTURE'S
+# proportions, assuming travel ran along its longer dimension. True for a corridor-shaped
+# aperture; false for a DOORWAY-shaped one wider than it is deep. Floor 2 authored exactly that,
+# so the barrier lay ALONG travel: a shot ran parallel to its own barrier and passed through a
+# gate the player could see was shut, while presentation drew the box across the opening.
+#
+# THE ROOT FIX (ruled 2026-09-02) derives the barrier from the patches the connection joins.
+# These fire real shots at real gates in BOTH aperture shapes, because the point of the fix is
+# that shape no longer decides anything.
 
 
-## THE GUARD RESTATES SimWorld._gate_segment's rule from gen/, because gen/ must not import sim/.
-## A second copy that silently drifts is worse than no check, so the two are pinned together
-## here: shoot at a shut gate the guard accepts, and at one it rejects, and require the sim to
-## agree with the guard both times.
-func test_the_guard_and_the_sim_agree_about_which_gates_stop_a_shot() -> void:
-	for deep: bool in [true, false]:
-		var near := Rect2(-10.0, -10.0, 20.0, 10.0)
-		var far := Rect2(-10.0, 2.0, 20.0, 10.0)
-		var aperture: Rect2 = Rect2(-2.5, -1.5, 5.0, 5.0) if deep else Rect2(-6.0, -1.5, 12.0, 5.0)
-		var plan := FloorPlan.new()
-		plan.patches.append(_patch(0, near))
-		plan.patches.append(_patch(1, far))
-		plan.connections.append(_connection(0, 0, 1, aperture, false))
+## Two rooms separated along `axis`, joined by an aperture of the given shape.
+func _gate_fixture(separated_on_z: bool, doorway: bool, starts_open: bool) -> Dictionary:
+	var near: Rect2 = Rect2(-10.0, -10.0, 20.0, 8.0) if separated_on_z else Rect2(-10.0, -10.0, 8.0, 20.0)
+	var far: Rect2 = Rect2(-10.0, 2.0, 20.0, 8.0) if separated_on_z else Rect2(2.0, -10.0, 8.0, 20.0)
+	# DOORWAY = wide across travel, shallow along it. CORRIDOR = the transpose.
+	var aperture: Rect2
+	if separated_on_z:
+		aperture = Rect2(-6.0, -3.0, 12.0, 6.0) if doorway else Rect2(-2.5, -3.0, 5.0, 6.0)
+	else:
+		aperture = Rect2(-3.0, -6.0, 6.0, 12.0) if doorway else Rect2(-3.0, -2.5, 6.0, 5.0)
 
-		var sim := SimWorld.new()
-		sim.set_damage_matrix({}, 1.5, 0.5)
-		var rects: Array[Rect2] = [near, far]
-		sim.load_floor(WalkableBounds.new(rects), Vector3.ZERO)
-		sim.register_patches(rects)
-		sim.register_solid_segments(plan.solid_segments())
-		sim.register_connection(0, aperture, false)
-		sim.add_entity(0, Vector3(0.0, 0.0, -3.0), 0.0, Vector3(0, 0, 1), 0.0)
-		sim.register_combatant(0, 999.0, &"envoy", 0, 0.0, &"player")
-		sim.add_entity(1, Vector3(0.0, 0.0, 5.0), 0.0)
-		sim.register_combatant(1, 100.0, &"fang", 0, 0.9, &"enemy")
-		sim.register_gun(&"g", 10.0, &"force", 30.0, 600, 0.2, 0.0, 1)
-		sim.set_equipped_weapon(0, &"g")
+	var plan := FloorPlan.new()
+	plan.patches.append(_patch(0, near))
+	plan.patches.append(_patch(1, far))
+	plan.connections.append(_connection(0, 0, 1, aperture, starts_open))
 
-		var hit: bool = false
-		for event in sim.tick([Command.new(sim.tick_count, 0, "attack", {"aim": Vector3(0, 0, 1)})] as Array[Command], 1.0 / 30.0):
+	var sim := SimWorld.new()
+	sim.set_damage_matrix({}, 1.5, 0.5)
+	var rects: Array[Rect2] = [near, far]
+	sim.load_floor(WalkableBounds.new(rects), Vector3.ZERO)
+	sim.register_patches(rects)
+	sim.register_solid_segments(plan.solid_segments())
+	sim.register_connection(0, aperture, starts_open)
+	return {"sim": sim, "plan": plan, "separated_on_z": separated_on_z}
+
+
+## Fires through the gate along the direction of travel. Returns whether the target was hit.
+func _shoot_through(fixture: Dictionary) -> bool:
+	var sim: SimWorld = fixture["sim"]
+	var on_z: bool = fixture["separated_on_z"]
+	var aim: Vector3 = Vector3(0, 0, 1) if on_z else Vector3(1, 0, 0)
+	sim.add_entity(0, -aim * 5.0, 0.0, aim, 0.0)
+	sim.register_combatant(0, 999.0, &"envoy", 0, 0.0, &"player")
+	sim.add_entity(1, aim * 6.0, 0.0)
+	sim.register_combatant(1, 100.0, &"fang", 0, 0.9, &"enemy")
+	sim.register_gun(&"g", 10.0, &"force", 30.0, 600, 0.2, 0.0, 1)
+	sim.set_equipped_weapon(0, &"g")
+	var hit: bool = false
+	for event in sim.tick([Command.new(sim.tick_count, 0, "attack", {"aim": aim})] as Array[Command], 1.0 / 30.0):
+		hit = hit or event.kind == "hit"
+	for i in 90:
+		for event in sim.tick([] as Array[Command], 1.0 / 30.0):
 			hit = hit or event.kind == "hit"
-		for i in 90:
-			for event in sim.tick([] as Array[Command], 1.0 / 30.0):
-				hit = hit or event.kind == "hit"
-		if deep:
-			assert_false(hit, "the shape the guard ACCEPTS must really stop a shot")
-		else:
-			assert_true(hit, "and the shape it REJECTS must really leak one -- otherwise the guard is superstition")
+	return hit
+
+
+## THE CASE THAT SHIPPED BROKEN: a doorway wider than it is deep.
+func test_a_doorway_shaped_gate_blocks_when_closed() -> void:
+	for on_z: bool in [true, false]:
+		assert_false(_shoot_through(_gate_fixture(on_z, true, false)),
+			"a shut doorway-shaped gate must stop the shot (travel along %s)" % ("z" if on_z else "x"))
+
+
+func test_a_corridor_shaped_gate_blocks_when_closed() -> void:
+	for on_z: bool in [true, false]:
+		assert_false(_shoot_through(_gate_fixture(on_z, false, false)),
+			"a shut corridor-shaped gate must stop the shot (travel along %s)" % ("z" if on_z else "x"))
+
+
+## AND BOTH MUST PASS WHEN OPEN -- otherwise the fix is just a wall, and gate solidity would no
+## longer derive from connection state.
+func test_both_shapes_let_the_shot_through_when_open() -> void:
+	for doorway: bool in [true, false]:
+		for on_z: bool in [true, false]:
+			assert_true(_shoot_through(_gate_fixture(on_z, doorway, true)),
+				"an OPEN gate must obstruct nothing (%s, travel along %s)" % [
+					"doorway" if doorway else "corridor", "z" if on_z else "x"])
+
+
+## PRESENTATION AND SIM MUST AGREE ABOUT ORIENTATION. The mesh is built from the sim's own
+## barrier, so this asserts the fact the mesh is built FROM -- the barrier lies across travel,
+## whatever the aperture's shape. Drawing it across x regardless is exactly the old bug.
+func test_the_barrier_lies_across_travel_for_every_aperture_shape() -> void:
+	for doorway: bool in [true, false]:
+		for on_z: bool in [true, false]:
+			var sim: SimWorld = _gate_fixture(on_z, doorway, false)["sim"]
+			var barrier: Dictionary = sim.gate_barrier(0)
+			assert_false(barrier.is_empty(), "every registered connection must have a barrier")
+			assert_eq(barrier["axis"], &"z" if on_z else &"x",
+				"barrier must lie across travel (%s aperture, travel along %s)" % [
+					"doorway" if doorway else "corridor", "z" if on_z else "x"])
 
 
 func test_both_authored_floors_have_correctly_oriented_barriers() -> void:
 	for depth in [1, 2]:
-		DepthGenerator.generate(0, depth)
-		assert_push_error_count(0, "authored floor at depth %d must have no misoriented gate barrier" % depth)
+		var plan: FloorPlan = DepthGenerator.generate(0, depth)
+		var sim := SimWorld.new()
+		sim.set_damage_matrix({}, 1.5, 0.5)
+		sim.load_floor(plan.make_bounds(), plan.entry_point)
+		sim.register_patches(plan.patch_rects())
+		for connection in plan.connections:
+			sim.register_connection(connection.connection_id, connection.aperture, connection.starts_open)
+		for connection in plan.connections:
+			var a: Rect2 = plan.patch_by_id(connection.patch_ids.x).rect
+			var b: Rect2 = plan.patch_by_id(connection.patch_ids.y).rect
+			var apart_on_z: bool = a.end.y < b.position.y or b.end.y < a.position.y
+			var apart_on_x: bool = a.end.x < b.position.x or b.end.x < a.position.x
+			if apart_on_z == apart_on_x:
+				continue  # touching patches: an always-open connection, orientation is moot
+			assert_eq(sim.gate_barrier(connection.connection_id)["axis"], &"z" if apart_on_z else &"x",
+				"depth %d connection %d barrier must lie across travel" % [depth, connection.connection_id])

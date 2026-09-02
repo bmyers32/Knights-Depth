@@ -181,3 +181,74 @@ func test_boundary_derivation_is_deterministic() -> void:
 	assert_eq(first.size(), second.size(), "the same plan must derive the same number of segments")
 	for i in first.size():
 		assert_eq(first[i], second[i], "segment %d must be identical, including its style" % i)
+
+
+# --- 9: the open-edge lip (2026-09-02) ---------------------------------------------------------
+#
+# `ledge` used to render as NOTHING, so an authored open edge and a wall that was never built
+# were the same picture -- an absence. Floor 2's Vault read as an unfinished room for exactly
+# that reason. open_edge_segments() exists so presentation can draw a low rim there.
+#
+# THE POINT OF THESE TESTS IS THAT NO LAW MOVED. A picture was added to a fact that already
+# existed, and the guarantees below are what "presentation only" has to mean.
+
+func test_open_edges_are_the_exact_complement_of_solid_ones() -> void:
+	var plan: FloorPlan = _plan_of([_patch(SOLO, &"wall", {"north": &"ledge", "east": &"ledge"})])
+	assert_eq(plan.solid_segments().size(), 2, "two sides stay solid")
+	assert_eq(plan.open_edge_segments().size(), 2, "and the other two are open edges")
+	for open_edge in plan.open_edge_segments():
+		for solid in plan.solid_segments():
+			assert_false(open_edge["axis"] == solid["axis"] and absf(float(open_edge["at"]) - float(solid["at"])) < 0.001
+					and absf(float(open_edge["outward"]) - float(solid["outward"])) < 0.001,
+				"no span may be both a wall and an open edge")
+
+
+func test_a_fully_walled_patch_has_no_open_edges_and_the_inverse() -> void:
+	assert_eq(_plan_of([_patch(SOLO, &"wall")]).open_edge_segments().size(), 0)
+	assert_eq(_plan_of([_patch(SOLO, &"ledge")]).solid_segments().size(), 0)
+	assert_eq(_plan_of([_patch(SOLO, &"ledge")]).open_edge_segments().size(), 4,
+		"a wholly open patch has four rims to draw")
+
+
+## INTERNAL SEAMS STAY INVISIBLE for open edges exactly as they do for walls -- the lip must not
+## appear along a join inside the walkable union, or every floor grows fences through its middle.
+func test_an_internal_seam_produces_no_lip() -> void:
+	var west: WalkablePatch = _patch(Rect2(-10.0, -5.0, 10.0, 10.0), &"ledge")
+	var east: WalkablePatch = _patch(Rect2(0.0, -5.0, 10.0, 10.0), &"ledge")
+	east.patch_id = 1
+	var plan: FloorPlan = _plan_of([west, east])
+	for open_edge in plan.open_edge_segments():
+		assert_false(open_edge["axis"] == &"x" and absf(float(open_edge["at"])) < 0.001,
+			"the shared seam must not grow a rim")
+
+
+## THE SIM NEVER SEES THEM. A lip that reached the sim would be a new boundary type by the back
+## door -- the exact thing the ruling forbade.
+func test_the_lip_stops_no_shot_and_bounds_no_body() -> void:
+	var room := Rect2(-10.0, -5.0, 20.0, 10.0)
+	var plan: FloorPlan = _plan_of([_patch(room, &"ledge")])
+	var sim := SimWorld.new()
+	sim.set_damage_matrix({}, 1.5, 0.5)
+	var rects: Array[Rect2] = [room]
+	sim.load_floor(WalkableBounds.new(rects), Vector3.ZERO)
+	sim.register_patches(rects)
+	# The driver hands over solid_segments() ONLY. Registering open edges is not possible by
+	# accident: there is no path for them into the sim at all.
+	sim.register_solid_segments(plan.solid_segments())
+	assert_eq(plan.open_edge_segments().size(), 4, "the rims exist for presentation")
+
+	sim.add_entity(0, Vector3(-8.0, 0.0, 0.0), 0.0, Vector3(1, 0, 0))
+	sim.register_combatant(0, 999.0, &"envoy", 0, 0.0, &"player")
+	sim.add_entity(1, Vector3(8.0, 0.0, 0.0), 0.0)
+	sim.register_combatant(1, 100.0, &"fang", 0, 0.5, &"enemy")
+	sim.register_gun(&"g", 10.0, &"force", 30.0, 600, 0.2, 0.0, 1)
+	sim.set_equipped_weapon(0, &"g")
+	var hit: bool = false
+	for event in sim.tick([Command.new(sim.tick_count, 0, "attack", {"aim": Vector3(1, 0, 0)})] as Array[Command], 1.0 / 30.0):
+		hit = hit or event.kind == "hit"
+	for i in 60:
+		for event in sim.tick([] as Array[Command], 1.0 / 30.0):
+			hit = hit or event.kind == "hit"
+	assert_true(hit, "an open edge must still stop no shot -- the lip is a picture, not a wall")
+	assert_false(sim._bounds.fits(Vector3(11.0, 0.0, 0.0), 0.5),
+		"and legality is unchanged: it never came from these segments either way")

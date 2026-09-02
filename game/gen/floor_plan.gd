@@ -102,6 +102,35 @@ func solid_segments() -> Array[Dictionary]:
 	return _merge_collinear(_solid_only(_reject_style_conflicts(segments)))
 
 
+## THE OPEN EDGES — the exact complement of solid_segments(), in the same shape, derived from the
+## same pass (ruled 2026-09-02).
+##
+## PRESENTATION ONLY, and deliberately not handed to the sim. `ledge` renders as NOTHING today,
+## so "ground intentionally ends here" and "a wall that was never built" are the same picture --
+## an absence. Floor 2's Vault read as an unfinished room for exactly that reason. This exists so
+## presentation can draw a low lip at an authored open edge.
+##
+## IT CHANGES NO LAW. A ledge stops no projectile, bounds no body and is not a new boundary type:
+## movement legality never came from these segments, and the sim still receives solid_segments()
+## alone. The lip is a picture of an edge that already existed.
+func open_edge_segments() -> Array[Dictionary]:
+	var rects: Array[Rect2] = all_rects()
+	var segments: Array[Dictionary] = []
+	for patch in patches:
+		_segments_of_patch(patch, rects, segments)
+	for connection in connections:
+		_segments_of(connection.aperture, 0.0, rects, segments)
+	return _merge_collinear(_ledge_only(_reject_style_conflicts(segments)))
+
+
+static func _ledge_only(segments: Array[Dictionary]) -> Array[Dictionary]:
+	var open_edges: Array[Dictionary] = []
+	for segment in segments:
+		if segment["style"] == &"ledge":
+			open_edges.append(segment)
+	return open_edges
+
+
 ## CONFLICT DETECTION, not precedence. Two overlapping patches can both own the same surviving
 ## exterior span; if they disagree about its style there is no honest winner, so this FAILS
 ## LOUDLY rather than resolving by array order. If it never fires, the condition genuinely cannot
@@ -387,7 +416,6 @@ func _snap(value: float) -> float:
 func validate() -> void:
 	_reject_unnamed_connection_patches()
 	_reject_bypassable_gates()
-	_reject_misoriented_gate_barriers()
 
 
 ## A connection that does not name the patches it joins cannot be checked by anything above,
@@ -469,39 +497,14 @@ static func _touches(a: Rect2, b: Rect2) -> bool:
 			and a.position.y <= b.end.y and b.position.y <= a.end.y
 
 
-## THE GATE BARRIER MUST LIE ACROSS TRAVEL, not along it (added 2026-09-02, same firing).
+## RETIRED 2026-09-02, the day after it was added: _reject_misoriented_gate_barriers.
 ##
-## SimWorld._gate_segment derives a closed gate's solid line from the aperture's PROPORTIONS,
-## assuming travel runs along the aperture's longer dimension -- true for a CORRIDOR-shaped
-## aperture, false for a DOORWAY-shaped one that is wider than it is deep. Floor 2 authored a
-## 10x5 mouth between two patches separated along z, so the sim placed the barrier along the
-## travel direction instead of across it. A shot fired straight at the shut gate ran PARALLEL to
-## its own barrier and passed through untouched, while presentation drew the box across the
-## opening -- the picture and the rule disagreed, which is exactly what P34 forbids.
+## It guarded a symptom. The sim used to infer a closed gate's barrier orientation from the
+## APERTURE'S proportions, so the guard refused aperture shapes that would be misread. The root
+## fix (ruled) derives the barrier from the patches a connection joins instead, and once shape
+## no longer decides anything there is nothing left for a shape guard to refuse -- the check
+## could only ever fire on floors that are now correct.
 ##
-## DETECTION, NOT REPAIR, and deliberately not a change to the aperture heuristic: the honest
-## fix is to derive the barrier from the patches a connection joins rather than from its shape,
-## and that changes the sim/gen registration contract. Until that is ruled on, this makes the
-## latent mismatch loud instead of silent.
-func _reject_misoriented_gate_barriers() -> void:
-	for connection in connections:
-		if not _is_closable(connection.connection_id):
-			continue
-		var a: WalkablePatch = patch_by_id(connection.patch_ids.x)
-		var b: WalkablePatch = patch_by_id(connection.patch_ids.y)
-		if a == null or b == null:
-			continue
-		# The patches are disjoint (guaranteed above), so exactly one axis carries the gap, and
-		# that axis IS the direction of travel through the gate.
-		var travel_is_z: bool = a.rect.end.y < b.rect.position.y or b.rect.end.y < a.rect.position.y
-		var aperture: Rect2 = connection.aperture
-		# Restating SimWorld._gate_segment's rule rather than importing it: sim/ must not be
-		# imported by gen/, and a second copy that silently drifts is worse than no check, so the
-		# rule is named here explicitly and tested against the sim in tests/test_gate_integrity.gd.
-		var barrier_is_across_z: bool = aperture.size.y >= aperture.size.x
-		if travel_is_z != barrier_is_across_z:
-			push_error(("FloorPlan: connection %d is a %.0fx%.0f aperture joining patches separated along %s, so "
-				+ "the barrier the sim derives lies ALONG the direction of travel rather than across it -- a shot "
-				+ "at the shut gate runs parallel to its own barrier and passes through. Author the aperture "
-				+ "longer in the travel direction than across it.")
-				% [connection.connection_id, aperture.size.x, aperture.size.y, "z" if travel_is_z else "x"])
+## Removed rather than left passing: a guard that cannot fail is not evidence, and reading one
+## as though it were is how a suite starts lying. What it protected is now covered directly by
+## tests/test_gate_integrity.gd, which fires real shots at real gates in both orientations.

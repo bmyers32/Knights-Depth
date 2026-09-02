@@ -254,7 +254,10 @@ func _load_floor() -> void:
 	_camera.set_floor_extent(_floor_extent_of(plan))
 	_camera.snap_to_target()
 
-	var spawned: Array[Dictionary] = _floor_builder.build(plan, _next_actor_id)
+	var barriers: Dictionary = {}
+	for connection in plan.connections:
+		barriers[connection.connection_id] = sim.gate_barrier(connection.connection_id)
+	var spawned: Array[Dictionary] = _floor_builder.build(plan, _next_actor_id, barriers)
 	_floor_builder.build_walls(plan)
 	_next_actor_id += spawned.size()  # ids are never reused within a run
 	for record in spawned:

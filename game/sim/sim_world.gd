@@ -270,6 +270,11 @@ var _run_persistent_actors: Dictionary = {}
 ## every authoritative displacement already funnels through (_legal_bounds_for).
 var _connections: Dictionary = {}        # connection_id -> {aperture}
 var _connection_open: Dictionary = {}    # connection_id -> bool  (THE gate state)
+## connection_id -> the solid line a CLOSED gate presents, derived from real patch geometry in
+## _rebuild_regions. THE ONE AUTHORITATIVE ORIENTATION: presentation reads it back through
+## gate_barrier() rather than deriving its own, so the barrier and the picture of it cannot be
+## oriented differently (P34).
+var _gate_barriers: Dictionary = {}
 var _triggers: Dictionary = {}           # trigger_id -> {kind, region, source_id, once, effects}
 var _triggers_fired: Dictionary = {}     # trigger_id -> true
 var _trigger_condition_met: Dictionary = {}  # trigger_id -> bool, last tick's occupancy state (edge detection)
@@ -419,6 +424,7 @@ const STATE_SCOPES: Dictionary = {
 	# dies with the floor, including which room owned which actor.
 	"_connections": SCOPE_FLOOR,
 	"_connection_open": SCOPE_FLOOR,
+	"_gate_barriers": SCOPE_FLOOR,
 	"_triggers": SCOPE_FLOOR,
 	"_triggers_fired": SCOPE_FLOOR,
 	"_trigger_condition_met": SCOPE_FLOOR,
@@ -700,6 +706,10 @@ func assign_actor_encounter(actor_id: int, encounter_id: int) -> bool:
 ## region is an authoring convenience that may overhang a void, and confining an actor to a raw
 ## rectangle would let it walk on nothing.
 func _rebuild_regions() -> void:
+	# Barriers depend on patch geometry, so they are recomputed wherever regions are -- both
+	# registration orders (patches then connections, or the reverse) end up with the same answer.
+	for connection_id in _connections:
+		_gate_barriers[connection_id] = _derive_gate_barrier(_connections[connection_id]["aperture"])
 	var open_rects: Array[Rect2] = _patch_rects.duplicate()
 	for connection_id in _connections:
 		if bool(_connection_open.get(connection_id, false)):
@@ -980,21 +990,61 @@ func _find_earliest_solid_hit(start: Vector3, end: Vector3, hit_radius: float) -
 	for connection_id in _connections:
 		if bool(_connection_open.get(connection_id, false)):
 			continue  # an open route obstructs nothing
-		var t: float = _segment_crossing(start, end, _gate_segment(_connections[connection_id]["aperture"]), hit_radius)
+		var t: float = _segment_crossing(start, end, _gate_barriers[connection_id], hit_radius)
 		if t >= 0.0 and t < best_t:
 			best_t = t
 	return {} if best_t == INF else {"t": best_t}
 
 
-## A CLOSED GATE IS A SOLID LINE ACROSS ITS APERTURE, derived from the aperture rather than
-## authored, so the barrier and the picture of it can never be placed differently.
-func _gate_segment(aperture: Rect2) -> Dictionary:
+## A CLOSED GATE IS A SOLID LINE ACROSS THE DIRECTION OF TRAVEL.
+##
+## DERIVED FROM THE PATCHES THE APERTURE JOINS, NOT FROM ANY SHAPE (ruled 2026-09-02). The
+## previous rule inferred travel from the APERTURE'S proportions -- true for a corridor-shaped
+## aperture, FALSE for a doorway-shaped one wider than it is deep. Floor 2 authored exactly
+## that, so the barrier was laid ALONG the direction of travel: a shot fired at the shut gate
+## ran parallel to its own barrier and passed straight through, while presentation drew the box
+## across the opening. The picture and the rule disagreed, which is what P34 forbids.
+##
+## NO SHAPE RULE CAN WORK, and the first attempt at this fix proved it by failing the same way:
+## measuring the GAP instead of the aperture is still a shape heuristic, and a wide doorway
+## between narrowly-separated rooms has a gap that is longer ALONG travel than across it. Only
+## the patches themselves carry the answer. Travel runs along the axis that SEPARATES them, and
+## the barrier lies across that axis.
+func _derive_gate_barrier(aperture: Rect2) -> Dictionary:
+	var touched: Array[Rect2] = []
+	for rect in _patch_rects:
+		if rect.intersection(aperture).get_area() > 0.0:
+			touched.append(rect)
+	for i in touched.size():
+		for j in range(i + 1, touched.size()):
+			var a: Rect2 = touched[i]
+			var b: Rect2 = touched[j]
+			var apart_on_x: bool = a.end.x < b.position.x or b.end.x < a.position.x
+			var apart_on_z: bool = a.end.y < b.position.y or b.end.y < a.position.y
+			# Exactly one axis may carry the gap; both would mean a diagonal relationship the
+			# grammar has no meaning for, and neither means they touch (see the fallback).
+			if apart_on_x == apart_on_z:
+				continue
+			if apart_on_z:
+				return {"axis": &"z", "at": (minf(a.end.y, b.end.y) + maxf(a.position.y, b.position.y)) * 0.5,
+					"min": aperture.position.x, "max": aperture.end.x}
+			return {"axis": &"x", "at": (minf(a.end.x, b.end.x) + maxf(a.position.x, b.position.x)) * 0.5,
+				"min": aperture.position.y, "max": aperture.end.y}
+	# NO SEPARATED PAIR: either the patches touch -- in which case a closed gate separates nothing
+	# anyway and FloorPlan._reject_bypassable_gates refuses to author it -- or no patches are
+	# registered at all, which is a bare unit fixture. Preserved verbatim as the pre-2026-09-02
+	# rule so those fixtures keep their exact behaviour rather than silently losing their barrier.
 	if aperture.size.y >= aperture.size.x:
-		# travel runs along z, so the barrier lies across x
 		return {"axis": &"z", "at": aperture.position.y + aperture.size.y * 0.5,
 			"min": aperture.position.x, "max": aperture.end.x}
 	return {"axis": &"x", "at": aperture.position.x + aperture.size.x * 0.5,
 		"min": aperture.position.y, "max": aperture.end.y}
+
+
+## THE ORIENTATION PRESENTATION MUST DRAW. Read back rather than re-derived, so a gate's picture
+## is a projection of the rule instead of a second opinion about it.
+func gate_barrier(connection_id: int) -> Dictionary:
+	return _gate_barriers.get(connection_id, {})
 
 
 ## Parametric t in [0,1] at which the projectile's leading edge meets this segment, or -1.

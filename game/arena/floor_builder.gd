@@ -30,6 +30,10 @@ const _FLOOR_THICKNESS: float = 0.2
 const _WALL_HEIGHT: float = 2.2
 const _WALL_THICKNESS: float = 0.6
 const _GATE_HEIGHT: float = 2.6
+## The open-edge lip: low enough to read as a rim rather than as cover, and thin enough that it
+## never looks like a wall someone forgot to finish.
+const _LIP_HEIGHT: float = 0.35
+const _LIP_THICKNESS: float = 0.45
 
 const _SURFACE_COLORS: Dictionary = {
 	&"stone": Color(0.19, 0.20, 0.24),
@@ -40,6 +44,8 @@ const _SURFACE_COLORS: Dictionary = {
 const _CORRIDOR_COLOR: Color = Color(0.15, 0.16, 0.19)
 const _WALL_COLOR: Color = Color(0.36, 0.35, 0.42)
 const _GATE_CLOSED_COLOR: Color = Color(0.78, 0.28, 0.26)
+## Deliberately close to the wall colour but lighter: same material family, clearly not a wall.
+const _LIP_COLOR: Color = Color(0.34, 0.35, 0.39)
 const _MARKER_COLOR: Color = Color(0.88, 0.80, 0.42)
 const _BREAKABLE_COLOR: Color = Color(0.52, 0.40, 0.24)
 ## A COMMITMENT plate (the party's, the exit's): bold, warm, unmistakable.
@@ -50,6 +56,7 @@ const _PLATE_THICKNESS: float = 0.12
 const _PLATE_MINOR_THICKNESS: float = 0.06
 
 var _gates: Dictionary = {}          # connection_id -> barrier mesh
+var _gate_barriers: Dictionary = {}  # connection_id -> the sim's authoritative barrier line
 var _plates: Dictionary = {}         # trigger_id -> plate mesh
 var _breakables: Dictionary = {}     # breakable_id -> mesh
 ## rect -> elevation, so an actor's transform can be lifted onto raised ground.
@@ -59,8 +66,14 @@ var _elevation_rects: Array = []
 ## Clears the previous floor and builds this one. Returns one record per spawned actor:
 ## {"actor_id", "enemy_key", "encounter_id", "node", "position"}. The DRIVER registers those
 ## with the sim through the ordinary ContentRegistrar path — this builder never touches SimWorld.
-func build(plan: FloorPlan, first_actor_id: int) -> Array[Dictionary]:
+## `gate_barriers` is the SIM'S OWN derivation, connection_id -> {axis, at, min, max}, handed in
+## by the driver. A gate's picture must be a projection of the rule rather than a second opinion
+## about it: this builder used to draw every barrier across x regardless, which was silently
+## right for corridors and silently wrong for doorways -- shots passed through a gate the player
+## could see was shut.
+func build(plan: FloorPlan, first_actor_id: int, gate_barriers: Dictionary = {}) -> Array[Dictionary]:
 	clear_floor()
+	_gate_barriers = gate_barriers
 	for patch in plan.patches:
 		_build_patch(patch)
 		_elevation_rects.append({"rect": patch.rect, "elevation": patch.elevation})
@@ -184,6 +197,32 @@ func _build_patch(patch: WalkablePatch) -> void:
 func build_walls(plan: FloorPlan) -> void:
 	for segment in plan.solid_segments():
 		_build_wall_segment(segment)
+	# THE OPEN EDGES GET A LIP (2026-09-02). Without one, `ledge` draws nothing at all, so an
+	# authored open edge and an unbuilt wall are the same picture -- Floor 2's Vault read as an
+	# unfinished room for exactly that reason. A lip says "ground intentionally ends here".
+	#
+	# PICTURE ONLY. It stops no shot, bounds no body and is not a new boundary type: the sim
+	# receives solid_segments() alone and never sees these. Kept below knee height so it reads as
+	# a rim rather than as cover the player might expect to crouch behind.
+	for segment in plan.open_edge_segments():
+		_build_ledge_lip(segment)
+
+
+func _build_ledge_lip(segment: Dictionary) -> void:
+	var vertical: bool = segment["axis"] == &"x"
+	var at: float = float(segment["at"])
+	var low: float = float(segment["min"])
+	var high: float = float(segment["max"])
+	var span: float = high - low
+	var middle: float = low + span * 0.5
+	# Sits just INSIDE the edge, so the lip reads as the floor's own rim rather than as a
+	# separate object floating beyond it.
+	var push: float = -float(segment["outward"]) * _LIP_THICKNESS * 0.5
+	var y: float = float(segment["elevation"]) + _LIP_HEIGHT * 0.5
+	if vertical:
+		_add_box(Vector3(_LIP_THICKNESS, _LIP_HEIGHT, span), Vector3(at + push, y, middle), _LIP_COLOR)
+	else:
+		_add_box(Vector3(span, _LIP_HEIGHT, _LIP_THICKNESS), Vector3(middle, y, at + push), _LIP_COLOR)
 
 
 func _build_wall_segment(segment: Dictionary) -> void:
@@ -216,11 +255,21 @@ func _build_connection(connection: TraversalConnection, plan: FloorPlan) -> void
 	_elevation_rects.append({"rect": rect, "elevation": elevation})
 	if not connection.has_barrier:
 		return
-	var gate := _add_box(
-		Vector3(rect.size.x, _GATE_HEIGHT, _WALL_THICKNESS),
-		Vector3(centre.x, elevation + _GATE_HEIGHT * 0.5, centre.z),
-		_GATE_CLOSED_COLOR,
-	)
+	# Drawn ON the sim's barrier line, not merely near it, so the mesh and the rule occupy the
+	# same place and the same orientation.
+	var barrier: Dictionary = _gate_barriers.get(connection.connection_id, {})
+	var size := Vector3(rect.size.x, _GATE_HEIGHT, _WALL_THICKNESS)
+	var at: Vector3 = Vector3(centre.x, elevation + _GATE_HEIGHT * 0.5, centre.z)
+	if not barrier.is_empty():
+		var span: float = float(barrier["max"]) - float(barrier["min"])
+		var middle: float = (float(barrier["min"]) + float(barrier["max"])) * 0.5
+		if barrier["axis"] == &"z":
+			size = Vector3(span, _GATE_HEIGHT, _WALL_THICKNESS)
+			at = Vector3(middle, elevation + _GATE_HEIGHT * 0.5, float(barrier["at"]))
+		else:
+			size = Vector3(_WALL_THICKNESS, _GATE_HEIGHT, span)
+			at = Vector3(float(barrier["at"]), elevation + _GATE_HEIGHT * 0.5, middle)
+	var gate := _add_box(size, at, _GATE_CLOSED_COLOR)
 	gate.visible = not connection.starts_open
 	_gates[connection.connection_id] = gate
 
