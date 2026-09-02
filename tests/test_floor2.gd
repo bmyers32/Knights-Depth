@@ -74,9 +74,9 @@ func _patch(patch_id: int) -> Rect2:
 	return plan.patch_by_id(patch_id).rect
 
 
-## Route B, the open first traversal: commons -> route B -> junction -> party plate.
+## Route B, the open first traversal: concourse -> route B -> junction -> party plate.
 func _take_route_b() -> void:
-	assert_true(_walk_to(_centre(_patch(L.P_COMMONS))), "into the commons")
+	assert_true(_walk_to(_centre(_patch(L.P_CONCOURSE))), "into the concourse")
 	assert_true(_walk_to(Vector3(22.0, 0.0, -42.0)), "toward the route B mouth")
 	assert_true(_walk_to(Vector3(23.0, 0.0, -55.0)), "down route B")
 	assert_true(_walk_to(Vector3(20.0, 0.0, -66.0)), "into the junction")
@@ -136,7 +136,7 @@ func test_the_vault_never_seals_anyone_in() -> void:
 
 func test_route_a_is_closed_before_the_control() -> void:
 	assert_false(_open(L.C_TO_A), "the shortcut must start shut")
-	assert_true(_walk_to(_centre(_patch(L.P_COMMONS))), "into the commons")
+	assert_true(_walk_to(_centre(_patch(L.P_CONCOURSE))), "into the concourse")
 	assert_false(_open(L.C_TO_A), "and stay shut until the control is used")
 
 
@@ -194,7 +194,7 @@ func test_the_terrace_is_gated_until_party_sync() -> void:
 func test_the_exit_requires_the_plate_not_merely_the_terrace() -> void:
 	_take_route_b()
 	_stand_on(L.PARTY_PLATE)
-	assert_true(_walk_to(Vector3(-20.0, 0.0, -74.0)), "step onto the terrace")
+	assert_true(_walk_to(Vector3(-20.0, 0.0, -76.0)), "step onto the terrace")
 	assert_false(sim.debug_describe_floor()["floor_complete"], "arriving is not finishing")
 	_stand_on(L.EXIT_PLATE)
 	assert_true(sim.debug_describe_floor()["floor_complete"], "standing on the exit finishes it")
@@ -204,15 +204,15 @@ func test_the_exit_requires_the_plate_not_merely_the_terrace() -> void:
 
 ## Its home must be CONVEX, which P33 requires and a single rect guarantees.
 func test_the_ambient_home_is_convex() -> void:
-	var ambient: EncounterSite = plan.encounter_by_id(L.E_COMMONS_AMBIENT)
+	var ambient: EncounterSite = plan.encounter_by_id(L.E_CONCOURSE_AMBIENT)
 	assert_eq(ambient.regions.size(), 1, "one rect is convex by construction, not by inspection")
-	assert_eq(ambient.regions[0], _patch(L.P_COMMONS))
+	assert_eq(ambient.regions[0], _patch(L.P_CONCOURSE))
 
 
 func test_the_ambient_roster_fits_and_binds_to_its_home() -> void:
-	for spawn in plan.encounter_by_id(L.E_COMMONS_AMBIENT).roster:
+	for spawn in plan.encounter_by_id(L.E_CONCOURSE_AMBIENT).roster:
 		var stats: Resource = ContentDB.get_resource(&"enemy", spawn["enemy_key"])
-		assert_true(_patch(L.P_COMMONS).has_point(Vector2(spawn["position"].x, spawn["position"].z)),
+		assert_true(_patch(L.P_CONCOURSE).has_point(Vector2(spawn["position"].x, spawn["position"].z)),
 			"%s spawns outside the home that owns it" % spawn["enemy_key"])
 		assert_true(sim._bounds.fits(spawn["position"], stats.combat_radius),
 			"%s does not fit where it spawns" % spawn["enemy_key"])
@@ -260,15 +260,15 @@ func _is_aperture_flank(at: float, axis: StringName) -> bool:
 
 # --- 11: THE VISIBLE-BEFORE-REACHABLE LINE ------------------------------------------------------
 
-## The measured beat was: standing at the COMMONS north edge, the JUNCTION is visible across the
+## The measured beat was: standing at the CONCOURSE north edge, the JUNCTION is visible across the
 ## gap. This pins the WORLD GEOMETRY that measurement depended on, so a later coordinate change
 ## cannot silently invalidate it -- the camera reading was taken against exactly this line.
-func test_the_commons_to_junction_sightline_geometry_is_intact() -> void:
-	var commons: Rect2 = _patch(L.P_COMMONS)
+func test_the_concourse_to_junction_sightline_geometry_is_intact() -> void:
+	var concourse: Rect2 = _patch(L.P_CONCOURSE)
 	var junction: Rect2 = _patch(L.P_JUNCTION)
-	assert_almost_eq(commons.position.y, -46.0, 0.01, "the commons' north edge is the observation line")
+	assert_almost_eq(concourse.position.y, -46.0, 0.01, "the concourse' north edge is the observation line")
 	assert_almost_eq(junction.end.y, -61.0, 0.01, "and the junction's near edge is what is seen")
-	var gap: float = commons.position.y - junction.end.y
+	var gap: float = concourse.position.y - junction.end.y
 	assert_almost_eq(gap, 15.0, 0.01, "the measured gap must not drift without re-measuring")
 	# And it must be a GAP: no walkable ground between them on the centre line.
 	assert_false(sim._bounds.is_inside(Vector3(0.0, 0.0, -53.0)),
@@ -276,7 +276,7 @@ func test_the_commons_to_junction_sightline_geometry_is_intact() -> void:
 
 
 func test_the_junction_cannot_be_reached_directly_across_the_gap() -> void:
-	assert_true(_walk_to(Vector3(0.0, 0.0, -44.0)), "reach the commons' north edge")
+	assert_true(_walk_to(Vector3(0.0, 0.0, -44.0)), "reach the concourse' north edge")
 	for i in 400:
 		sim.tick([Command.new(sim.tick_count, player, "move", {"direction": Vector3(0, 0, -1)})] as Array[Command], DT)
 	assert_gt(sim.entities[player].z, -50.0,

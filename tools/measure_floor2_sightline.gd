@@ -1,5 +1,5 @@
 extends SceneTree
-## FLOOR 2 PRE-BUILD MEASUREMENT 1 — is the Junction actually VISIBLE from the Commons edge?
+## FLOOR 2 PRE-BUILD MEASUREMENT 1 — is the Junction actually VISIBLE from the Concourse edge?
 ##
 ## Run:  & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s tools/measure_floor2_sightline.gd
 ##
@@ -12,7 +12,7 @@ extends SceneTree
 ## Reports only. No geometry is authored from this run.
 
 ## Draft Floor 2 coordinates under review.
-const COMMONS := Rect2(-26.0, -46.0, 52.0, 28.0)
+const CONCOURSE := Rect2(-26.0, -46.0, 52.0, 28.0)
 ## FINAL AUTHORED COORDINATES (re-measured after the layout moved during implementation --
 ## the junction widened to the full span and the terrace shifted west to sit beyond the
 ## party-sync plate, so the earlier reading could not simply be assumed to survive).
@@ -56,12 +56,12 @@ func _init() -> void:
 		return
 	print("")
 
-	# THE OBSERVATION POINT: standing at the Commons' north edge, looking across the gap.
-	var stand := Vector3(0.0, 0.0, COMMONS.position.y + 1.5)
-	_look_from(camera, stand, "COMMONS north edge")
+	# THE OBSERVATION POINT: standing at the Concourse' north edge, looking across the gap.
+	var stand := Vector3(0.0, 0.0, CONCOURSE.position.y + 1.5)
+	_look_from(camera, stand, "CONCOURSE north edge")
 
 	# And from a little further back, where a player naturally approaches the edge.
-	_look_from(camera, Vector3(0.0, 0.0, COMMONS.position.y + 8.0), "COMMONS, 8 u back from the edge")
+	_look_from(camera, Vector3(0.0, 0.0, CONCOURSE.position.y + 8.0), "CONCOURSE, 8 u back from the edge")
 
 	# The overlook, for the early establishing view.
 	_look_from(camera, Vector3(0.0, 0.0, -6.0), "OVERLOOK (entry)")
@@ -78,8 +78,8 @@ func _look_from(camera: Camera3D, stand: Vector3, label: String) -> void:
 	_report(camera, size, "JUNCTION near edge", Vector3(0.0, 0.0, JUNCTION.end.y))
 	_report(camera, size, "JUNCTION centre   ", Vector3(0.0, 0.0, JUNCTION.position.y + JUNCTION.size.y * 0.5))
 	_report(camera, size, "TERRACE centre    ", Vector3(0.0, 1.0, TERRACE.position.y + TERRACE.size.y * 0.5))
-	_report(camera, size, "COMMONS far edge  ", Vector3(0.0, 0.0, COMMONS.position.y))
-	_report(camera, size, "ROUTE B mouth     ", Vector3(23.0, 0.0, COMMONS.position.y))
+	_report(camera, size, "CONCOURSE far edge  ", Vector3(0.0, 0.0, CONCOURSE.position.y))
+	_report(camera, size, "ROUTE B mouth     ", Vector3(23.0, 0.0, CONCOURSE.position.y))
 	print("")
 
 

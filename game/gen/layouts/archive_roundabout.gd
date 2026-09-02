@@ -10,7 +10,7 @@ extends RefCounted
 ## TOPOLOGY: fork and rejoin, deliberately NOT another ring or corridor chain.
 ##
 ##   z=-2     ┌──────────────┐
-##            │   OVERLOOK   │  e3   entry, establishing view of the commons and the fork
+##            │   OVERLOOK   │  e3   entry, establishing view of the concourse and the fork
 ##   -10      └──────┬┬──────┘
 ##                   ││ c0
 ##   -18      ┌──────┴┴──────┐
@@ -18,7 +18,7 @@ extends RefCounted
 ##            └──────┬┬──────┘
 ##                   ││ c1
 ##   -46 ┌───────────┴┴────────────────────┐
-##       │          OPEN COMMONS           │  ambient home; ▫ control plate
+##       │          OPEN CONCOURSE           │  ambient home; ▫ control plate
 ##       └──┬┬──────────────────────────┬┬─┘
 ##          ││ c2 GATED          c3 open ││
 ##   -62 ┌──┴┴────┐    ~~ GAP ~~    ┌────┴┴──┐  c4  ┌──────────┐
@@ -28,18 +28,22 @@ extends RefCounted
 ##       │  JUNCTION   ▪ party-sync (WEST end)     │  <- SEEN across the gap
 ##       └────┬┬──────────────────────────────────┘
 ##            ││ c5  opens on party-sync
-##   -83 ┌────┴┴─────┐
+##   -85 ┌────┴┴─────┐
 ##       │  TERRACE  │ e1  ▪ all-party exit
 ##       └───────────┘
 ##
+## EVERY CLOSABLE GATE BRIDGES A REAL GAP. Patches joined by a gate that can shut are disjoint,
+## so the aperture is the only thing spanning them -- otherwise the union spans the seam anyway
+## and the gate is decoration (FloorPlan._reject_bypassable_gates).
+##
 ## ROUTES A AND B ARE NOT MIRRORS. The party-sync plate sits at the junction's WEST end, so
 ## Route B (open, east) lands a long walk from it while Route A (gated, west) drops in beside it.
-## That is what makes the fork a decision rather than a decoration: the Commons control BUYS a
+## That is what makes the fork a decision rather than a decoration: the Concourse control BUYS a
 ## shortcut, and pays for it with the response it wakes. No rewards, no drops -- spatial value
 ## only, which is all the deferred economy permits.
 ##
 ## MEASURED BEFORE BUILDING, not assumed:
-##   * the Junction reads at 19% down the screen from the Commons north edge (real camera,
+##   * the Junction reads at 19% down the screen from the Concourse north edge (real camera,
 ##     unproject_position) -- the visible-before-reachable beat is real. The Overlook CANNOT
 ##     carry a view of the Terrace, so it is not asked to.
 ##   * accepted v1 Ooze locomotion transits the Route B fork with zero stall ticks.
@@ -52,7 +56,7 @@ extends RefCounted
 # Patch ids
 const P_OVERLOOK := 0
 const P_RAMP := 1
-const P_COMMONS := 2
+const P_CONCOURSE := 2
 const P_ROUTE_A := 3
 const P_ROUTE_B := 4
 const P_VAULT := 5
@@ -68,7 +72,7 @@ const C_VAULT := 4
 const C_TO_TERRACE := 5
 
 # Encounter ids
-const E_COMMONS_AMBIENT := 0
+const E_CONCOURSE_AMBIENT := 0
 const E_CONTROL_RESPONSE := 1
 const E_VAULT := 2
 
@@ -84,7 +88,7 @@ const T_EXIT := 3
 const CONTROL_PLATE := Rect2(-15.0, -33.0, 2.0, 2.0)
 const VAULT_PLATE := Rect2(35.0, -56.0, 2.0, 2.0)
 const PARTY_PLATE := Rect2(-24.0, -68.0, 4.0, 4.0)
-const EXIT_PLATE := Rect2(-22.0, -80.0, 4.0, 4.0)
+const EXIT_PLATE := Rect2(-22.0, -82.0, 4.0, 4.0)
 
 
 static func build(plan: FloorPlan) -> void:
@@ -92,7 +96,7 @@ static func build(plan: FloorPlan) -> void:
 	_progression(plan)
 	_encounters(plan)
 	plan.entry_point = Vector3(0.0, 0.0, -6.0)
-	plan.end_marker = Vector3(-20.0, 0.0, -77.0)
+	plan.end_marker = Vector3(-20.0, 0.0, -79.0)
 
 
 # --- SPATIAL ---------------------------------------------------------------------------
@@ -100,11 +104,17 @@ static func build(plan: FloorPlan) -> void:
 static func _spatial(plan: FloorPlan) -> void:
 	_patch(plan, P_OVERLOOK, Rect2(-8.0, -10.0, 16.0, 8.0), 3.0, &"high", &"ledge")
 	_patch(plan, P_RAMP, Rect2(-4.0, -18.0, 8.0, 8.0), 1.5, &"ramp", &"ledge")
-	# THE COMMONS is one rect on purpose: an ambient territory must be convex (P33), and a single
+	# THE CONCOURSE is one rect on purpose: an ambient territory must be convex (P33), and a single
 	# rectangle is convex by construction rather than by inspection.
-	_patch(plan, P_COMMONS, Rect2(-26.0, -46.0, 52.0, 28.0), 0.0, &"stone", &"ledge")
-	_patch(plan, P_ROUTE_A, Rect2(-30.0, -62.0, 14.0, 16.0), 0.0, &"stone", &"ledge")
-	_patch(plan, P_ROUTE_B, Rect2(16.0, -62.0, 14.0, 16.0), 0.0, &"stone", &"ledge")
+	_patch(plan, P_CONCOURSE, Rect2(-26.0, -46.0, 52.0, 28.0), 0.0, &"stone", &"ledge")
+	# BOTH ROUTES STAND OFF THE CONCOURSE BY 2 UNITS, and their apertures bridge the gap.
+	# Route A's gate is closable, and a closable gate between TOUCHING patches separates nothing:
+	# inclusive edges plus body-aware union legality make a body straddling the seam legal, so the
+	# union spans it whether the gate is open or shut (FloorPlan._reject_bypassable_gates). Route B
+	# needs no gate, but is stood off identically -- an asymmetric fork would read as two different
+	# kinds of opening when they are meant to read as one choice with two answers.
+	_patch(plan, P_ROUTE_A, Rect2(-30.0, -62.0, 14.0, 14.0), 0.0, &"stone", &"ledge")
+	_patch(plan, P_ROUTE_B, Rect2(16.0, -62.0, 14.0, 14.0), 0.0, &"stone", &"ledge")
 	# THE VAULT: solid inward for occlusion, open on the map-facing east side.
 	# SET APART FROM ROUTE B, not abutting it. Abutting rects share zero AREA -- so they would not
 	# connect for movement -- while still suppressing each other's wall, because ground lies just
@@ -114,7 +124,9 @@ static func _spatial(plan: FloorPlan) -> void:
 	# The junction spans the full width, so both routes rejoin it by patch OVERLAP -- no aperture
 	# is needed where no CONTROL is wanted, exactly as the hall's arms worked on Floor 1.
 	_patch(plan, P_JUNCTION, Rect2(-30.0, -71.0, 60.0, 10.0), 0.0, &"stone", &"ledge")
-	_patch(plan, P_TERRACE, Rect2(-28.0, -83.0, 16.0, 12.0), 1.0, &"high", &"ledge")
+	# STOOD OFF THE JUNCTION for the same reason: its gate is closable, so the aperture must be
+	# the only thing bridging the two.
+	_patch(plan, P_TERRACE, Rect2(-28.0, -85.0, 16.0, 12.0), 1.0, &"high", &"ledge")
 
 
 static func _patch(plan: FloorPlan, patch_id: int, rect: Rect2, elevation: float, surface: StringName, boundary_style: StringName = &"wall", side_overrides: Dictionary = {}) -> void:
@@ -134,16 +146,16 @@ static func _patch(plan: FloorPlan, patch_id: int, rect: Rect2, elevation: float
 # --- PROGRESSION -----------------------------------------------------------------------
 
 static func _progression(plan: FloorPlan) -> void:
-	_connect(plan, C_DESCEND, Rect2(-2.5, -11.5, 5.0, 3.0), true)
-	_connect(plan, C_RAMP, Rect2(-2.5, -19.5, 5.0, 3.0), true)
-	# THE GATED SHORTCUT. Closed until the Commons control is stood on.
-	_connect(plan, C_TO_A, Rect2(-27.0, -47.5, 10.0, 3.0), false)
+	_connect(plan, C_DESCEND, P_OVERLOOK, P_RAMP, Rect2(-2.5, -11.5, 5.0, 3.0), true)
+	_connect(plan, C_RAMP, P_RAMP, P_CONCOURSE, Rect2(-2.5, -19.5, 5.0, 3.0), true)
+	# THE GATED SHORTCUT. Closed until the Concourse control is stood on.
+	_connect(plan, C_TO_A, P_CONCOURSE, P_ROUTE_A, Rect2(-27.0, -49.5, 10.0, 5.0), false)
 	# THE OPEN ROUTE, and the floor's natural first traversal.
-	_connect(plan, C_TO_B, Rect2(17.0, -47.5, 10.0, 3.0), true)
+	_connect(plan, C_TO_B, P_CONCOURSE, P_ROUTE_B, Rect2(17.0, -49.5, 10.0, 5.0), true)
 	# The Vault's mouth: open, because the encounter inside is opt-in rather than gated.
 	# Spans the standoff so it overlaps BOTH -- route B ends at x=30, the vault starts at x=32.
-	_connect(plan, C_VAULT, Rect2(28.5, -56.5, 5.0, 5.0), true)
-	_connect(plan, C_TO_TERRACE, Rect2(-22.5, -72.5, 5.0, 3.0), false)
+	_connect(plan, C_VAULT, P_ROUTE_B, P_VAULT, Rect2(28.5, -56.5, 5.0, 5.0), true)
+	_connect(plan, C_TO_TERRACE, P_JUNCTION, P_TERRACE, Rect2(-22.5, -74.5, 5.0, 5.0), false)
 
 	# THE CONTROL BEAT: one record, two consequences -- the shortcut opens AND something notices.
 	# Non-sealing, so buying the shortcut never becomes a mandatory combat lock.
@@ -164,9 +176,10 @@ static func _progression(plan: FloorPlan) -> void:
 	], true)
 
 
-static func _connect(plan: FloorPlan, connection_id: int, aperture: Rect2, starts_open: bool) -> void:
+static func _connect(plan: FloorPlan, connection_id: int, near_id: int, far_id: int, aperture: Rect2, starts_open: bool) -> void:
 	var connection := TraversalConnection.new()
 	connection.connection_id = connection_id
+	connection.patch_ids = Vector2i(near_id, far_id)
 	connection.aperture = aperture
 	connection.starts_open = starts_open
 	plan.connections.append(connection)
@@ -186,12 +199,12 @@ static func _trigger(plan: FloorPlan, trigger_id: int, kind: StringName, region:
 # --- ENCOUNTERS ------------------------------------------------------------------------
 
 static func _encounters(plan: FloorPlan) -> void:
-	# AMBIENT, living in the commons. Its home is the single commons rect, so P33's convexity
+	# AMBIENT, living in the concourse. Its home is the single concourse rect, so P33's convexity
 	# constraint holds by construction. Pursuit itself is detection-governed and may follow the
 	# player anywhere; home only decides where it walks back to.
 	var ambient := EncounterSite.new()
-	ambient.encounter_id = E_COMMONS_AMBIENT
-	ambient.regions = [plan.patch_by_id(P_COMMONS).rect]
+	ambient.encounter_id = E_CONCOURSE_AMBIENT
+	ambient.regions = [plan.patch_by_id(P_CONCOURSE).rect]
 	ambient.role = FloorLayers.ROLE_AMBIENT
 	ambient.confines_player = false
 	ambient.spawn_at_floor_load = true
@@ -205,7 +218,7 @@ static func _encounters(plan: FloorPlan) -> void:
 	# the player may still walk away up either route.
 	var response := EncounterSite.new()
 	response.encounter_id = E_CONTROL_RESPONSE
-	response.regions = [plan.patch_by_id(P_COMMONS).rect]
+	response.regions = [plan.patch_by_id(P_CONCOURSE).rect]
 	response.role = FloorLayers.ROLE_OPTIONAL
 	response.confines_player = false
 	response.spawn_at_floor_load = false

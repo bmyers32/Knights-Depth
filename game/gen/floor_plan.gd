@@ -372,3 +372,97 @@ func _point(point: Vector3) -> Dictionary:
 
 func _snap(value: float) -> float:
 	return snappedf(value, 0.0001)
+
+
+# --- AUTHORING VALIDATION ----------------------------------------------------------------
+#
+# Structural guards in the same family as _reject_style_conflicts: they DETECT authoring
+# errors loudly and never repair them, because a silent repair would make the authored floor
+# and the played floor two different floors.
+#
+# Run on EVERY produced plan by DepthGenerator.generate, whoever produced it -- so a future
+# procedural producer inherits them without being asked to remember.
+
+
+func validate() -> void:
+	_reject_unnamed_connection_patches()
+	_reject_bypassable_gates()
+
+
+## A connection that does not name the patches it joins cannot be checked by anything above,
+## and presentation reads the same field to place its corridor slab at the right elevation --
+## an unnamed connection silently draws at y=0, so a ramp's corridor floats or sinks.
+func _reject_unnamed_connection_patches() -> void:
+	for connection in connections:
+		for patch_id: int in [connection.patch_ids.x, connection.patch_ids.y]:
+			if patch_by_id(patch_id) == null:
+				push_error(("FloorPlan: connection %d names patch %d, which does not exist. A connection must "
+					+ "declare the two patches it joins: every structural check above reads that field, and so "
+					+ "does the corridor's elevation.") % [connection.connection_id, patch_id])
+				break
+		if patch_by_id(connection.patch_ids.x) == null or patch_by_id(connection.patch_ids.y) == null:
+			continue
+		for patch_id: int in [connection.patch_ids.x, connection.patch_ids.y]:
+			if connection.aperture.intersection(patch_by_id(patch_id).rect).get_area() <= 0.0:
+				push_error(("FloorPlan: aperture %d only abuts patch %d rather than overlapping it. A zero-area "
+					+ "junction makes the threshold a discontinuity the clamp cannot reason about.")
+					% [connection.connection_id, patch_id])
+
+
+## THE CLOSED-GATE INTEGRITY LAW (added 2026-09-02, after Floor 2's human replay).
+##
+## A CLOSED CONNECTION CLAIMS TO SEPARATE TWO PATCHES. Nothing previously checked that it does.
+## Closing a gate removes its aperture from the walkable union and subtracts NOTHING -- so if
+## the two patches also touch each other directly, the union still spans the seam and the gate
+## separates nothing at all. Floor 2 shipped two such gates; both were purely decorative, and a
+## walk straight south entered the "gated" shortcut without ever finding its control.
+##
+## WHY TOUCHING IS ENOUGH TO BE A BYPASS. Walkable edges are INCLUSIVE and legality is
+## BODY-AWARE against the UNION, so a body straddling the seam of two abutting rects is covered
+## by both halves and fits perfectly. "Zero shared area" therefore does NOT mean "not connected"
+## -- an older comment in WalkableBounds said otherwise and was wrong once bodies arrived.
+##
+## SCOPE, STATED HONESTLY. This proves a gate is the only DIRECT adjacency between its two
+## patches. It does NOT prove global separation, and must not: routes that fork and rejoin
+## elsewhere are legitimate floor grammar, so "you can get there the long way round" is a
+## routing fact rather than a broken gate. A bypass through a THIRD patch bridging both would
+## not be caught here; that case is indistinguishable from an intended rejoin without authorial
+## intent the plan does not record.
+##
+## APPLIES TO EVERY CLOSABLE CONNECTION, not merely those that start shut: a one-way commitment
+## starts open and is blocked later, and a commitment that seals nothing is the same defect.
+func _reject_bypassable_gates() -> void:
+	for connection in connections:
+		if not _is_closable(connection.connection_id):
+			continue
+		var a: WalkablePatch = patch_by_id(connection.patch_ids.x)
+		var b: WalkablePatch = patch_by_id(connection.patch_ids.y)
+		if a == null or b == null:
+			continue  # already reported above
+		if not _touches(a.rect, b.rect):
+			continue
+		push_error(("FloorPlan: connection %d can be closed, but patches %d and %d touch directly at %s -- "
+			+ "so the walkable union spans their seam whether the gate is open or shut and the gate separates "
+			+ "nothing. Patches joined by a closable connection must be DISJOINT, with the aperture as the only "
+			+ "thing bridging them.") % [connection.connection_id, a.patch_id, b.patch_id,
+			str(a.rect.intersection(b.rect)) if a.rect.intersects(b.rect) else "their shared edge"])
+
+
+## Can this connection ever be shut? Either it starts that way, or some authored effect blocks it.
+func _is_closable(connection_id: int) -> bool:
+	for connection in connections:
+		if connection.connection_id == connection_id and not connection.starts_open:
+			return true
+	for trigger in triggers:
+		for authored_effect: Dictionary in trigger.effects:
+			if authored_effect.get("kind", &"") == FloorLayers.EFFECT_BLOCK_CONNECTION \
+					and int(authored_effect.get("target_id", -1)) == connection_id:
+				return true
+	return false
+
+
+## INCLUSIVE on every edge, matching WalkableBounds: two rects that merely abut DO touch, because
+## a body straddling that seam is legal. This is the whole point of the guard.
+static func _touches(a: Rect2, b: Rect2) -> bool:
+	return a.position.x <= b.end.x and b.position.x <= a.end.x \
+			and a.position.y <= b.end.y and b.position.y <= a.end.y

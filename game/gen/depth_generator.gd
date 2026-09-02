@@ -38,6 +38,10 @@ static func generate(seed: int, depth: int) -> FloorPlan:
 		ArchiveRoundaboutLayout.build(plan)
 	else:
 		ArchivePrototypeLayout.build(plan)
+	# STRUCTURAL VALIDATION RUNS ON EVERY PLAN, whoever produced it. Placed here rather than in
+	# each layout so a future procedural producer inherits the guards without being asked to
+	# remember them. Detection only -- a plan is never silently repaired.
+	plan.validate()
 	return plan
 
 

@@ -1,5 +1,5 @@
 extends SceneTree
-## FLOOR 2 PRE-BUILD MEASUREMENT 2 — can the accepted bab167d Ooze follow COMMONS -> ROUTE B ->
+## FLOOR 2 PRE-BUILD MEASUREMENT 2 — can the accepted bab167d Ooze follow CONCOURSE -> ROUTE B ->
 ## JUNCTION on the draft coordinates?
 ##
 ## Run:  & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s tools/probe_floor2_pursuit.gd
@@ -20,15 +20,15 @@ const PLAYER: int = 0
 const OOZE: int = 1
 
 ## Draft Floor 2 coordinates under review.
-const COMMONS := Rect2(-26.0, -46.0, 52.0, 28.0)
+const CONCOURSE := Rect2(-26.0, -46.0, 52.0, 28.0)
 const ROUTE_B := Rect2(16.0, -62.0, 14.0, 16.0)
 const JUNCTION := Rect2(-30.0, -71.0, 60.0, 10.0)
-const C_TO_B := Rect2(18.0, -48.0, 10.0, 4.0)   # aperture: commons <-> route B
+const C_TO_B := Rect2(18.0, -48.0, 10.0, 4.0)   # aperture: concourse <-> route B
 
-## The line a human would actually walk: across the commons, into route B, down it, then west
+## The line a human would actually walk: across the concourse, into route B, down it, then west
 ## along the junction -- incrementally, staying engaged the whole way.
 const WAYPOINTS: Array[Vector3] = [
-	Vector3(0.0, 0.0, -30.0),    # commons, where the fight starts
+	Vector3(0.0, 0.0, -30.0),    # concourse, where the fight starts
 	Vector3(20.0, 0.0, -36.0),   # drift east toward the route B mouth
 	Vector3(23.0, 0.0, -46.0),   # through the aperture
 	Vector3(23.0, 0.0, -58.0),   # down route B
@@ -41,14 +41,14 @@ const WAYPOINTS: Array[Vector3] = [
 ## cannot end the run before the geometry is tested -- otherwise this measures the leash again
 ## rather than the aperture.
 static func _transit_probe(sim_script: GDScript, bounds_script: GDScript, registrar: GDScript, envoy: Resource, stats: Resource) -> void:
-	var rects: Array[Rect2] = [COMMONS, ROUTE_B, JUNCTION, C_TO_B]
+	var rects: Array[Rect2] = [CONCOURSE, ROUTE_B, JUNCTION, C_TO_B]
 	var sim: Object = sim_script.new()
 	sim.set_damage_matrix({}, 1.5, 0.5)
 	sim.load_floor(bounds_script.new(rects), Vector3.ZERO)
 	sim.register_patches(rects)
 	sim.register_connection(0, C_TO_B, true)
 
-	var anchor := Vector3(22.0, 0.0, -42.0)  # commons side, beside the mouth
+	var anchor := Vector3(22.0, 0.0, -42.0)  # concourse side, beside the mouth
 	sim.add_entity(PLAYER, anchor + Vector3(-2.0, 0.0, 0.0), envoy.move_speed, Vector3(0, 0, -1), envoy.combat_radius)
 	sim.register_combatant(PLAYER, envoy.max_health, envoy.family, 0, envoy.combat_radius, &"player")
 	sim.mark_run_persistent(PLAYER)
@@ -110,7 +110,7 @@ func _init() -> void:
 	var stats: Resource = db.get_resource(&"enemy", &"ooze")
 	var envoy: Resource = db.get_resource(&"envoy", &"default")
 
-	var rects: Array[Rect2] = [COMMONS, ROUTE_B, JUNCTION, C_TO_B]
+	var rects: Array[Rect2] = [CONCOURSE, ROUTE_B, JUNCTION, C_TO_B]
 	var sim: Object = sim_script.new()
 	sim.set_damage_matrix({}, 1.5, 0.5)
 	sim.load_floor(bounds_script.new(rects), WAYPOINTS[0])
@@ -127,14 +127,14 @@ func _init() -> void:
 	sim.debug_set_ai_active(OOZE)
 	sim._next_fire_tick[OOZE] = 1_000_000  # never attacks: this measures locomotion only
 
-	print("FLOOR 2 DRAFT PURSUIT PROBE — commons -> route B -> junction")
+	print("FLOOR 2 DRAFT PURSUIT PROBE — concourse -> route B -> junction")
 	print("   ooze speed %.2f  radius %.2f  detection %.2f  leash %.2f" % [
 		stats.move_speed, stats.combat_radius, stats.detection_radius, stats.leash_radius])
 	print("")
 	print("TWO QUESTIONS, kept apart because they have different answers:")
 	print("  A. how far along this route does an engaged Ooze actually FOLLOW before the leash")
 	print("     ends the chase -- an authored law, not incidental geometry")
-	print("  B. does the COMMONS -> aperture -> ROUTE_B transit itself stall, measured with the")
+	print("  B. does the CONCOURSE -> aperture -> ROUTE_B transit itself stall, measured with the")
 	print("     Ooze anchored close enough that the leash cannot end the run first")
 	print("")
 

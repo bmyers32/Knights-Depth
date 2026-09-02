@@ -50,8 +50,9 @@ teeth, because a beast has teeth.
 | Term | Register | Meaning |
 |---|---|---|
 | **the Lattice** | Ancient | The world: civilization-wide ancient infrastructure humanity inhabits. Not "the internet." Reasoning: structural, mathematical, legend-viable; derivatives (Lattice Gate, Off-Lattice) come free. Avoids: weaving-cluster (WoT collision), tech jargon. |
-| **the Commons** | Resistance | Upper inhabited layer; every expedition starts/ends here; the M4 hub. Reasoning: the one warm name — the living renamed their home. Its ancient true name = free Archive lore. |
+| **the Commons** | Resistance | Upper inhabited layer; every expedition starts/ends here; the M4 hub. Reasoning: the one warm name — the living renamed their home. Its ancient true name = free Archive lore. **RESERVED FOR THE SAFE LAYER ONLY** (2026-09-02): gathering, trade, crafting, gear, run preparation. A hostile floor space must never be called a Commons — the name promises safety, and a room full of enemies wearing it makes the one warm word in the vocabulary mean nothing. Name hostile open space from the Ancient register instead (see **Concourse**). |
 | **Strata (named)** | Ancient | Commons → Archive → Foundry → Meridian → Manifold → Axis → Deep Drift. Candidate pool, not a shipped-count commitment (see ROADMAP). Each introduces one world rule before stronger enemies (§6.3). |
+| **Concourse** | Ancient | A wide open circulation space inside a stratum — Lattice infrastructure built for movement, not for living. The neutral name for the hostile open rooms that **the Commons** must never be used for. First consumer: the Archive's roundabout floor. |
 | **the Deep Drift** | Entropy | Beneath the Axis. Primordial entropy; source of Drift; not ruled by the Axiom. The endgame descends PAST the enemy's throne into what the enemy fears. |
 
 ### People
