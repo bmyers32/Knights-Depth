@@ -203,3 +203,56 @@ is **not** evidence that meaningful optional content has been solved. Recorded a
    mouths visible · Floor 1 unaffected.
 
 Environmental vocabulary remains held.
+
+---
+
+# BUILT — 2026-09-02
+
+Sections D–G implemented under the ruling. **730/730 green.** Floor 1 unaffected.
+
+## Real-camera re-measurement on final authored coordinates
+
+The measurement tool now **reads the authored plan** instead of holding a copy of its
+coordinates — the earlier version had to be hand-resynced whenever the layout moved, which is
+exactly how a measurement quietly starts describing a floor that no longer exists.
+
+| Standing at | Mouth A | Mouth B | Control | Junction |
+|---|---|---|---|---|
+| `z = -30` | 24% down / **27% across** | 24% / **73%** | 27% / 25% | 11% / 50% |
+| `z = -34` | 28% / 24% | 28% / 76% | 32% / 22% | 13% / 50% |
+| `z = -38` | 34% / 21% | 34% / 79% | 39% / 18% | 15% / 50% |
+| `z = -42` | 41% / 17% | 41% / 83% | 47% / 13% | 17% / 50% |
+| `z = -44` | 45% / 15% | 45% / 85% | 53% / 10% | 19% / 50% |
+
+**Both mouths legible throughout the entire approach**, symmetric about the centre line, with
+the destination dead centre between them and the control visible alongside. The requirement is
+met, and no camera change was involved.
+
+Also measured: from the control, mouth A sits dead centre (50% across) — *this buys that* is on
+screen. From the junction, the exit plate reads at 24% down. From Route B the Vault's mouth is
+visible but its interior is not, which is correct for a room that now promises nothing.
+
+## Resulting beat accounts (§12)
+
+| Beat | Pays | Receives | Exchange |
+|---|---|---|---|
+| **Route A** | control activation + a localized response standing in the route itself | materially shorter direct route to the Junction and exit | net-positive; both sides visible at the decision point |
+| **Route B** | longer traversal | immediate access, nothing bought or fought for | neutral baseline — a legitimate role |
+| **Vault** | nothing mandatory | exploratory space only | **not** a claim of optional-content success |
+| **Final exit** | party regrouping | floor completion | human-ratified, unchanged |
+
+## Notes on what changed beyond geometry
+
+- **The response now stands in Route A** rather than loose in the Concourse. Asserted
+  non-sealing, and asserted that a player may open the shortcut, look at what is in it, and take
+  the long way anyway — otherwise the "choice" would be a toll booth.
+- **The Vault's mixed boundary was removed**, not preserved. Its occlusion rationale left with
+  the fight. **Per-edge overrides therefore have zero authored consumers again**, asserted in
+  `tests/test_floor2.gd` so the audit reads code rather than memory. The capability's fixtures
+  still prove it *works* — a different claim from proving it is *used*.
+- **The intermediate party plate and the Terrace gate are gone.** The exit is now the floor's
+  only all-party requirement, and it inherits the loud plate treatment automatically because
+  prominence derives from `trigger.kind`. No presentation work was needed.
+- **The floor-completion feedback gap is recorded as ROADMAP P35**, framed as
+  *floor-completion / transition presentation* rather than "build the Floor 2 elevator", with a
+  binding condition to audit existing vocabulary before authoring.

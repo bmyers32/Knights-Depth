@@ -1,17 +1,18 @@
 extends SceneTree
-## FLOOR 2 BEAT-ECONOMY MEASUREMENT — is each beat's PAYOFF legible at its DECISION POINT?
+## FLOOR 2 LEGIBILITY — is each beat's PAYOFF visible at its DECISION POINT?
 ##
 ## Run:  & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s tools/measure_floor2_legibility.gd
 ##
-## A currency the player cannot see when they choose is not a currency. The beat table claims
-## Route A's saving is illegible and the Vault's temptation is unreadable; both are claims about
-## what is ON SCREEN, so both get projected through the real shipped camera rather than argued
-## from world distance. Same instrument as the sightline measurement, same guard against a
-## transposed basis.
+## A currency the player cannot see when they choose is not a currency. Projected through the
+## REAL shipped camera -- the actual FollowCamera script, its authored offset and 45-degree
+## pitch, its edge clamp, and the project's real viewport -- because these are claims about what
+## is ON SCREEN, and world distance is not evidence for them.
+##
+## READS THE AUTHORED PLAN, never a copy of its coordinates. An earlier version of this tool
+## hardcoded them and had to be manually re-synced every time the layout moved; that is exactly
+## how a measurement quietly starts describing a floor that no longer exists.
 ##
 ## Reports only. No geometry is authored from this run.
-
-const FLOOR_EXTENT := Rect2(-30.0, -85.0, 74.0, 83.0)
 
 
 func _init() -> void:
@@ -23,100 +24,88 @@ func _init() -> void:
 	var L: GDScript = load("res://game/gen/layouts/archive_roundabout.gd")
 	var generator: GDScript = load("res://game/gen/depth_generator.gd")
 	var plan: FloorPlan = generator.generate(0, 2)
-	var viewport: Viewport = Engine.get_main_loop().root
+
+	var concourse: Rect2 = plan.patch_by_id(L.P_CONCOURSE).rect
+	var route_a: Rect2 = plan.patch_by_id(L.P_ROUTE_A).rect
+	var route_b: Rect2 = plan.patch_by_id(L.P_ROUTE_B).rect
+	var junction: Rect2 = plan.patch_by_id(L.P_JUNCTION).rect
+	var vault: Rect2 = plan.patch_by_id(L.P_VAULT).rect
+
+	# The extent the camera clamp actually receives: the union of every authored rect.
+	var extent: Rect2 = plan.patches[0].rect
+	for rect: Rect2 in plan.all_rects():
+		extent = extent.merge(rect)
+
 	var camera: Camera3D = load("res://game/arena/follow_camera.gd").new()
 	camera.rotation = Vector3(deg_to_rad(-45.0), 0.0, 0.0)
-	viewport.add_child(camera)
+	Engine.get_main_loop().root.add_child(camera)
 	camera.current = true
-	camera.set_floor_extent(FLOOR_EXTENT)
+	camera.set_floor_extent(extent)
 	var forward: Vector3 = -camera.global_transform.basis.z
 	if forward.y >= 0.0 or forward.z >= 0.0:
 		print("REFUSING TO MEASURE: the camera is not aimed at the ground.")
 		quit(1)
 		return
-
-	print("FLOOR 2 LEGIBILITY — can the player PRICE each choice at the moment they make it?")
+	print("FLOOR 2 LEGIBILITY — final authored coordinates, read from the plan")
+	print("   floor extent %s   camera offset %s   pitch %.0f deg" % [extent, camera.offset, rad_to_deg(camera.rotation.x)])
 	print("")
 
-	# DECISION 1: the fork. Standing in the concourse where the two mouths diverge, can the
-	# player see what Route A actually buys -- the party plate at the junction's west end?
-	print("DECISION: THE FORK  (standing mid-concourse, about to pick a route)")
-	_from(camera, Vector3(0.0, 0.0, -40.0), [
-		["ROUTE A mouth      ", Vector3(-22.0, 0.0, -47.0)],
-		["ROUTE B mouth      ", Vector3(22.0, 0.0, -47.0)],
-		["PARTY PLATE (what A buys)", Vector3(-22.0, 0.0, -66.0)],
-		["JUNCTION centre    ", Vector3(0.0, 0.0, -66.0)],
-	])
+	var mouth_a := Vector3(route_a.get_center().x, 0.0, concourse.position.y)
+	var mouth_b := Vector3(route_b.get_center().x, 0.0, concourse.position.y)
+	var control := Vector3(L.CONTROL_PLATE.get_center().x, 0.0, L.CONTROL_PLATE.get_center().y)
+	var exit_plate := Vector3(L.EXIT_PLATE.get_center().x, 1.0, L.EXIT_PLATE.get_center().y)
 
-	# DECISION 2: the control. Standing on it, is the thing it opens visible?
-	print("DECISION: THE CONTROL  (standing on the plate, about to pay for the shortcut)")
-	_from(camera, Vector3(-14.0, 0.0, -32.0), [
-		["ROUTE A mouth      ", Vector3(-22.0, 0.0, -47.0)],
-		["PARTY PLATE (what it buys)", Vector3(-22.0, 0.0, -66.0)],
-	])
+	# THE REQUIREMENT: both route choices meaningfully visible from the same decision area.
+	print("DECISION: THE FORK  (the requirement -- both mouths from ONE decision area)")
+	var legible_everywhere: bool = true
+	for z: float in [-30.0, -34.0, -38.0, -42.0, -44.0]:
+		var both: bool = _from(camera, Vector3(0.0, 0.0, z), [
+			["mouth A", mouth_a], ["mouth B", mouth_b], ["control", control],
+			["junction", Vector3(0.0, 0.0, junction.get_center().y)]])
+		legible_everywhere = legible_everywhere and both
+	print("   %s" % ("BOTH MOUTHS LEGIBLE THROUGHOUT THE APPROACH" if legible_everywhere
+		else "NOT legible from every approach point -- inspect the rows above"))
+	print("")
 
-	# DECISION 3: the vault. Walking down route B, is it visible and does it read as inviting?
-	print("DECISION: THE VAULT  (walking down route B, about to pass its mouth)")
-	_from(camera, Vector3(23.0, 0.0, -52.0), [
-		["VAULT mouth        ", Vector3(31.0, 0.0, -54.0)],
-		["VAULT interior     ", Vector3(38.0, 0.0, -54.0)],
-		["VAULT plate        ", Vector3(36.0, 0.0, -55.0)],
-		["JUNCTION (the way on)", Vector3(20.0, 0.0, -66.0)],
-	])
+	print("DECISION: THE CONTROL  (standing on it, can the player see what it buys?)")
+	_from(camera, control, [["mouth A (what it opens)", mouth_a], ["mouth B", mouth_b],
+		["junction", Vector3(0.0, 0.0, junction.get_center().y)]])
+	print("")
 
-	# DECISION 4: the party plate, and what standing on it opens.
-	print("DECISION: THE PARTY PLATE  (standing on it, about to be sent a few steps north)")
-	_from(camera, Vector3(-22.0, 0.0, -66.0), [
-		["TERRACE gate       ", Vector3(-20.0, 0.0, -72.0)],
-		["EXIT plate         ", Vector3(-20.0, 1.0, -80.0)],
-	])
-	_measure_view_width(camera, plan, L)
+	print("ARRIVAL: THE JUNCTION  (is the exit readable once you are down?)")
+	_from(camera, Vector3(-20.0, 0.0, junction.get_center().y), [["EXIT plate", exit_plate]])
+	print("")
+
+	print("PASSING: THE VAULT  (an empty room now -- it should read as a place, not a promise)")
+	_from(camera, Vector3(route_b.get_center().x, 0.0, -54.0), [
+		["vault mouth", Vector3(vault.position.x, 0.0, vault.get_center().y)],
+		["vault interior", Vector3(vault.get_center().x, 0.0, vault.get_center().y)]])
 	quit(0)
 
 
-## HOW WIDE IS THE CAMERA'S VIEW AT PLAYER SCALE? The fork's two mouths measured OFF-SCREEN
-## from mid-concourse while the DESTINATION measured visible, which is the opposite of the
-## assumption the beat table started from. If the room is wider than the view, its two exits can
-## never be on screen together and the fork cannot read as a fork -- so the number matters.
-func _measure_view_width(camera: Camera3D, plan: FloorPlan, L: GDScript) -> void:
-	var size: Vector2 = Engine.get_main_loop().root.get_visible_rect().size
-	var stand := Vector3(0.0, 0.0, -40.0)
-	camera.position = camera._resolve_position(stand)
-	camera.rotation = Vector3(deg_to_rad(-45.0), 0.0, 0.0)
-	print("CAMERA REACH at the fork's decision point (player at %s)" % stand)
-	for z: float in [-40.0, -47.0, -55.0, -66.0]:
-		var half: float = 0.0
-		for step in 2000:
-			var x: float = float(step) * 0.05
-			var world := Vector3(x, 0.0, z)
-			if camera.is_position_behind(world):
-				break
-			var screen: Vector2 = camera.unproject_position(world)
-			if screen.x > size.x:
-				break
-			half = x
-		print("   at z=%.0f the view spans x[%.1f, %.1f]  (%.0f units wide)" % [z, -half, half, half * 2.0])
-	var concourse: Rect2 = plan.patch_by_id(L.P_CONCOURSE).rect
-	print("   the CONCOURSE is %.0f units wide, and its two route mouths sit %.0f apart." % [
-		concourse.size.x, plan.patch_by_id(L.P_ROUTE_B).rect.get_center().x - plan.patch_by_id(L.P_ROUTE_A).rect.get_center().x])
-
-
-func _from(camera: Camera3D, stand: Vector3, targets: Array) -> void:
+## Returns whether BOTH fork mouths were on screen, when both were asked for.
+func _from(camera: Camera3D, stand: Vector3, targets: Array) -> bool:
 	camera.position = camera._resolve_position(stand)
 	camera.rotation = Vector3(deg_to_rad(-45.0), 0.0, 0.0)
 	var size: Vector2 = Engine.get_main_loop().root.get_visible_rect().size
-	print("   player at %s" % stand)
+	var line: String = "   from %-22s " % str(stand)
+	var mouths_seen: int = 0
+	var mouths_asked: int = 0
 	for entry in targets:
+		var label: String = entry[0]
 		var world: Vector3 = entry[1]
+		var is_mouth: bool = label.begins_with("mouth")
+		if is_mouth:
+			mouths_asked += 1
 		if camera.is_position_behind(world):
-			print("      %s  BEHIND THE CAMERA -- not visible" % entry[0])
+			line += "%s BEHIND  " % label
 			continue
 		var screen: Vector2 = camera.unproject_position(world)
-		var on: bool = screen.x >= 0.0 and screen.x <= size.x and screen.y >= 0.0 and screen.y <= size.y
-		var down: float = screen.y / size.y
-		var across: float = screen.x / size.x
-		var verdict: String = "OFF-SCREEN"
-		if on:
-			verdict = "marginal (%.0f%% down)" % (down * 100.0) if down < 0.08 else "VISIBLE (%.0f%% down, %.0f%% across)" % [down * 100.0, across * 100.0]
-		print("      %s  -> %s" % [entry[0], verdict])
-	print("")
+		if screen.x < 0.0 or screen.x > size.x or screen.y < 0.0 or screen.y > size.y:
+			line += "%s OFF-SCREEN  " % label
+			continue
+		if is_mouth:
+			mouths_seen += 1
+		line += "%s %.0f%%d/%.0f%%a  " % [label, screen.y / size.y * 100.0, screen.x / size.x * 100.0]
+	print(line)
+	return mouths_asked < 2 or mouths_seen == mouths_asked

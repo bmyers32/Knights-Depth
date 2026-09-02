@@ -42,6 +42,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P33 | Ooze movement quality | **PASS 2026-09-01 · closed** | Built to the frozen spec. Measured on the real geometry: rub ticks 203 -> 0, arrival 321 -> 202 ticks. All 11 pre-registered tests green |
 | P34 | Projectile-vs-world obstruction | **LANDED 2026-08-31 · migration classified B** | Human gate PASSED ("they read naturally"). One authored WALL/LEDGE fact shared by sim + presentation; shots stop on walls and closed gates, pass open ledges |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
+| P35 | Floor-completion / transition presentation | PROPOSED | Winning a floor gives weaker feedback than dying — a `print()` vs an overlay. Audit existing exit vocabulary first |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -3151,6 +3152,34 @@ capsule extents.
   reframe (P21-adjacent) evaluated in the same pass.
 **Why here and not earlier:** it is a deliberate design pass, not a bug fix. Doing it
 before flinch exists would tune spacing against combat that has no reaction layer yet.
+
+### P35 — Floor-completion / transition presentation
+**Status:** PROPOSED. Raised by the M1 presentation audit during the Floor 2 iteration
+(2026-09-02), recorded rather than filled so the Floor 2 batch stayed a Floor 2 batch.
+
+**The gap, measured not guessed.** Completing a floor currently resolves to a single
+`print("FLOOR COMPLETE: ...")` in `arena.gd`. Nothing on screen changes; the game keeps running.
+Dying, by contrast, shows a real overlay. **Winning a floor produces less feedback than losing
+one** — which inverts the emphasis a player would expect.
+
+**What already ships, so this is not greenfield.** The audit found one exit dialect and no
+elevator anywhere in code (three source comments explicitly rule an elevator out of current
+scope). Existing vocabulary:
+
+- group-occupancy exit region whose plate mesh **is** the trigger region,
+- prominence **derived** from `trigger.kind` rather than authored twice,
+- a gold emissive end-marker pillar standing inside the exit plate.
+
+**Framing, deliberately.** This is *floor-completion / transition presentation*, NOT "build the
+Floor 2 elevator". Elevators, next-floor preview and run-end framing are separate M2 gate items;
+collapsing them into one ticket is how a small presentation gap becomes a zone-presentation
+project.
+
+**Binding condition when it is taken up:** audit whatever exit/transition vocabulary exists at
+that time BEFORE authoring, and state explicitly what is inherited unchanged versus consciously
+evolved. Do not parallel-invent a second dialect. (BRAIN: "before inventing presentation, check
+whether an earlier milestone already shipped a member of it".)
+
 
 ### P29 — Enemy action repertoire / distance-conditioned action selection
 **Status:** **PASS — CLOSED 2026-08-18.** Frozen point: commit `9378316`

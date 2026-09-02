@@ -154,11 +154,17 @@ func test_presentation_and_sim_read_the_same_boundary_fact() -> void:
 ## The capability this file exists for is unchanged and still exercised by the fixtures above;
 ## what changed is that FLOOR 1 no longer needs a mixed-side patch.
 ##
-## THE ZERO-CONSUMER QUESTION IS NOW CLOSED (2026-09-02): Floor 2's Vault is the first shipped
-## consumer -- solid on its inward sides so the optional fight cannot be farmed by shooting in
-## from the gallery, LEDGE on its exposed map-facing side, one rectangle with two meanings. The
-## override vocabulary therefore survives the same rule that retired the `switch` interactable,
-## on evidence rather than on anticipation. Asserted in tests/test_floor2.gd.
+## THE ZERO-CONSUMER QUESTION IS OPEN AGAIN, and the honest record matters more than the
+## capability. Floor 2's Vault briefly WAS the first shipped consumer: solid inward so the
+## optional fight there could not be farmed by shooting in, LEDGE on its exposed side. Then the
+## human found that fight paid nothing, it was deactivated (ruled 2026-09-02), and the occlusion
+## rationale went with it. The mixed treatment was removed rather than preserved to keep the
+## capability alive.
+##
+## SO PER-EDGE OVERRIDES HAVE ZERO AUTHORED CONSUMERS AGAIN, asserted directly in
+## tests/test_floor2.gd so the audit reads code rather than memory. A validated capability is not
+## entitled to permanent survival without a consumer, and the fixtures above keep proving it
+## WORKS -- which is a different claim from proving it is USED.
 func test_the_authored_roundabout_is_fully_open() -> void:
 	var plan: FloorPlan = DepthGenerator.generate(0, 1)
 	for segment in plan.solid_segments():
