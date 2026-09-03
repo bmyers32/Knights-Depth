@@ -107,6 +107,11 @@ func solid_segments() -> Array[Dictionary]:
 	# faces are INWARD-facing walls, so they are emitted directly rather than through the
 	# uncovered-span derivation, which asks "is there ground beyond this edge" -- and beyond an
 	# obstacle's edge there always is.
+	# A BLOCKING DESTRUCTIBLE CONTRIBUTES NO WALL FACES, deliberately, and this is worth stating
+	# because the first version did emit them. A breakable ALREADY stops projectiles through its
+	# own detection -- so faces duplicated that law, and the duplicate won: the west face stopped
+	# every shot a hair SHORT of the prop, which made a destructible standing in a doorway
+	# permanently indestructible. Its rect governs MOVEMENT; its own hit circle governs shots.
 	for obstacle in obstacles:
 		var box: Rect2 = obstacle.rect
 		segments.append({"axis": &"x", "at": box.position.x, "min": box.position.y, "max": box.end.y, "outward": -1.0, "style": &"wall", "elevation": 0.0})
@@ -308,10 +313,16 @@ func make_bounds() -> WalkableBounds:
 	return WalkableBounds.new(open_walkable_rects(open_ids), obstacle_rects())
 
 
+## Every rect that is solid AT FLOOR LOAD: permanent obstacles, plus destructibles that occupy
+## ground until broken. The sim retires a destructible's share when it is destroyed, which is the
+## only difference between the two -- and the reason they share one representation.
 func obstacle_rects() -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	for obstacle in obstacles:
 		rects.append(obstacle.rect)
+	for breakable in breakables:
+		if breakable.blocking_rect.get_area() > 0.0:
+			rects.append(breakable.blocking_rect)
 	return rects
 
 

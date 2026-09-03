@@ -322,7 +322,7 @@ func _unpack_floor(plan: FloorPlan) -> void:
 	for encounter in plan.encounters:
 		sim.register_encounter(encounter.encounter_id, encounter.regions, encounter.role, encounter.confines_player, encounter.spawn_at_floor_load)
 	for breakable in plan.breakables:
-		sim.register_breakable(breakable.breakable_id, breakable.position, breakable.radius, breakable.durability)
+		sim.register_breakable(breakable.breakable_id, breakable.position, breakable.radius, breakable.durability, breakable.blocking_rect)
 	for hit_switch in plan.hit_switches:
 		sim.register_hit_switch(hit_switch.switch_id, hit_switch.position, hit_switch.radius,
 			hit_switch.mode, hit_switch.effects, hit_switch.starts_hidden)

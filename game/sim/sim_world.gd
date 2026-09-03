@@ -696,8 +696,15 @@ func register_solid_segments(segments: Array[Dictionary]) -> void:
 	_solid_segments = segments
 
 
-func register_breakable(breakable_id: int, position: Vector3, radius: float, durability: float) -> void:
-	_breakables[breakable_id] = {"position": position, "radius": radius, "durability": durability}
+## `blocking_rect` (2026-09-03): an EMPTY rect keeps the original behaviour exactly -- a target
+## and nothing more. A real rect means this prop OCCUPIES that ground until destroyed, using the
+## same exclusion representation a static obstacle uses. "Solid until broken" is therefore the
+## obstacle law with an end date, not a second notion of impassable.
+func register_breakable(breakable_id: int, position: Vector3, radius: float, durability: float, blocking_rect: Rect2 = Rect2()) -> void:
+	_breakables[breakable_id] = {
+		"position": position, "radius": radius, "durability": durability,
+		"blocking_rect": blocking_rect,
+	}
 
 
 ## A PERSISTENT hit target. Shares only DETECTION with the melee cone and the projectile sweep,
@@ -1032,7 +1039,19 @@ func _resolve_hit_on_breakable(attacker_id: int, breakable_id: int, damage: floa
 	})]
 	if float(breakable["durability"]) > 0.0:
 		return events
+	var vacated: Rect2 = breakable.get("blocking_rect", Rect2())
 	_breakables.erase(breakable_id)
+	# THE GROUND COMES BACK, and every gameplay fact the prop owned updates at once: the union
+	# regains the space and territories are re-clipped, so movement and pursuit change together
+	# rather than one lagging behind a mesh that has already vanished. Shots need no step here --
+	# they stopped at the prop's own detection, which disappears with it.
+	if vacated.get_area() > 0.0:
+		var remaining: Array[Rect2] = []
+		for rect: Rect2 in _obstacle_rects:
+			if rect != vacated:
+				remaining.append(rect)
+		_obstacle_rects = remaining
+		_rebuild_regions()
 	events.append(Event.new(tick_count, "breakable_destroyed", {"breakable_id": breakable_id}))
 	events.append_array(_fire_triggers_watching(&"breakable_destroyed", breakable_id))
 	return events

@@ -22,3 +22,15 @@ var radius: float = 0.7
 var durability: float = 1.0
 ## interactable_id revealed on destruction, or -1 for a purely decorative prop.
 var conceals_trigger_id: int = -1
+## REMOVABLE TOPOLOGY (2026-09-03). An EMPTY rect means the prop is a target and nothing more --
+## the original behaviour, unchanged. A real rect means it also OCCUPIES that ground until it is
+## destroyed, and then stops.
+##
+## THIS IS WHAT SEPARATES A DESTRUCTIBLE FROM A PROP WITH HP. Its authored spatial role is the
+## point: temporary route blockage, sightline blockage, temporary cover, enemy containment. A
+## breakable that shapes no space is decoration you can hit.
+##
+## Deliberately the SAME representation an obstacle uses -- an exclusion from the walkable union
+## -- so "solid until broken" is the obstacle law with an end date rather than a second notion of
+## impassable.
+var blocking_rect: Rect2 = Rect2()

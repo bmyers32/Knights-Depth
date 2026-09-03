@@ -152,3 +152,126 @@ func test_an_encounter_territory_excludes_obstacles() -> void:
 	assert_false(territory.fits(Vector3(0.0, 0.0, 0.0), 0.45),
 		"the column is solid inside a territory as much as outside one")
 	assert_true(territory.fits(Vector3(-10.0, 0.0, 0.0), 0.45), "the rest of the home is unaffected")
+
+
+# --- 5: REMOVABLE TOPOLOGY — the blocking destructible (ruled 2026-09-03) -----------------------
+#
+# A destructible with a footprint OCCUPIES ground until it is destroyed, using the same exclusion
+# representation a static obstacle uses. "Solid until broken" is the obstacle law with an end
+# date, not a second notion of impassable.
+#
+# THIS IS WHAT SEPARATES A DESTRUCTIBLE FROM A PROP WITH HP: its authored spatial role. A
+# breakable that shapes no space is decoration you can hit.
+
+## On a DIFFERENT LANE from the column, deliberately: the first version of these tests fired
+## along z=0 with the column sitting in the way, so the shot never reached the rubble and the
+## fixture reported "the rubble must actually break" -- a fixture failure wearing a defect's
+## clothes.
+const RUBBLE := Rect2(4.0, -8.0, 4.0, 4.0)
+const LANE := -6.0
+
+
+func _plan_with_rubble() -> FloorPlan:
+	var plan: FloorPlan = _plan_with_column()
+	var rubble := BreakablePlan.new()
+	rubble.breakable_id = 0
+	rubble.position = Vector3(RUBBLE.get_center().x, 0.0, RUBBLE.get_center().y)
+	rubble.radius = 1.0
+	rubble.durability = 5.0
+	rubble.blocking_rect = RUBBLE
+	plan.breakables.append(rubble)
+	return plan
+
+
+func _load_rubble() -> void:
+	var plan: FloorPlan = _plan_with_rubble()
+	sim = SimWorld.new()
+	sim.set_damage_matrix({}, 1.5, 0.5)
+	sim.load_floor(plan.make_bounds(), Vector3(-15.0, 0.0, 0.0))
+	sim.register_patches(plan.patch_rects())
+	sim.register_obstacles(plan.obstacle_rects())
+	sim.register_solid_segments(plan.solid_segments())
+	for breakable in plan.breakables:
+		sim.register_breakable(breakable.breakable_id, breakable.position, breakable.radius,
+			breakable.durability, breakable.blocking_rect)
+	sim.add_entity(PLAYER, Vector3(-15.0, 0.0, 0.0), 6.0, Vector3(1, 0, 0), 0.45)
+	sim.register_combatant(PLAYER, 1000.0, &"envoy", 0, 0.45, &"player")
+	sim.register_gun(&"wand", 10.0, &"force", 40.0, 600, 0.2, 0.0, 1)
+	sim.set_equipped_weapon(PLAYER, &"wand")
+
+
+## A destructible with no footprint is unchanged from before this existed.
+func test_a_footprintless_breakable_blocks_nothing() -> void:
+	sim.register_breakable(0, Vector3(10.0, 0.0, 0.0), 1.0, 5.0)
+	assert_true(sim._bounds.fits(Vector3(10.0, 0.0, 0.0), 0.45),
+		"a target-only prop occupies no ground, exactly as before")
+
+
+func test_a_blocking_destructible_is_solid_while_it_stands() -> void:
+	_load_rubble()
+	assert_false(sim._bounds.fits(Vector3(RUBBLE.get_center().x, 0.0, LANE), 0.45),
+		"no body may stand inside standing rubble")
+
+
+## AND THE GROUND COMES BACK, with every fact it owned updating at once.
+func test_destroying_it_returns_the_ground_and_the_sightline_together() -> void:
+	_load_rubble()
+	var middle := Vector3(RUBBLE.get_center().x, 0.0, LANE)
+	assert_false(sim._bounds.fits(middle, 0.45), "sanity: solid to begin with")
+
+	sim.entities[PLAYER] = Vector3(-8.0, 0.0, LANE)
+	var destroyed: bool = false
+	for i in 20:
+		var events: Array[Event] = sim.tick(
+			[Command.new(sim.tick_count, PLAYER, "attack", {"aim": Vector3(1, 0, 0)})] as Array[Command], DT)
+		for j in 30:
+			events.append_array(sim.tick([] as Array[Command], DT))
+		for event in events:
+			if event.kind == "breakable_destroyed":
+				destroyed = true
+		if destroyed:
+			break
+	assert_true(destroyed, "sanity: the rubble must actually break")
+	assert_true(sim._bounds.fits(middle, 0.45), "the ground it occupied returns")
+
+
+## A BLOCKING DESTRUCTIBLE CONTRIBUTES NO WALL FACES, and that is deliberate rather than an
+## oversight. It already stops projectiles through its own detection, so faces duplicated that
+## law -- and the duplicate won: the west face stopped every shot a hair SHORT of the prop, which
+## made a destructible standing in a doorway permanently indestructible. Its rect governs
+## MOVEMENT; its own hit circle governs shots.
+func test_a_blocking_destructible_adds_no_wall_faces() -> void:
+	var plan: FloorPlan = _plan_with_rubble()
+	for segment in plan.solid_segments():
+		var at: float = float(segment["at"])
+		assert_false(segment["axis"] == &"x" and absf(at - RUBBLE.position.x) < 0.01,
+			"a destructible must not wall itself off from the shots meant to destroy it")
+	assert_true(plan.obstacle_rects().has(RUBBLE), "while still occupying its ground for bodies")
+
+
+## While it stands it is cover, from the same authored rect -- so a destructible can hold a
+## sightline as well as a route.
+func test_standing_rubble_stops_a_shot_and_the_cleared_ground_does_not() -> void:
+	_load_rubble()
+	sim.entities[PLAYER] = Vector3(-8.0, 0.0, LANE)
+	sim.add_entity(TARGET, Vector3(15.0, 0.0, LANE), 0.0)
+	sim.register_combatant(TARGET, 100000.0, &"fang", 0, 0.5, &"enemy")
+	var reached: bool = false
+	for i in 40:
+		for event in sim.tick([] as Array[Command], DT):
+			if event.kind == "hit" and int(event.payload.get("target_id", -1)) == TARGET:
+				reached = true
+	assert_false(reached, "sanity: nothing has been fired yet")
+
+	# Fire until the rubble is gone, then confirm the lane is open.
+	for i in 30:
+		var events: Array[Event] = sim.tick(
+			[Command.new(sim.tick_count, PLAYER, "attack", {"aim": Vector3(1, 0, 0)})] as Array[Command], DT)
+		for j in 30:
+			events.append_array(sim.tick([] as Array[Command], DT))
+		for event in events:
+			if event.kind == "hit" and int(event.payload.get("target_id", -1)) == TARGET:
+				reached = true
+		if reached:
+			break
+	assert_true(reached, "once the cover is gone the shot reaches what it was hiding")
