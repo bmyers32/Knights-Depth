@@ -46,6 +46,13 @@ const _WALL_COLOR: Color = Color(0.36, 0.35, 0.42)
 const _GATE_CLOSED_COLOR: Color = Color(0.78, 0.28, 0.26)
 ## Deliberately unlike the plates (orange/blue) and the crate: a switch is a thing you SHOOT.
 const _SWITCH_COLOR: Color = Color(0.86, 0.84, 0.35)
+## Its used/alternate state. Distinct enough to read across a room, which is where the decision
+## about whether to hit it again gets made.
+const _SWITCH_ACTIVE_COLOR: Color = Color(0.36, 0.82, 0.52)
+## A BLOCKING destructible reads differently from an ordinary prop, because its job is different:
+## one is scenery to clear, the other is a route decision.
+const _BLOCKER_COLOR: Color = Color(0.52, 0.42, 0.30)
+const _BLOCKER_HEIGHT: float = 1.8
 ## Close to the wall colour on purpose: an obstacle IS a wall, just one standing in the room.
 const _OBSTACLE_COLOR: Color = Color(0.30, 0.31, 0.35)
 ## Dull when dormant, hot when out: the phase must be readable at a glance from across a room,
@@ -316,6 +323,18 @@ func _build_spike_pad(pad: SpikePadPlan) -> void:
 	_hazards[pad.pad_id] = mesh
 
 
+## THE SWITCH MUST LOOK DIFFERENT AFTER IT IS USED (ruled 2026-09-04). The human hit one and
+## could not tell anything had happened. Colour REINFORCES state; it is never the authority --
+## the connection is, and the door's own geometry carries the primary read.
+func set_switch_state(switch_id: int, activated: bool) -> void:
+	if not _switches.has(switch_id):
+		return
+	var material: StandardMaterial3D = _switches[switch_id].material_override
+	material.albedo_color = _SWITCH_ACTIVE_COLOR if activated else _SWITCH_COLOR
+	material.emission = material.albedo_color
+	material.emission_energy_multiplier = 1.1 if activated else 0.6
+
+
 ## Mirrors the sim's authoritative phase. Presentation never decides when spikes are out.
 func set_hazard_active(pad_id: int, active: bool) -> void:
 	if not _hazards.has(pad_id):
@@ -353,7 +372,22 @@ func _build_hit_switch(hit_switch: HitSwitchPlan) -> void:
 	_switches[hit_switch.switch_id] = mesh
 
 
+## DRAWN FROM ITS FOOTPRINT when it has one, so the mesh and the ground it occupies are the same
+## shape. A blocker drawn as a small box over a large exclusion would be the presentation-lies
+## defect in miniature -- the player would walk into an edge that was not where it looked.
 func _build_breakable(breakable: BreakablePlan) -> void:
+	if breakable.blocking_rect.get_area() > 0.0:
+		var box: Rect2 = breakable.blocking_rect
+		var middle := Vector3(box.position.x + box.size.x * 0.5, 0.0, box.position.y + box.size.y * 0.5)
+		_breakables[breakable.breakable_id] = _add_box(
+			Vector3(box.size.x, _BLOCKER_HEIGHT, box.size.y),
+			middle + Vector3(0.0, elevation_at(middle) + _BLOCKER_HEIGHT * 0.5, 0.0),
+			_BLOCKER_COLOR)
+		return
+	_build_ordinary_breakable(breakable)
+
+
+func _build_ordinary_breakable(breakable: BreakablePlan) -> void:
 	var size: float = breakable.radius * 1.6
 	var mesh := _add_box(Vector3(size, size, size), breakable.position + Vector3(0.0, size * 0.5, 0.0), _BREAKABLE_COLOR)
 	_breakables[breakable.breakable_id] = mesh

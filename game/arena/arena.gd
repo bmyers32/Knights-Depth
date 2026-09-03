@@ -315,7 +315,7 @@ func _unpack_floor(plan: FloorPlan) -> void:
 	sim.register_obstacles(plan.obstacle_rects())
 	for pad in plan.spike_pads:
 		sim.register_spike_pad(pad.pad_id, pad.rect, pad.safe_ticks, pad.active_ticks,
-			pad.phase_offset_ticks, pad.damage, pad.damage_type)
+			pad.phase_offset_ticks, pad.damage, pad.damage_type, pad.eligible_allegiances)
 	sim.register_solid_segments(plan.solid_segments())
 	for connection in plan.connections:
 		sim.register_connection(connection.connection_id, connection.aperture, connection.starts_open)
@@ -667,6 +667,7 @@ func _report_events(events: Array[Event]) -> void:
 				# never decides what it did. The door it opened arrives as its own
 				# connection_changed, through the same path a plate's would.
 				print("switch activated: ", event.payload)
+				_floor_builder.set_switch_state(int(event.payload.get("switch_id", -1)), true)
 			"switch_revealed":
 				print("switch revealed: ", event.payload)
 				_floor_builder.set_switch_visible(int(event.payload.get("switch_id", -1)), true)

@@ -108,7 +108,12 @@ const B_THICKET_RUBBLE := 1   # partly blocks the way on
 const B_GALLERY_RUBBLE := 2   # holds the Watcher's sightline, and a lane
 
 ## PLATE SIZE SIGNALS SEMANTIC WEIGHT: small for a local action, large for floor transition.
-const CONTROL_PLATE := Rect2(-13.0, -65.0, 2.0, 2.0)
+##
+## MOVED CLEAR OF THE GALLERY'S WEST OBSTACLE (2026-09-04). It previously sat at (-13,-65),
+## overlapping the column at x[-14,-10] z[-68,-64] -- so the plate poked out from under permanent
+## geometry. The human read that exactly as it was: an accident, not concealment. Clipping is not
+## discovery language; a control is either plainly visible or hidden behind something removable.
+const CONTROL_PLATE := Rect2(-20.0, -62.0, 2.0, 2.0)
 const EXIT_PLATE := Rect2(-22.0, -108.0, 4.0, 4.0)
 
 
@@ -268,19 +273,32 @@ static func _trigger(plan: FloorPlan, trigger_id: int, kind: StringName, region:
 static func _world_objects(plan: FloorPlan) -> void:
 	# THE CONCEALED SWITCH, and the vegetation in front of it. Hidden means NOT DRAWN AND NOT
 	# HITTABLE: concealment is physical here, never a flag consulted after the fact.
+	# BESIDE THE DOOR IT OPENS (2026-09-04). It used to stand in the Thicket, two spaces and a
+	# whole chamber away from the Vault -- so hitting it changed something the player could not
+	# see, and the causal link had to be inferred rather than read. We have no vocabulary for
+	# remote causality, and inventing one to rescue a placement is exactly backwards.
+	#
+	# It remains a ONE-SHOT switch, not a reversible one. Correcting the record: the toggle was
+	# never wired to the Vault; what was wrong was the DISTANCE, and that is now fixed.
 	var vault_switch := HitSwitchPlan.new()
 	vault_switch.switch_id = S_VAULT
-	vault_switch.position = Vector3(-28.0, 0.0, -48.0)
+	vault_switch.position = Vector3(13.5, 0.0, -80.0)
 	vault_switch.radius = 0.7
 	vault_switch.mode = HitSwitchPlan.MODE_ONE_SHOT
 	vault_switch.starts_hidden = true
 	vault_switch.effects = [FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, C_VAULT)]
 	plan.hit_switches.append(vault_switch)
 
-	_breakable(plan, B_COVER, Vector3(-25.0, 0.0, -48.0), 1.1, 18.0)
-	# BLOCKING RUBBLE: it occupies ground until broken, so the Thicket's direct line is a choice
-	# between clearing it and walking around.
-	_breakable(plan, B_THICKET_RUBBLE, Vector3(-18.0, 0.0, -44.0), 1.6, 34.0, Rect2(-20.0, -46.0, 4.0, 4.0))
+	# THE COVER SITS WITH THE SWITCH, beside the door they open. An ordinary prop, so ONE HIT.
+	_breakable(plan, B_COVER, Vector3(11.0, 0.0, -80.0), 1.1, 1.0)
+	# THE THICKET'S BLOCKER, and now its ONLY prop. It occupies ground until broken, so the direct
+	# line west is a choice between clearing it and walking around -- which is the whole of its
+	# job, and is why it no longer shares a room with a concealment prop that meant something
+	# entirely different. Two boxes with unrelated purposes in one space read as neither.
+	#
+	# Authored durability, deliberately above the one-hit baseline: this one is a route decision
+	# rather than scenery, and it should cost something to remove.
+	_breakable(plan, B_THICKET_RUBBLE, Vector3(-18.0, 0.0, -44.0), 1.6, 30.0, Rect2(-20.0, -46.0, 4.0, 4.0))
 	# THE GALLERY'S RUBBLE, which is the whole integrated beat: it holds the Watcher's sightline
 	# BOTH ways and occupies the lane in front of it. One act changes the fight and the route.
 	_breakable(plan, B_GALLERY_RUBBLE, Vector3(0.0, 0.0, -61.5), 2.0, 46.0, Rect2(-3.0, -63.0, 6.0, 3.0))

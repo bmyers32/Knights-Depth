@@ -362,3 +362,57 @@ func test_every_authored_spawn_fits_and_sits_in_its_own_home() -> void:
 				"%s does not fit at %s" % [spawn["enemy_key"], spawn["position"]])
 			assert_true(WalkableBounds.contains(encounter.regions[0], spawn["position"].x, spawn["position"].z),
 				"%s spawns outside the home that owns it" % spawn["enemy_key"])
+
+
+# --- 10: CAUSE AND EFFECT MUST BE SPATIALLY LEGIBLE (ruled 2026-09-04) --------------------------
+
+## THE VAULT SWITCH USED TO STAND TWO SPACES AND A WHOLE CHAMBER AWAY from the door it opened, so
+## hitting it changed something the player could not see. We have no vocabulary for remote
+## causality, and inventing one to rescue a placement would be backwards.
+##
+## Correcting the record while pinning it: that switch was always ONE-SHOT, never reversible.
+## What was wrong was the DISTANCE.
+func test_the_vault_switch_is_within_sight_of_the_door_it_opens() -> void:
+	var vault_switch: HitSwitchPlan = plan.hit_switches[0]
+	assert_eq(vault_switch.mode, HitSwitchPlan.MODE_ONE_SHOT, "the vault's control is not a toggle")
+	var door: Rect2 = Rect2()
+	for connection: TraversalConnection in plan.connections:
+		if connection.connection_id == L.C_VAULT:
+			door = connection.aperture
+	var to_door: float = Vector3(door.get_center().x, 0.0, door.get_center().y).distance_to(vault_switch.position)
+	assert_lt(to_door, 12.0,
+		"a control must be readable together with what it controls (%.1f units away)" % to_door)
+
+
+## AND ITS COVER TRAVELS WITH IT. A concealment prop separated from the thing it conceals is two
+## unrelated boxes in two rooms.
+func test_the_cover_sits_with_the_switch_it_hides() -> void:
+	var vault_switch: HitSwitchPlan = plan.hit_switches[0]
+	for breakable: BreakablePlan in plan.breakables:
+		if breakable.breakable_id == L.B_COVER:
+			assert_lt(breakable.position.distance_to(vault_switch.position), 6.0,
+				"the cover must be in front of the switch, not in another room")
+
+
+## ORDINARY PROPS BREAK IN ONE HIT. Clearing scenery must not feel like fighting a low-health
+## enemy -- while a prop whose ROLE is a route decision may still cost something.
+func test_ordinary_props_are_one_hit_and_route_blockers_are_not() -> void:
+	for breakable: BreakablePlan in plan.breakables:
+		if breakable.blocking_rect.get_area() > 0.0:
+			assert_gt(breakable.durability, 1.0,
+				"a route blocker is a decision, so it may cost more than a swing")
+		else:
+			assert_lte(breakable.durability, 1.0,
+				"breakable %d is scenery and must break in one hit" % breakable.breakable_id)
+
+
+## EVERY PROP IN A SPACE SHOULD SHARE ITS PURPOSE. Two boxes with unrelated jobs in one room read
+## as neither -- which is exactly what the human reported about the Thicket.
+func test_the_thicket_holds_one_prop_with_one_job() -> void:
+	var thicket: Rect2 = _patch(L.P_THICKET)
+	var props: Array = []
+	for breakable: BreakablePlan in plan.breakables:
+		if WalkableBounds.contains(thicket, breakable.position.x, breakable.position.z):
+			props.append(breakable.breakable_id)
+	assert_eq(props.size(), 1, "one prop, one job: %s" % str(props))
+	assert_eq(props[0], L.B_THICKET_RUBBLE, "and it is the route blocker")

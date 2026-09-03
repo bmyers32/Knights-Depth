@@ -267,3 +267,68 @@ func test_both_authored_floors_have_correctly_oriented_barriers() -> void:
 				continue  # touching patches: an always-open connection, orientation is moot
 			assert_eq(sim.gate_barrier(connection.connection_id)["axis"], &"z" if apart_on_z else &"x",
 				"depth %d connection %d barrier must lie across travel" % [depth, connection.connection_id])
+
+
+# --- 6: CONTROLS MUST NOT HIDE UNDER PERMANENT GEOMETRY (ruled 2026-09-04) ----------------------
+#
+# Floor 2 authored a plate overlapping a column, so it poked out from under something solid. The
+# human read it exactly as it was -- an accident, not concealment. The distinction the guard
+# encodes: GOOD concealment hides a control behind something REMOVABLE, so finding it is an
+# action; clipping under permanent geometry is a mistake that happens to be partly visible.
+
+func _floor_with_control_at(region: Rect2, obstacle_rect: Rect2) -> FloorPlan:
+	var plan := FloorPlan.new()
+	plan.patches.append(_patch(0, Rect2(-20.0, -20.0, 40.0, 40.0)))
+	var obstacle := ObstaclePlan.new()
+	obstacle.obstacle_id = 0
+	obstacle.rect = obstacle_rect
+	plan.obstacles.append(obstacle)
+	var trigger := FloorTrigger.new()
+	trigger.trigger_id = 0
+	trigger.kind = FloorLayers.TRIGGER_REGION
+	trigger.region = region
+	trigger.renders_as_plate = true
+	trigger.effects = [] as Array[Dictionary]
+	plan.triggers.append(trigger)
+	return plan
+
+
+func test_a_plate_overlapping_a_permanent_obstacle_is_reported() -> void:
+	_floor_with_control_at(Rect2(-1.0, -1.0, 2.0, 2.0), Rect2(-2.0, -2.0, 3.0, 3.0)).validate()
+	assert_push_error("overlaps permanent obstacle")
+
+
+func test_a_plate_clear_of_obstacles_passes() -> void:
+	_floor_with_control_at(Rect2(8.0, 8.0, 2.0, 2.0), Rect2(-2.0, -2.0, 3.0, 3.0)).validate()
+	assert_push_error_count(0)
+
+
+## THE EXEMPTION IS THE POINT, not an oversight: hiding a control behind something the player can
+## CLEAR is the intended vocabulary, and a guard that refused it would forbid the good case with
+## the bad one.
+func test_concealment_behind_a_removable_blocker_is_allowed() -> void:
+	var plan: FloorPlan = _floor_with_control_at(Rect2(-1.0, -1.0, 2.0, 2.0), Rect2(30.0, 30.0, 2.0, 2.0))
+	var rubble := BreakablePlan.new()
+	rubble.breakable_id = 0
+	rubble.position = Vector3(0.0, 0.0, 0.0)
+	rubble.radius = 1.5
+	rubble.blocking_rect = Rect2(-2.0, -2.0, 4.0, 4.0)
+	plan.breakables.append(rubble)
+	plan.validate()
+	assert_push_error_count(0, "a control behind something removable is concealment, not a defect")
+
+
+func test_a_switch_buried_in_an_obstacle_is_reported() -> void:
+	var plan: FloorPlan = _floor_with_control_at(Rect2(20.0, 20.0, 2.0, 2.0), Rect2(-2.0, -2.0, 4.0, 4.0))
+	var buried := HitSwitchPlan.new()
+	buried.switch_id = 0
+	buried.position = Vector3(0.0, 0.0, 0.0)
+	plan.hit_switches.append(buried)
+	plan.validate()
+	assert_push_error("unhittable, not hidden")
+
+
+func test_both_authored_floors_keep_their_controls_clear() -> void:
+	for depth in [1, 2]:
+		DepthGenerator.generate(0, depth)
+		assert_push_error_count(0, "depth %d hides a control under permanent geometry" % depth)

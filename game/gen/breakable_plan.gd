@@ -19,6 +19,10 @@ extends RefCounted
 var breakable_id: int = -1
 var position: Vector3 = Vector3.ZERO
 var radius: float = 0.7
+## ORDINARY PROPS BREAK IN ONE HIT (ruled 2026-09-04). Clearing scenery must not feel like
+## fighting a low-health enemy, so the baseline is deliberately below any authored weapon damage.
+## A prop whose ROLE needs more -- a route blocker meant to cost something -- authors its own
+## value; this is a default, not a law that every destructible is fragile.
 var durability: float = 1.0
 ## interactable_id revealed on destruction, or -1 for a purely decorative prop.
 var conceals_trigger_id: int = -1

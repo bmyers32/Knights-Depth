@@ -654,11 +654,11 @@ func register_patches(rects: Array[Rect2]) -> void:
 ## A timed hazard. Its damage is ENVIRONMENT-sourced and travels the ordinary damage pipeline,
 ## so a shield absorbs it, repeated ticks can break that shield, and i-frames gate repeats --
 ## all of which is existing law rather than anything this hazard invents.
-func register_spike_pad(pad_id: int, rect: Rect2, safe_ticks: int, active_ticks: int, phase_offset_ticks: int, damage: float, damage_type: StringName) -> void:
+func register_spike_pad(pad_id: int, rect: Rect2, safe_ticks: int, active_ticks: int, phase_offset_ticks: int, damage: float, damage_type: StringName, eligible_allegiances: Array = [&"player"]) -> void:
 	_spike_pads[pad_id] = {
 		"rect": rect, "safe_ticks": maxi(1, safe_ticks), "active_ticks": maxi(1, active_ticks),
 		"phase_offset": phase_offset_ticks, "damage": damage, "damage_type": damage_type,
-		"was_active": false,
+		"eligible": eligible_allegiances, "was_active": false,
 	}
 
 
@@ -4069,6 +4069,13 @@ func _advance_hazards() -> Array[Event]:
 		actor_ids.sort()
 		for actor_id: int in actor_ids:
 			if _health.get(actor_id, 0.0) <= 0.0 or _combat_absent.has(actor_id):
+				continue
+			# ELIGIBILITY IS AUTHORED, never assumed (ruled 2026-09-04). A hazard damaging every
+			# actor that touches it was an implementation default, not a design decision, and the
+			# human ruled that enemies do not die to spikes. Note what is NOT concluded: this is
+			# THIS pad's policy, not a law that environment damage spares enemies -- a later
+			# explosive block may hurt whatever its own content says it hurts.
+			if not pad["eligible"].has(_allegiance.get(actor_id, &"enemy")):
 				continue
 			var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
 			if not WalkableBounds.contains(pad["rect"], position.x, position.z):

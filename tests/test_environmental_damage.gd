@@ -231,8 +231,32 @@ func test_iframes_prevent_every_active_tick_from_landing() -> void:
 
 # --- 5: AGGRO -----------------------------------------------------------------------------------
 
+## ENEMIES ARE IMMUNE TO SPIKE PADS (ruled 2026-09-04). Eligibility is AUTHORED: a hazard
+## damaging everything that touched it was an implementation default, never a design decision.
+func test_enemies_do_not_take_spike_damage() -> void:
+	sim.add_entity(ENEMY, Vector3(0.0, 0.0, 0.0), 0.0, Vector3(0, 0, 1), 0.5)
+	sim.register_combatant(ENEMY, 500.0, &"fang", 0, 0.5, &"enemy")
+	_run_to_active()
+	_run(60)
+	assert_eq(sim._health[ENEMY], 500.0, "an enemy standing on active spikes must be unharmed")
+
+
+## AND THE POLICY IS THE PAD'S, not a law that environment damage spares enemies -- widening the
+## authored list is all it takes, which is what keeps a future explosive block free to differ.
+func test_a_pad_authored_to_include_enemies_does_hurt_them() -> void:
+	sim.register_spike_pad(PAD, SPIKES, 10, 10, 0, 12.0, &"force", [&"player", &"enemy"])
+	sim.add_entity(ENEMY, Vector3(0.0, 0.0, 0.0), 0.0, Vector3(0, 0, 1), 0.5)
+	sim.register_combatant(ENEMY, 500.0, &"fang", 0, 0.5, &"enemy")
+	_run_to_active()
+	_run(60)
+	assert_lt(sim._health[ENEMY], 500.0, "eligibility is authored, so widening it must work")
+
+
 ## "The floor hurt me, therefore attack the player" is not an inference the sim gets to make.
+## Tested through a pad authored to include enemies, so the aggro law keeps a live consumer
+## rather than being deleted along with the default that used to reach it.
 func test_environmental_damage_acquires_no_aggro() -> void:
+	sim.register_spike_pad(PAD, SPIKES, 10, 10, 0, 12.0, &"force", [&"player", &"enemy"])
 	sim.add_entity(ENEMY, Vector3(0.0, 0.0, 0.0), 4.0, Vector3(0, 0, 1), 0.5)
 	sim.register_combatant(ENEMY, 500.0, &"fang", 0, 0.5, &"enemy")
 	sim.register_weapon(&"bite", 5.0, &"force", 2.0, 90.0, 0.0, 9999)

@@ -24,3 +24,12 @@ var active_ticks: int = 30
 var phase_offset_ticks: int = 0
 var damage: float = 12.0
 var damage_type: StringName = &"force"
+## WHO THIS HAZARD ACTUALLY HURTS, authored explicitly (ruled 2026-09-04).
+##
+## THE DEFAULT IS THE PLAYER ALONE, because the human ruled that enemies do not die to spikes --
+## and the general lesson is stated here rather than assumed: "environment damage" does NOT imply
+## "damages everything". Eligibility is a property of the authored hazard, so a later explosive
+## block may legitimately hurt whatever its own content says it hurts.
+##
+## An allegiance list rather than a bool, so widening it needs no new field and no new law.
+var eligible_allegiances: Array[StringName] = [&"player"]

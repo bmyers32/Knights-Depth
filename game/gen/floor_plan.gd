@@ -452,6 +452,7 @@ func validate(body_radii: Dictionary = {}) -> void:
 	_reject_unnamed_connection_patches()
 	_reject_bypassable_gates()
 	_reject_impassable_apertures(body_radii)
+	_reject_obstructed_controls()
 
 
 ## A connection that does not name the patches it joins cannot be checked by anything above,
@@ -592,3 +593,32 @@ func _reject_impassable_apertures(body_radii: Dictionary) -> void:
 				+ "for the Envoy, and impassable for an actor the floor itself places. Widen the aperture; "
 				+ "never shrink the actor.")
 				% [connection.connection_id, across, widest_key, widest, widest * 2.0])
+
+
+## A CONTROL MUST NOT SIT UNDER PERMANENT GEOMETRY (ruled 2026-09-04).
+##
+## Floor 2 authored a plate overlapping a column, so it poked out from beneath something solid.
+## The human read that exactly as it was -- an accident, not concealment -- and the distinction
+## matters: GOOD concealment hides a control behind something REMOVABLE, so finding it is an
+## action. Clipping under permanent geometry is not discovery language, it is a mistake that
+## happens to be partly visible.
+##
+## Blocking destructibles are deliberately EXEMPT: hiding a control behind something the player
+## can clear is the intended vocabulary, and refusing it here would forbid the good case along
+## with the bad one.
+func _reject_obstructed_controls() -> void:
+	for trigger in triggers:
+		if not trigger.renders_as_plate or trigger.region.get_area() <= 0.0:
+			continue
+		for obstacle in obstacles:
+			if obstacle.rect.intersection(trigger.region).get_area() > 0.0:
+				push_error(("FloorPlan: trigger %d is drawn as a plate at %s but overlaps permanent obstacle %d "
+					+ "at %s. A control is either plainly visible or hidden behind something REMOVABLE -- "
+					+ "clipping under solid geometry reads as an authoring accident, because it is one.")
+					% [trigger.trigger_id, str(trigger.region), obstacle.obstacle_id, str(obstacle.rect)])
+	for hit_switch in hit_switches:
+		for obstacle in obstacles:
+			if WalkableBounds.contains(obstacle.rect, hit_switch.position.x, hit_switch.position.z):
+				push_error(("FloorPlan: hit-switch %d stands inside permanent obstacle %d. Concealment must be "
+					+ "removable; a switch buried in a column is unhittable, not hidden.")
+					% [hit_switch.switch_id, obstacle.obstacle_id])
