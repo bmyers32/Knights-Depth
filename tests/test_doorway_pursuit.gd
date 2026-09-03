@@ -250,3 +250,135 @@ func test_both_authored_floors_admit_every_body_they_place() -> void:
 	for depth in [1, 2]:
 		DepthGenerator.generate(0, depth)  # validate() runs inside, with real radii
 		assert_push_error_count(0, "depth %d authors a doorway its own roster cannot use" % depth)
+
+
+# --- 4: THE BURROW EMERGENCE LAW (P17 evolved, ruled 2026-09-03) --------------------------------
+#
+# P17 authored the retry-window timeout under OPEN-ARENA scope, where every candidate being
+# blocked was supposed to be unreachable, so the only resolution was a loud death. Floors
+# produced a real consumer: a committed destination can go invalid for ordinary world reasons,
+# and killing an enemy for a room layout is a defect with a warning attached.
+#
+# TWO OUTCOMES NOW. Abort to the committed burrow ENTRY when that placement is legal and
+# unoccupied -- deterministic, no search, nowhere surprising. The loud death survives, but means
+# something narrower: the authored candidates AND the abort destination were all impossible.
+
+## Small enough that EVERY candidate in the fixed emergence set lands off the floor -- including
+## the diagonals, which a merely-small box still admits. Paired with a deliberately large
+## emergence radius below rather than a knife-edge box, so the fixture is blocked by a wide
+## margin instead of by luck.
+const TIGHT := Rect2(-2.5, -2.5, 5.0, 5.0)
+
+
+## Registers a burrower on a floor of the caller's choosing, with the shipped Fang's shape.
+func _burrower_on(rects: Array[Rect2], at: Vector3, player_at: Vector3) -> void:
+	sim = SimWorld.new()
+	sim.set_damage_matrix({}, 1.5, 0.5)
+	sim.load_floor(WalkableBounds.new(rects), player_at)
+	sim.register_patches(rects)
+	sim.add_entity(PLAYER, player_at, 6.0, Vector3(0, 0, 1), 0.45)
+	sim.register_combatant(PLAYER, 100000.0, &"envoy", 0, 0.45, &"player")
+	sim.mark_run_persistent(PLAYER)
+	sim.add_entity(ENEMY, at, 4.0, Vector3(0, 0, 1), 0.9)
+	sim.register_combatant(ENEMY, 500.0, &"fang", 0, 0.9, &"enemy")
+	sim.register_weapon(&"test_bite", 5.0, &"force", 2.0, 90.0, 0.0, 9999)
+	sim.register_ai(ENEMY, CombatTestHelpers.single_action_repertoire(&"test_bite", 2.0, 10000),
+		at, 2.2, 1.9, 30.0, 60.0, 0, 45, 4.0, 0.4, 20, 6.0, 30, 15, 0, 45)
+	sim.debug_set_ai_active(ENEMY)
+	sim._next_fire_tick[ENEMY] = 1_000_000
+
+
+var _resolution: Dictionary = {}
+
+## Runs a committed burrow to its resolution. Returns the resolving event kind, or "" if it
+## never resolved -- which is itself a failure, and asserted as one. The payload is kept because
+## the EVENT is authoritative about where the actor was placed; reading `entities` afterwards
+## reads a position the AI may already have moved on from in the same tick.
+func _resolve_burrow(max_ticks: int = 900) -> String:
+	_resolution = {}
+	for i in max_ticks:
+		sim.debug_override_health(PLAYER, 100000.0)
+		for event in sim.tick([] as Array[Command], DT):
+			if int(event.payload.get("actor_id", -1)) != ENEMY:
+				continue
+			if event.kind == "burrow_emerged" or event.kind == "burrow_aborted" or event.kind == "died":
+				_resolution = event.payload
+				return event.kind
+	return ""
+
+
+## ORDINARY EMERGENCE STILL WINS. The new fallback must not have displaced the authored path.
+func test_ordinary_emergence_still_resolves_normally() -> void:
+	var open_floor: Array[Rect2] = [Rect2(-20.0, -20.0, 40.0, 40.0)]
+	_burrower_on(open_floor, Vector3(0.0, 0.0, -4.0), Vector3(0.0, 0.0, 0.0))
+	assert_true(sim.debug_trigger_burrow(ENEMY, PLAYER))
+	assert_eq(_resolve_burrow(), "burrow_emerged", "an unobstructed burrow must simply emerge")
+	assert_false(sim.debug_is_combat_absent(ENEMY))
+
+
+## TIMEOUT WITH A LEGAL ENTRY -> ABORT TO ENTRY. The floor is a tight box: the player stands at
+## the centre, so every candidate ringing them at the authored emergence radius lands outside the
+## walkable floor, while the burrow's own entry remains perfectly legal.
+func test_a_blocked_emergence_aborts_to_the_burrow_entry() -> void:
+	var tight: Array[Rect2] = [TIGHT]
+	# The player stands clear of the entry: a burrow may never abort into another body, so a
+	# player parked on top of the entry would have this test measuring occupancy instead.
+	_burrower_on(tight, Vector3(0.0, 0.0, -1.5), Vector3(0.0, 0.0, 1.0))
+	assert_true(sim.debug_trigger_burrow(ENEMY, PLAYER))
+	var entry: Vector3 = sim.entities[ENEMY]
+	assert_eq(_resolve_burrow(), "burrow_aborted",
+		"with every candidate off the floor, the burrow must abort rather than kill the actor")
+	assert_true(sim._health.get(ENEMY, 0.0) > 0.0, "and the actor is alive")
+	assert_false(sim.debug_is_combat_absent(ENEMY), "present again")
+	assert_lt(sim.entities[ENEMY].distance_to(entry), 4.5,
+		"it comes back where it went down, not somewhere surprising (%s vs entry %s)" % [sim.entities[ENEMY], entry])
+
+
+## THE ABORT DESTINATION IS THE COMMITTED ENTRY, not the submerge point drifted by the jump --
+## asserted as an exact identity so a later refactor cannot quietly substitute "wherever it
+## happened to end up".
+func test_the_abort_lands_on_the_committed_entry_exactly() -> void:
+	var tight: Array[Rect2] = [TIGHT]
+	_burrower_on(tight, Vector3(0.0, 0.0, -1.5), Vector3(0.0, 0.0, 1.0))
+	assert_true(sim.debug_trigger_burrow(ENEMY, PLAYER))
+	var committed: Vector3 = sim.entities[ENEMY]
+	assert_eq(_resolve_burrow(), "burrow_aborted")
+	# Asserted against the EVENT, which is authoritative about placement. The jump carries the
+	# body away from the entry before it submerges, so "wherever it ended up" is a different
+	# point entirely -- that difference is exactly what this pins.
+	var landed: Vector3 = _resolution.get("position", Vector3.INF)
+	assert_almost_eq(landed.x, committed.x, 0.001, "exactly the committed entry x")
+	assert_almost_eq(landed.z, committed.z, 0.001, "exactly the committed entry z")
+
+
+## TIMEOUT WITH AN ILLEGAL ENTRY -> THE LOUD FAIL-SAFE SURVIVES, and now means something
+## narrower: the authored candidates AND the deterministic abort destination were both
+## impossible. Reached here by shrinking the floor out from under the entry mid-burrow.
+func test_the_loud_failsafe_still_fires_when_the_entry_is_also_impossible() -> void:
+	var tight: Array[Rect2] = [TIGHT]
+	_burrower_on(tight, Vector3(0.0, 0.0, -1.5), Vector3(0.0, 0.0, 1.0))
+	assert_true(sim.debug_trigger_burrow(ENEMY, PLAYER))
+	# The world changes under it while it is under: the ground it left no longer exists.
+	for i in 20:
+		sim.tick([] as Array[Command], DT)
+	# The surviving ground no longer includes the entry -- the player's half of the box remains,
+	# so the world is still coherent and only the abort destination has become impossible.
+	var sliver: Array[Rect2] = [Rect2(-2.5, 0.0, 5.0, 2.5)]
+	sim._bounds = WalkableBounds.new(sliver)
+	assert_eq(_resolve_burrow(), "died",
+		"with the candidates AND the entry impossible, the loud fail-safe is still the answer")
+	assert_push_error_count(0)  # a warning, deliberately, not an error
+
+
+## THE SOFT-LOCK IS UNREACHABLE BY EITHER ROAD. Whatever happens, a burrow resolves.
+func test_a_burrow_always_resolves_one_way_or_the_other() -> void:
+	for tight: bool in [true, false]:
+		var rects: Array[Rect2] = [TIGHT]
+		if not tight:
+			rects = [Rect2(-20.0, -20.0, 40.0, 40.0)] as Array[Rect2]
+		_burrower_on(rects, Vector3(0.0, 0.0, -1.5), Vector3(0.0, 0.0, 1.0))
+		assert_true(sim.debug_trigger_burrow(ENEMY, PLAYER))
+		var outcome: String = _resolve_burrow()
+		assert_ne(outcome, "", "a burrow must never simply never resolve (tight=%s)" % str(tight))
+		assert_false(sim._health.get(ENEMY, 0.0) > 0.0 and sim.debug_is_combat_absent(ENEMY),
+			"and must never leave an actor alive and absent (tight=%s)" % str(tight))

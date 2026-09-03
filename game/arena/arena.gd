@@ -650,6 +650,15 @@ func _report_events(events: Array[Event]) -> void:
 					_enemies[submerged_id].set_combat_present(false)
 					_enemies[submerged_id].clear_telegraph()
 				_windup_cues.erase(submerged_id)
+			"burrow_aborted":
+				# The burrow failed and the Fang came back up where it went down. Presented
+				# exactly like an emergence, because to the player it IS one -- what differs is
+				# only where it happens, and that is already in the payload.
+				print("burrow aborted to entry: ", event.payload)
+				var aborted_id: int = event.payload.get("actor_id")
+				if _enemies.has(aborted_id):
+					_enemies[aborted_id].teleport_from_sim(event.payload.get("position"))
+					_enemies[aborted_id].set_combat_present(true)
 			"burrow_emerged":
 				print("burrow emerged: ", event.payload)
 				var emerged_id: int = event.payload.get("actor_id")

@@ -3819,14 +3819,39 @@ func _advance_burrow() -> Array[Event]:
 	return events
 
 
-## FAIL-SAFE, for a condition that should be unreachable in an open arena. It is NOT a tuning
-## mechanic: the alternative to a diagnosable death is a living Fang left combat-absent for the
-## rest of the encounter, which is an encounter soft-lock and strictly worse.
+## RETRY WINDOW EXHAUSTED. P17 authored this under open-arena scope, where every emergence
+## candidate being blocked was supposed to be unreachable, so the only resolution was a loud
+## death -- strictly better than a living Fang left absent forever.
 ##
-## Mirrors the hit-death cleanup, including _clear_reaction_state, so this path is never the
-## odd one out.
+## FLOORS PRODUCED A REAL CONSUMER (ruled 2026-09-03). A committed destination can become
+## invalid for ordinary world reasons: the player retreats behind a gate that shuts, stands
+## where this body does not fit, or is ringed by other actors. Killing an enemy for a room
+## layout is not a fail-safe, it is a defect with a warning attached -- the human watched a Fang
+## vanish and read it, correctly, as a bug.
+##
+## SO THERE ARE NOW TWO OUTCOMES, and the second one means something narrower than it used to.
+##
+## FIRST FALLBACK — ABORT TO THE BURROW ENTRY. "The burrow failed; it comes back where it
+## started." The entry is committed historical state, so this is deterministic, needs no search,
+## retargets nothing underground, and can place the actor nowhere surprising. Occupancy is still
+## checked: the whole point of the retry window is that nothing emerges inside another body.
+##
+## FINAL FAIL-SAFE — the loud death is KEPT, but now fires only when the authored candidates AND
+## the deterministic abort destination are all impossible. That is a genuinely degenerate world
+## state rather than an ordinary obstruction, which is what the original comment assumed it was.
 func _resolve_burrow_emergence_timeout(actor_id: int) -> Array[Event]:
-	push_warning("burrow_emergence_timeout [actor %d]: every emergence candidate stayed blocked for the full retry window -- this is a v1 SCOPE/INVARIANT FAILURE (open-arena placement only), not a tuning outcome. The actor dies underground rather than emerging illegally or remaining absent." % actor_id)
+	var entry: Vector3 = _burrow[actor_id].entry_position
+	if _point_is_legal_for(actor_id, entry) and not _burrow_point_is_occupied(actor_id, entry):
+		entities[actor_id] = entry
+		_combat_absent.erase(actor_id)
+		_end_burrow(actor_id)
+		return [Event.new(tick_count, "burrow_aborted", {"actor_id": actor_id, "position": entry})]
+
+	push_warning(("burrow_emergence_timeout [actor %d]: every authored emergence candidate stayed blocked "
+		+ "for the full retry window AND the burrow entry at %s is itself no longer a legal, unoccupied "
+		+ "placement. Both the authored emergence and the deterministic abort destination are impossible, "
+		+ "so the actor dies underground rather than emerging illegally or remaining absent forever. This "
+		+ "is a placement-invariant failure, not a tuning outcome.") % [actor_id, entry])
 	_health[actor_id] = 0.0
 	_end_burrow(actor_id)
 	var events: Array[Event] = [Event.new(tick_count, "died", {"actor_id": actor_id})]
