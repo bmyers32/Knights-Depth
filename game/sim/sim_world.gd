@@ -1086,6 +1086,20 @@ func _resolve_hit_on_switch(switch_id: int) -> Array[Event]:
 	return events
 
 
+## Destroys a breakable through the ORDINARY resolution path, for tests and tools that need a
+## prop gone without staging a firing line to it. Not a second destruction route: the same
+## function a hit calls, so reveals, effects, vacated ground and events are all identical.
+func debug_destroy_breakable(breakable_id: int) -> Array[Event]:
+	if not _breakables.has(breakable_id):
+		return []
+	return _resolve_hit_on_breakable(-1, breakable_id, float(_breakables[breakable_id]["durability"]))
+
+
+## Presses a switch through the ORDINARY activation path, for the same reason.
+func debug_activate_hit_switch(switch_id: int) -> Array[Event]:
+	return _resolve_hit_on_switch(switch_id)
+
+
 ## Every VISIBLE switch the melee cone covers. Hidden ones are absent from the scan entirely, so
 ## concealment is physical rather than a flag consulted after the fact.
 func _switches_in_cone(attacker_position: Vector3, resolved_aim: Vector3, weapon: Dictionary) -> Array:

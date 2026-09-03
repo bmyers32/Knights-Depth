@@ -1,16 +1,14 @@
 extends GutTest
-## FLOOR 2 BUILD CHECKS — the second authored floor, verified mechanically before human replay.
+## FLOOR 2 BUILD CHECKS — the production-scale floor (rebuilt 2026-09-03).
 ##
-## THE GOVERNING QUESTION: can the same grammar produce a materially different convincing place
-## without another foundational rewrite? Nothing in Floor 2 is a new primitive, so these assert
-## that the SAME vocabulary carries a different composition -- and, since the 2026-09-02
-## iteration, that each thing on the floor has a reason to be there.
+## THE GOVERNING QUESTION has moved on. It is no longer only "can the grammar produce a second
+## convincing place", but "does this read as a plausible FULL floor rather than a mechanics test
+## map" -- which means the entry must not reveal the whole thing, and its combat spaces must be
+## authored around the environment rather than sharing a room with it.
 ##
-## DRIVEN THROUGH THE REAL ARENA at depth 2, not through a hand-built SimWorld. A hand-built
-## harness registers encounter SITES but never their ROSTERS -- the driver spawns those -- so an
-## activation there resolves instantly to "cleared" against an empty roster and the response beat
-## silently reads as broken. Same banked lesson as the AI probes: an instrument must be shown to
-## be measuring the thing it claims.
+## DRIVEN THROUGH THE REAL ARENA at depth 2. A hand-built harness registers encounter SITES but
+## never their ROSTERS -- the driver spawns those -- so an activation there resolves instantly to
+## "cleared" against an empty roster and a working beat silently reads as broken.
 
 const DT := 1.0 / 30.0
 const L = preload("res://game/gen/layouts/archive_roundabout.gd")
@@ -23,40 +21,34 @@ var player: int
 
 func before_each() -> void:
 	arena = load("res://game/arena/arena.tscn").instantiate()
-	# Set BEFORE add_child: _ready loads the floor, and depth is what selects the layout.
 	arena.depth = 2
 	add_child_autofree(arena)
 	sim = arena.sim
 	player = arena.envoy.actor_id
 	plan = DepthGenerator.generate(arena.run_seed, arena.depth)
-	# Traversal tests must measure traversal. Never a balance claim.
-	sim.debug_override_health(player, 100000.0)
+	# Traversal tests must measure traversal, never survivability. Never a balance claim.
+	sim.debug_override_health(player, 1000000.0)
 
 
-## Walks the Envoy to a point through the real move Command. Straight-line, no pathfinding --
-## tests route through intermediate points, and a walk that fails because geometry is in the way
-## is the geometry working.
-func _walk_to(target: Vector3, max_ticks: int = 2000) -> bool:
+func _walk_to(target: Vector3, max_ticks: int = 3000) -> bool:
 	for i in max_ticks:
+		sim.debug_override_health(player, 1000000.0)
 		var position: Vector3 = sim.entities[player]
-		if position.distance_to(target) < 1.2:
+		if position.distance_to(target) < 1.4:
 			return true
 		var direction: Vector3 = target - position
 		direction.y = 0.0
 		sim.tick([Command.new(sim.tick_count, player, "move", {"direction": direction.normalized()})] as Array[Command], DT)
-	return sim.entities[player].distance_to(target) < 1.2
+	return sim.entities[player].distance_to(target) < 1.4
 
 
-## Walks ONTO a plate and lets the occupancy tick resolve. `_walk_to` stops within 1.2 units,
-## which for a 2x2 plate can leave the Envoy beside it rather than on it -- the trigger then
-## fires a moment later and the assertion reads a floor that has not changed yet.
 func _stand_on(plate: Rect2) -> void:
 	var centre: Vector3 = _centre(plate)
-	for i in 2000:
-		var position: Vector3 = sim.entities[player]
-		if position.distance_to(centre) < 0.3:
+	for i in 3000:
+		sim.debug_override_health(player, 1000000.0)
+		if sim.entities[player].distance_to(centre) < 0.3:
 			break
-		var direction: Vector3 = centre - position
+		var direction: Vector3 = centre - sim.entities[player]
 		direction.y = 0.0
 		sim.tick([Command.new(sim.tick_count, player, "move", {"direction": direction.normalized()})] as Array[Command], DT)
 	sim.tick([] as Array[Command], DT)
@@ -66,289 +58,307 @@ func _centre(rect: Rect2) -> Vector3:
 	return Vector3(rect.position.x + rect.size.x * 0.5, 0.0, rect.position.y + rect.size.y * 0.5)
 
 
-func _open(connection_id: int) -> bool:
-	return bool(sim._connection_open[connection_id])
-
-
 func _patch(patch_id: int) -> Rect2:
 	return plan.patch_by_id(patch_id).rect
 
 
-## Route B, the open first traversal: concourse -> route B -> junction.
-func _take_route_b() -> void:
-	assert_true(_walk_to(Vector3(0.0, 0.0, -32.0)), "into the concourse")
-	assert_true(_walk_to(Vector3(10.0, 0.0, -44.0)), "toward the route B mouth")
-	assert_true(_walk_to(Vector3(10.0, 0.0, -55.0)), "down route B")
-	assert_true(_walk_to(Vector3(6.0, 0.0, -66.0)), "into the junction")
+func _open(connection_id: int) -> bool:
+	return bool(sim._connection_open[connection_id])
 
 
-## The last leg, shared by several routes: west along the junction, up onto the terrace, exit.
-func _finish_from_the_junction() -> void:
-	assert_true(_walk_to(Vector3(-20.0, 0.0, -66.0)), "west along the junction")
-	assert_true(_walk_to(Vector3(-20.0, 0.0, -76.0)), "up onto the terrace")
+func _state(encounter_id: int) -> String:
+	return String(sim._encounter_state.get(encounter_id, ""))
+
+
+## Down to the Gallery the western way. Waypoints, not pathfinding: a walk that fails because
+## geometry is in the way is the geometry working.
+func _descend_via_thicket() -> void:
+	assert_true(_walk_to(Vector3(0.0, 0.0, -26.0)), "down the ramp into the landing")
+	assert_true(_walk_to(Vector3(-10.0, 0.0, -32.0)), "west across the landing")
+	assert_true(_walk_to(Vector3(-10.0, 0.0, -40.0)), "into the thicket")
+	assert_true(_walk_to(Vector3(-19.5, 0.0, -52.0)), "across it, south of the rubble")
+	assert_true(_walk_to(Vector3(-19.5, 0.0, -60.0)), "and on into the gallery")
+
+
+func _descend_via_spillway() -> void:
+	assert_true(_walk_to(Vector3(0.0, 0.0, -26.0)), "down the ramp into the landing")
+	assert_true(_walk_to(Vector3(11.0, 0.0, -32.0)), "east across the landing")
+	assert_true(_walk_to(Vector3(11.0, 0.0, -40.0)), "into the spillway")
+	assert_true(_walk_to(Vector3(22.0, 0.0, -48.0)), "round the slow lane, clear of the spikes")
+	assert_true(_walk_to(Vector3(18.5, 0.0, -60.0)), "and on into the gallery")
+
+
+func _finish_from_the_gallery() -> void:
+	assert_true(_walk_to(Vector3(10.0, 0.0, -78.0)), "down route B")
+	assert_true(_walk_to(Vector3(10.0, 0.0, -90.0)), "into the junction")
+	assert_true(_walk_to(Vector3(-20.0, 0.0, -92.0)), "west along it")
+	assert_true(_walk_to(Vector3(-20.0, 0.0, -102.0)), "up onto the terrace")
 	_stand_on(L.EXIT_PLATE)
 
 
-# --- THE FLOOR EXISTS AND IS DIFFERENT ------------------------------------------------------
+# --- 1: THE FLOOR IS A SEQUENCE, NOT A ROOM WITH A FORK ----------------------------------------
 
-func test_depth_two_authors_a_different_floor_from_depth_one() -> void:
-	var floor_one: FloorPlan = DepthGenerator.generate(arena.run_seed, 1)
-	assert_ne(plan.patches.size(), 0, "floor 2 has geometry")
-	assert_ne(_centre(plan.patches[0].rect), _centre(floor_one.patches[0].rect),
-		"depth 2 must author a materially different floor, not the same one again")
+func test_the_floor_has_production_scale_beat_density() -> void:
+	assert_gte(plan.patches.size(), 9, "a production floor is a sequence of spaces")
+	assert_gte(plan.spike_pads.size(), 1, "with a hazard")
+	assert_gte(plan.obstacles.size(), 4, "obstacle composition")
+	assert_gte(plan.breakables.size(), 2, "destructibles")
+	assert_eq(plan.hit_switches.size(), 1, "and a remote switch")
+	assert_gte(plan.encounters.size(), 4, "with several encounters rather than one")
 
 
-## THE M2 DETERMINISM LAW applies to authored floors too. An authored layout takes no RNG draws,
-## so this is nearly free -- and it is exactly the assertion that would catch the day someone
-## reaches for a random number inside a hand-built layout without noticing.
+## THE ENTRY MUST NOT REVEAL THE FLOOR. Asserted as the geometry the claim rests on: the spaces
+## that carry the later beats are far beyond anything the Overlook looks at, and the two middle
+## branches do not overlap in x, so standing in one shows nothing of the other.
+func test_the_entry_cannot_see_the_later_floor() -> void:
+	var overlook: Rect2 = _patch(L.P_OVERLOOK)
+	var gallery: Rect2 = _patch(L.P_GALLERY)
+	assert_gt(overlook.position.y - gallery.end.y, 40.0,
+		"the gallery is far beyond the entry's reach, not merely further along")
+	var thicket: Rect2 = _patch(L.P_THICKET)
+	var spillway: Rect2 = _patch(L.P_SPILLWAY)
+	assert_lt(thicket.end.x, spillway.position.x,
+		"the two middle branches must not share ground, or neither hides the other")
+
+
 func test_depth_two_generation_is_deterministic() -> void:
 	var first: String = JSON.stringify(DepthGenerator.generate(4242, 2).to_dict(), "\t")
 	var second: String = JSON.stringify(DepthGenerator.generate(4242, 2).to_dict(), "\t")
-	assert_eq(first, second, "the same seed and depth must produce a byte-identical floor 2")
+	assert_eq(first, second, "the same seed and depth must produce a byte-identical floor")
 
 
-# --- 1: END-TO-END COMPLETION, AND THE EXIT OWNS SYNCHRONISATION ------------------------------
+# --- 2: BOTH BRANCHES COMPLETE THE FLOOR -------------------------------------------------------
 
-## The whole floor, walked, using only player Commands. Note how short this is now: the
-## intermediate party plate is gone, so arriving at the junction leads straight to the exit.
-func test_the_floor_completes_end_to_end() -> void:
-	_take_route_b()
-	_finish_from_the_junction()
-	assert_true(sim.debug_describe_floor()["floor_complete"], "and the floor completes")
+func test_the_floor_completes_through_the_thicket() -> void:
+	_descend_via_thicket()
+	_finish_from_the_gallery()
+	assert_true(sim.debug_describe_floor()["floor_complete"], "the western way is a complete route")
 
 
-## THE REDUNDANT BEAT IS GONE. One all-party requirement on the floor, not two in a row.
-func test_the_exit_is_the_only_party_wide_requirement() -> void:
-	var group_triggers: int = 0
-	for trigger: FloorTrigger in plan.triggers:
-		if trigger.kind == FloorLayers.TRIGGER_GROUP_OCCUPANCY:
-			group_triggers += 1
-	assert_eq(group_triggers, 1,
-		"'everyone is here' must mean something; asking for it twice in a row means nothing")
+func test_the_floor_completes_through_the_spillway() -> void:
+	_descend_via_spillway()
+	_finish_from_the_gallery()
+	assert_true(sim.debug_describe_floor()["floor_complete"], "and so is the eastern way")
 
 
-## And the way to the terrace is simply open -- no plate stands between the junction and the exit.
-func test_nothing_gates_the_walk_from_the_junction_to_the_exit() -> void:
-	assert_true(_open(L.C_TO_TERRACE), "the terrace route starts open")
-	_take_route_b()
-	assert_true(_walk_to(Vector3(-20.0, 0.0, -66.0)))
-	assert_true(_walk_to(Vector3(-20.0, 0.0, -76.0)), "walked without buying anything")
-	assert_false(sim.debug_describe_floor()["floor_complete"],
-		"arriving is still not finishing -- the exit plate remains the act")
+# --- 3: THE ONE-WAY COMMITMENT ------------------------------------------------------------------
+
+## The floor's real phase transition, and the reason it needs no party plate to mark one.
+func test_descending_seals_the_way_back() -> void:
+	assert_true(_open(L.C_COMMIT), "the way down starts open")
+	assert_true(_walk_to(Vector3(0.0, 0.0, -26.0)), "commit past the trigger")
+	assert_false(_open(L.C_COMMIT), "and it closes behind you")
+	assert_true(_walk_to(Vector3(0.0, 0.0, -22.0)), "walking back toward it is allowed")
+	for i in 300:
+		sim.tick([Command.new(sim.tick_count, player, "move", {"direction": Vector3(0, 0, 1)})] as Array[Command], DT)
+	assert_lt(sim.entities[player].z, _patch(L.P_DESCENT).position.y,
+		"but the descent is unreachable now, at %s" % sim.entities[player])
 
 
-# --- 2: THE FORK IS LEGIBLE -------------------------------------------------------------------
+# --- 4: STAGED ENCOUNTER ACTIVATION -------------------------------------------------------------
 
-## THE HUMAN FINDING, pinned as geometry. The fork was structurally real and behaviourally
-## invisible: the camera reaches ~34 units of width at the mouths' depth, and the mouths sat 46
-## apart, so they could never appear together. The screen-space proof is a camera measurement
-## (tools/measure_floor2_legibility.gd); this guards the world geometry that measurement rests
-## on, so a later coordinate change cannot silently undo it.
-func test_the_fork_mouths_are_close_enough_to_share_a_screen() -> void:
-	var a: Rect2 = _patch(L.P_ROUTE_A)
-	var b: Rect2 = _patch(L.P_ROUTE_B)
-	var separation: float = b.get_center().x - a.get_center().x
-	assert_lt(separation, 28.0,
-		"mouths %.0f apart cannot both be on screen; a lateral choice only reads as a choice when both options fit the camera's reach" % separation)
-	assert_gt(separation, 12.0, "but they must still read as two distinct ways, not one wide one")
-	assert_almost_eq(a.get_center().x, -b.get_center().x, 0.01,
-		"symmetric about the centre line, so neither route is merely the one you happen to face")
+## A long floor stages its fights rather than waking them all at load.
+func test_the_later_encounters_are_dormant_until_reached() -> void:
+	assert_eq(_state(L.E_GALLERY), "dormant", "the gallery waits")
+	assert_eq(_state(L.E_JUNCTION), "dormant", "so does the junction")
+	assert_eq(_state(L.E_ROUTE_A_RESPONSE), "dormant", "and the shortcut's price")
+	assert_ne(_state(L.E_LANDING), "dormant", "but the ambient landing pair are simply there")
 
 
-## THE MIDDLE MUST STAY A GAP, or the fork is decoration around continuous ground.
-func test_the_two_routes_are_separated_by_real_void() -> void:
-	assert_false(sim._bounds.is_inside(Vector3(0.0, 0.0, -55.0)),
-		"the ground between the routes must not exist")
-	assert_gt(_patch(L.P_ROUTE_B).position.x - _patch(L.P_ROUTE_A).end.x, 4.0,
-		"and the void must be wide enough to read as one")
+func test_entering_the_gallery_wakes_its_fight() -> void:
+	_descend_via_thicket()
+	assert_eq(_state(L.E_GALLERY), "active", "arriving is what starts it")
+	for actor_id: int in sim._encounter_roster[L.E_GALLERY]:
+		assert_false(sim.debug_is_combat_absent(actor_id), "and its roster arrives")
+	assert_eq(sim.debug_describe_floor()["active_confinement"], -1, "without sealing the player in")
 
 
-# --- 3: THE JUNCTION IS STILL VISIBLE BEFORE IT IS REACHABLE ----------------------------------
-
-func test_the_concourse_to_junction_sightline_geometry_is_intact() -> void:
-	var concourse: Rect2 = _patch(L.P_CONCOURSE)
-	var junction: Rect2 = _patch(L.P_JUNCTION)
-	assert_almost_eq(concourse.position.y, -46.0, 0.01, "the concourse's north edge is the observation line")
-	assert_almost_eq(junction.end.y, -61.0, 0.01, "and the junction's near edge is what is seen")
-	assert_almost_eq(concourse.position.y - junction.end.y, 15.0, 0.01,
-		"the measured gap must not drift without re-measuring")
-	assert_false(sim._bounds.is_inside(Vector3(0.0, 0.0, -53.0)),
-		"the middle must stay unwalkable, or it is not visible-BEFORE-reachable")
+func test_the_junction_fight_waits_until_the_junction() -> void:
+	_descend_via_spillway()
+	assert_eq(_state(L.E_JUNCTION), "dormant", "still dormant from the gallery")
+	assert_true(_walk_to(Vector3(10.0, 0.0, -78.0)))
+	assert_true(_walk_to(Vector3(10.0, 0.0, -90.0)))
+	assert_eq(_state(L.E_JUNCTION), "active", "and wakes on arrival")
 
 
-func test_the_junction_cannot_be_reached_directly_across_the_gap() -> void:
-	assert_true(_walk_to(Vector3(0.0, 0.0, -44.0)), "reach the concourse's north edge")
-	for i in 400:
-		sim.tick([Command.new(sim.tick_count, player, "move", {"direction": Vector3(0, 0, -1)})] as Array[Command], DT)
-	assert_gt(sim.entities[player].z, -50.0,
-		"walking straight at the junction must fail; the fork is the way round")
+# --- 5: THE INTEGRATED CHAMBER (the composition the ruling required) ----------------------------
+
+## THREAT-VISIBLE-BEFORE-ACTIONABLE. The Watcher stands behind blocking rubble that holds the
+## sightline BOTH ways: the player understands the threat before they can act on it, and the
+## environment is what changes the relationship.
+func test_the_gallery_watcher_stands_behind_cover_that_holds_the_line_both_ways() -> void:
+	var rubble: BreakablePlan = null
+	for breakable: BreakablePlan in plan.breakables:
+		if breakable.breakable_id == L.B_GALLERY_RUBBLE:
+			rubble = breakable
+	assert_not_null(rubble, "the gallery's rubble exists")
+	assert_gt(rubble.blocking_rect.get_area(), 0.0, "and occupies ground rather than merely standing on it")
+
+	var watcher: Vector3 = Vector3.ZERO
+	for spawn in plan.encounter_by_id(L.E_GALLERY).roster:
+		if spawn["enemy_key"] == &"watcher":
+			watcher = spawn["position"]
+	assert_lt(absf(watcher.x - rubble.position.x), 3.0,
+		"the watcher must be BEHIND the cover, not merely in the same room")
+	assert_lt(watcher.z, rubble.position.z, "and on the far side of it from the approach")
 
 
-# --- 4: ROUTE B PROGRESSES WITHOUT BUYING ANYTHING --------------------------------------------
+## THE SAME ACT CHANGES THE FIGHT AND THE ROUTE: the rubble occupies a lane, so clearing it both
+## exposes what is behind and opens the ground in front.
+func test_breaking_the_gallery_rubble_opens_the_ground_it_held() -> void:
+	var rubble: Rect2 = Rect2()
+	for breakable: BreakablePlan in plan.breakables:
+		if breakable.breakable_id == L.B_GALLERY_RUBBLE:
+			rubble = breakable.blocking_rect
+	var middle := Vector3(rubble.get_center().x, 0.0, rubble.get_center().y)
+	assert_false(sim._bounds.fits(middle, 0.45), "the lane is held while the rubble stands")
 
-func test_route_b_reaches_the_exit_without_the_control() -> void:
-	_take_route_b()
-	assert_false(_open(L.C_TO_A), "the shortcut was never bought")
-	assert_eq(String(sim._encounter_state.get(L.E_CONTROL_RESPONSE, "")), "dormant",
-		"and nothing was woken")
-	_finish_from_the_junction()
-	assert_true(sim.debug_describe_floor()["floor_complete"], "the long way is a complete route")
-
-
-# --- 5: ROUTE A IS GATED, AND THE CONTROL BUYS IT ---------------------------------------------
-
-func test_route_a_is_closed_before_the_control() -> void:
-	assert_false(_open(L.C_TO_A), "the shortcut must start shut")
-	assert_true(_walk_to(Vector3(0.0, 0.0, -32.0)), "into the concourse")
-	assert_false(_open(L.C_TO_A), "and stay shut until the control is used")
+	sim.debug_destroy_breakable(L.B_GALLERY_RUBBLE)
+	assert_true(sim._bounds.fits(middle, 0.45), "and returns when it is cleared")
 
 
-func test_the_control_opens_route_a_and_fires_once() -> void:
-	_stand_on(L.CONTROL_PLATE)
-	assert_true(_open(L.C_TO_A), "standing on it opens the shortcut")
-	var fired: int = 0
+## OBSTACLES SHAPE THE APPROACH rather than blocking it: two lanes, both real.
+func test_the_gallery_has_two_approaches_around_its_obstacles() -> void:
+	var gallery: Rect2 = _patch(L.P_GALLERY)
+	for x: float in [-22.0, 22.0]:
+		assert_true(sim._bounds.fits(Vector3(x, 0.0, gallery.get_center().y), 1.45),
+			"the widest authored body must fit down the lane at x=%.0f" % x)
+
+
+# --- 6: THE HAZARD ------------------------------------------------------------------------------
+
+func test_the_spillway_spikes_cycle_and_are_out_of_step() -> void:
+	var differed: bool = false
 	for i in 120:
-		for event in sim.tick([] as Array[Command], DT):
-			if event.kind == "floor_trigger_fired":
-				fired += 1
-	assert_eq(fired, 0, "a one-shot control must not re-fire while stood on")
+		var first: bool = sim.debug_describe_spike_pad(0)["active"]
+		var second: bool = sim.debug_describe_spike_pad(1)["active"]
+		if first != second:
+			differed = true
+		sim.tick([] as Array[Command], DT)
+	assert_true(differed, "neighbouring pads must not march in lockstep, or the lane is one gate")
 
 
-## CAUSAL LEGIBILITY, pinned as geometry. The control charges no walking distance -- costing
-## showed it cannot, because any detour big enough to feel like a price costs MORE than the
-## shortcut saves. What it must do instead is sit where its purpose is visible: beside the mouth
-## it opens.
-func test_the_control_sits_beside_the_mouth_it_opens() -> void:
-	var control: Vector3 = _centre(L.CONTROL_PLATE)
-	var mouth := Vector3(_patch(L.P_ROUTE_A).get_center().x, 0.0, _patch(L.P_CONCOURSE).position.y)
-	assert_lt(control.distance_to(mouth), 8.0,
-		"the control must be in sight of what it buys, or the player cannot connect the two")
+## A HAZARD IS RISK TOPOLOGY, NOT WALKABILITY: the pad's ground stays walkable at every phase.
+func test_a_spike_pad_never_changes_where_you_may_stand() -> void:
+	var pad: SpikePadPlan = plan.spike_pads[0]
+	var middle := Vector3(pad.rect.get_center().x, 0.0, pad.rect.get_center().y)
+	for i in 120:
+		assert_true(sim._bounds.fits(middle, 0.45),
+			"spikes change what standing costs, never whether you may")
+		sim.tick([] as Array[Command], DT)
 
 
-func test_route_a_is_walkable_once_opened() -> void:
+## AND THERE IS A WAY ROUND. The fast line is the timed line; the slow line is not a gate.
+func test_the_spillway_has_a_route_that_avoids_every_pad() -> void:
+	_descend_via_spillway()
+	for pad: SpikePadPlan in plan.spike_pads:
+		assert_false(WalkableBounds.contains(pad.rect, sim.entities[player].x, sim.entities[player].z),
+			"the slow lane must not end on a pad")
+
+
+# --- 7: THE TWO FLOOR VERBS ---------------------------------------------------------------------
+
+## PRESENCE. Route A is bought by standing.
+func test_route_a_is_gated_until_the_control_is_stood_on() -> void:
+	assert_false(_open(L.C_TO_A), "the shortcut starts shut")
+	_descend_via_thicket()
+	assert_false(_open(L.C_TO_A), "and stays shut on arrival")
 	_stand_on(L.CONTROL_PLATE)
-	assert_true(_walk_to(Vector3(-10.0, 0.0, -55.0)), "down route A")
-	assert_true(_walk_to(Vector3(-20.0, 0.0, -66.0)), "and it lands in the junction's west end")
+	assert_true(_open(L.C_TO_A), "standing on the control opens it")
+	assert_eq(_state(L.E_ROUTE_A_RESPONSE), "active", "and wakes what guards it")
 
 
-## THE FORK IS A REAL DECISION: Route A arrives materially nearer the exit than Route B does.
-func test_route_a_is_materially_shorter_to_the_exit() -> void:
-	var exit_point: Vector3 = _centre(L.EXIT_PLATE)
-	var from_a: float = Vector3(_patch(L.P_ROUTE_A).get_center().x, 0.0, -61.0).distance_to(exit_point)
-	var from_b: float = Vector3(_patch(L.P_ROUTE_B).get_center().x, 0.0, -61.0).distance_to(exit_point)
-	assert_lt(from_a, from_b * 0.75,
-		"route A must land materially closer (%.1f) than route B (%.1f) or the shortcut is a fiction" % [from_a, from_b])
+## THE PRICE STANDS IN THE SHORTCUT, so it is paid by whoever takes it -- and may be declined.
+func test_the_shortcuts_price_stands_in_the_shortcut() -> void:
+	var response: EncounterSite = plan.encounter_by_id(L.E_ROUTE_A_RESPONSE)
+	assert_eq(response.regions[0], _patch(L.P_ROUTE_A), "its territory is the route itself")
+	assert_false(response.confines_player, "and it never seals anyone in")
 
 
-# --- 6: THE PRICE STANDS WHERE THE SHORTCUT IS ------------------------------------------------
-
-## THE 2026-09-02 RESEQUENCING. The response used to wake loose in the Concourse -- the room the
-## player was already in and could walk away from -- so even its cost was soft. It now stands in
-## Route A, so the price is paid by whoever actually takes the shortcut.
-func test_the_response_belongs_to_the_route_it_guards() -> void:
-	var response: EncounterSite = plan.encounter_by_id(L.E_CONTROL_RESPONSE)
-	assert_eq(response.regions.size(), 1, "one rect is convex by construction, not by inspection")
-	assert_eq(response.regions[0], _patch(L.P_ROUTE_A), "and that rect is the shortcut itself")
-	for spawn in response.roster:
-		var stats: Resource = ContentDB.get_resource(&"enemy", spawn["enemy_key"])
-		assert_true(WalkableBounds.contains(_patch(L.P_ROUTE_A), spawn["position"].x, spawn["position"].z),
-			"%s must stand in the route it is the price of" % spawn["enemy_key"])
-		assert_true(sim._bounds.fits(spawn["position"], stats.combat_radius),
-			"%s does not fit where it spawns" % spawn["enemy_key"])
+## PERCEPTION. The Vault is opened by finding a concealed switch and shooting it -- a different
+## verb from the plate, because the spatial meaning differs.
+func test_the_vault_switch_is_concealed_until_its_cover_is_broken() -> void:
+	assert_true(bool(sim._hit_switches[L.S_VAULT]["hidden"]), "the switch starts hidden")
+	assert_false(_open(L.C_VAULT), "and the vault door starts shut")
+	sim.debug_destroy_breakable(L.B_COVER)
+	assert_false(bool(sim._hit_switches[L.S_VAULT]["hidden"]), "breaking the cover reveals it")
+	assert_false(_open(L.C_VAULT), "revealing is not pressing")
 
 
-func test_the_control_wakes_the_response_without_sealing_anyone_in() -> void:
-	_stand_on(L.CONTROL_PLATE)
-	assert_eq(String(sim._encounter_state.get(L.E_CONTROL_RESPONSE, "")), "active",
-		"opening the shortcut must wake what guards it")
-	for actor_id: int in sim._encounter_roster[L.E_CONTROL_RESPONSE]:
-		assert_false(sim.debug_is_combat_absent(actor_id), "the response ARRIVES")
-	assert_eq(sim.debug_describe_floor()["active_confinement"], -1,
-		"but it must NOT seal the player in -- buying a shortcut is not a mandatory arena lock")
+func test_shooting_the_revealed_switch_opens_the_vault() -> void:
+	sim.debug_destroy_breakable(L.B_COVER)
+	sim.debug_activate_hit_switch(L.S_VAULT)
+	assert_true(_open(L.C_VAULT), "the switch opens the door it names")
 
 
-## AND THE PLAYER MAY DECLINE. Open the shortcut, look at what is standing in it, take the long
-## way anyway. If that were impossible the "choice" would be a toll booth.
-func test_the_player_may_open_route_a_and_still_take_route_b() -> void:
-	_stand_on(L.CONTROL_PLATE)
-	assert_eq(String(sim._encounter_state.get(L.E_CONTROL_RESPONSE, "")), "active")
-	_take_route_b()
-	_finish_from_the_junction()
-	assert_true(sim.debug_describe_floor()["floor_complete"],
-		"declining the shortcut after opening it must still finish the floor")
+## THE GATE ACTUALLY OWNS ITS BRANCH: there is no other way into the Vault.
+func test_the_vault_cannot_be_entered_without_the_switch() -> void:
+	# ASSERTED ON THE GAP, not on the room. The Vault's own ground is always legal -- it is a
+	# patch -- and closing the door removes only the aperture that BRIDGES to it. Reachability is
+	# the claim; standing-legality inside the destination was never the question.
+	var route_b: Rect2 = _patch(L.P_ROUTE_B)
+	var vault: Rect2 = _patch(L.P_VAULT)
+	var gap := Vector3((route_b.end.x + vault.position.x) * 0.5, 0.0, vault.get_center().y)
+	assert_false(sim._bounds.fits(gap, 0.45), "nothing bridges to the vault while its door is shut")
+	sim.debug_destroy_breakable(L.B_COVER)
+	sim.debug_activate_hit_switch(L.S_VAULT)
+	assert_true(sim._bounds.fits(gap, 0.45), "and the switch is the only thing that bridges it")
 
 
-# --- 7: THE AMBIENT --------------------------------------------------------------------------
-
-func test_the_ambient_home_is_convex_and_its_roster_fits() -> void:
-	var ambient: EncounterSite = plan.encounter_by_id(L.E_CONCOURSE_AMBIENT)
-	assert_eq(ambient.regions.size(), 1, "one rect is convex by construction, not by inspection")
-	assert_eq(ambient.regions[0], _patch(L.P_CONCOURSE))
-	for spawn in ambient.roster:
-		var stats: Resource = ContentDB.get_resource(&"enemy", spawn["enemy_key"])
-		assert_true(WalkableBounds.contains(_patch(L.P_CONCOURSE), spawn["position"].x, spawn["position"].z),
-			"%s spawns outside the home that owns it" % spawn["enemy_key"])
-		assert_true(sim._bounds.fits(spawn["position"], stats.combat_radius),
-			"%s does not fit where it spawns" % spawn["enemy_key"])
-
-
-# --- 8: THE VAULT IS AN EMPTY ROOM, HONESTLY ---------------------------------------------------
-
-## Its fight asked for a detour, combat and risk and paid essentially nothing. Deactivated rather
-## than given a faked reward. The room stays; the toll does not.
-func test_the_vault_asks_for_nothing() -> void:
-	assert_eq(plan.encounters.size(), 2, "ambient and the route-A response; no vault fight")
+## THE DESTINATION IS STILL EMPTY, and that is recorded rather than disguised.
+func test_the_vault_contains_nothing_and_claims_nothing() -> void:
 	for encounter: EncounterSite in plan.encounters:
-		assert_ne(encounter.regions[0], _patch(L.P_VAULT), "no encounter lives in the vault")
-	for trigger: FloorTrigger in plan.triggers:
-		assert_false(WalkableBounds.contains(_patch(L.P_VAULT), trigger.region.get_center().x, trigger.region.get_center().y),
-			"and no plate inside it asks the player to start one")
+		assert_ne(encounter.regions[0], _patch(L.P_VAULT), "no fight is placed there to invent a reason")
 
 
-## But it is still a place, reachable and walkable.
-func test_the_vault_is_still_a_room_you_can_enter() -> void:
-	assert_true(_open(L.C_VAULT), "its mouth is open")
-	_take_route_b()
-	assert_true(_walk_to(Vector3(24.0, 0.0, -54.0)), "and the room can be walked into and looked at")
+# --- 8: FLOOR 1 IS UNAFFECTED --------------------------------------------------------------------
+
+func test_depth_one_still_authors_the_prototype() -> void:
+	var floor_one: FloorPlan = DepthGenerator.generate(arena.run_seed, 1)
+	assert_eq(floor_one.spike_pads.size(), 0, "floor 1 gains no hazards")
+	assert_eq(floor_one.obstacles.size(), 0, "no obstacles")
+	assert_eq(floor_one.hit_switches.size(), 0, "and no switches")
+	assert_ne(floor_one.patches.size(), plan.patches.size(), "it is still its own floor")
 
 
-## THE BOUNDARY RATIONALE WENT WITH THE FIGHT. Mixed WALL/LEDGE existed to occlude an encounter
-## that no longer happens here, and a validated capability is not entitled to survive without a
-## consumer. Asserted so the zero-consumer audit reads code rather than memory.
-func test_per_edge_boundary_overrides_now_have_no_authored_consumer() -> void:
-	for depth in [1, 2]:
-		for patch: WalkablePatch in DepthGenerator.generate(0, depth).patches:
-			for side: StringName in [patch.boundary_north, patch.boundary_south, patch.boundary_east, patch.boundary_west]:
-				assert_eq(side, &"", "depth %d patch %d still overrides a single edge" % [depth, patch.patch_id])
+# --- 9: THE ROSTER CAN USE THE FLOOR (§12) -------------------------------------------------------
+
+## OBSTACLES MAY SHAPE SPACE; THEY MAY NOT STRAND THE ROSTER. Sampled with the WIDEST authored
+## body rather than the player's, because pursuit, retreat and knockback all push enemies down
+## lanes their own encounter never mentioned. The apertures are covered by FloorPlan's clearance
+## guard; this is the other half -- the ground BETWEEN the obstacles.
+func test_the_widest_authored_body_can_walk_every_main_lane() -> void:
+	var widest: float = 0.0
+	for encounter: EncounterSite in plan.encounters:
+		for spawn in encounter.roster:
+			widest = maxf(widest, float(ContentDB.get_resource(&"enemy", spawn["enemy_key"]).combat_radius))
+	assert_gt(widest, 1.0, "sanity: the floor places a genuinely wide body")
+
+	# One representative line through each space that a chase can legitimately cross.
+	var lanes: Array = [
+		["landing, west of the columns", Vector3(-12.0, 0.0, -30.0), Vector3(-12.0, 0.0, -22.0)],
+		["landing, east of the columns", Vector3(11.0, 0.0, -30.0), Vector3(11.0, 0.0, -22.0)],
+		["thicket, south of the rubble", Vector3(-29.0, 0.0, -52.0), Vector3(-11.0, 0.0, -52.0)],
+		["spillway slow lane", Vector3(22.0, 0.0, -52.0), Vector3(22.0, 0.0, -40.0)],
+		["gallery west approach", Vector3(-22.0, 0.0, -70.0), Vector3(-22.0, 0.0, -60.0)],
+		["gallery east approach", Vector3(22.0, 0.0, -70.0), Vector3(22.0, 0.0, -60.0)],
+		["junction, end to end", Vector3(-27.0, 0.0, -92.0), Vector3(27.0, 0.0, -92.0)],
+	]
+	for lane in lanes:
+		var from: Vector3 = lane[1]
+		var to: Vector3 = lane[2]
+		for step in 21:
+			var point: Vector3 = from.lerp(to, float(step) / 20.0)
+			assert_true(sim._bounds.fits(point, widest),
+				"%s must admit a body of radius %.2f, blocked at %s" % [lane[0], widest, point])
 
 
-# --- 9: BOUNDARY AND GATE TRUTH ----------------------------------------------------------------
-
-## Floor 2 is open ground: every patch edge is a ledge, so the only solid boundary comes from
-## aperture flanks. The lip (2026-09-02) is what now makes those open edges read as intentional.
-func test_the_floor_is_open_ground_with_readable_edges() -> void:
-	assert_gt(plan.open_edge_segments().size(), 0, "the floor's open edges exist to be drawn")
-	for segment in plan.solid_segments():
-		assert_true(_is_aperture_flank(float(segment["at"]), segment["axis"]),
-			"unexpected wall on axis %s at %.1f -- walls belong only where they earn it" % [segment["axis"], segment["at"]])
-
-
-func _is_aperture_flank(at: float, axis: StringName) -> bool:
-	for connection in plan.connections:
-		var aperture: Rect2 = connection.aperture
-		if axis == &"x" and (absf(at - aperture.position.x) < 0.01 or absf(at - aperture.end.x) < 0.01):
-			return true
-		if axis == &"z" and (absf(at - aperture.position.y) < 0.01 or absf(at - aperture.end.y) < 0.01):
-			return true
-	return false
-
-
-## THE ROOT GATE FIXES STILL HOLD ON THE REAUTHORED FLOOR: the shut shortcut separates real
-## ground, and its barrier lies across travel rather than along it.
-func test_the_shut_shortcut_still_separates_and_is_oriented_correctly() -> void:
-	assert_eq(sim.gate_barrier(L.C_TO_A)["axis"], &"z",
-		"travel runs along z here, so the barrier must lie across x")
-	var route_a: Rect2 = _patch(L.P_ROUTE_A)
-	for x in [-15.0, -10.0, -5.0]:
-		assert_false(sim._bounds.fits(Vector3(x, 0.0, route_a.end.y), 0.45),
-			"nothing may stand in the shortcut's mouth at x=%.0f while it is shut" % x)
+## EVERY AUTHORED SPAWN FITS WHERE IT IS PLACED, including inside the obstacle-shaped rooms.
+func test_every_authored_spawn_fits_and_sits_in_its_own_home() -> void:
+	for encounter: EncounterSite in plan.encounters:
+		for spawn in encounter.roster:
+			var radius: float = ContentDB.get_resource(&"enemy", spawn["enemy_key"]).combat_radius
+			assert_true(sim._bounds.fits(spawn["position"], radius),
+				"%s does not fit at %s" % [spawn["enemy_key"], spawn["position"]])
+			assert_true(WalkableBounds.contains(encounter.regions[0], spawn["position"].x, spawn["position"].z),
+				"%s spawns outside the home that owns it" % spawn["enemy_key"])
