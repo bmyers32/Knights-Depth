@@ -270,6 +270,9 @@ var _run_persistent_actors: Dictionary = {}
 ## every authoritative displacement already funnels through (_legal_bounds_for).
 var _connections: Dictionary = {}        # connection_id -> {aperture}
 var _connection_open: Dictionary = {}    # connection_id -> bool  (THE gate state)
+## switch_id -> {position, radius, mode, effects, hidden, spent}. A PERSISTENT hit target: it
+## survives activation, unlike a breakable, which is the whole reason it is not one.
+var _hit_switches: Dictionary = {}
 ## connection_id -> the solid line a CLOSED gate presents, derived from real patch geometry in
 ## _rebuild_regions. THE ONE AUTHORITATIVE ORIENTATION: presentation reads it back through
 ## gate_barrier() rather than deriving its own, so the barrier and the picture of it cannot be
@@ -424,6 +427,7 @@ const STATE_SCOPES: Dictionary = {
 	# dies with the floor, including which room owned which actor.
 	"_connections": SCOPE_FLOOR,
 	"_connection_open": SCOPE_FLOOR,
+	"_hit_switches": SCOPE_FLOOR,
 	"_gate_barriers": SCOPE_FLOOR,
 	"_triggers": SCOPE_FLOOR,
 	"_triggers_fired": SCOPE_FLOOR,
@@ -662,6 +666,16 @@ func register_breakable(breakable_id: int, position: Vector3, radius: float, dur
 	_breakables[breakable_id] = {"position": position, "radius": radius, "durability": durability}
 
 
+## A PERSISTENT hit target. Shares only DETECTION with the melee cone and the projectile sweep,
+## exactly as a breakable does -- it is not a combatant, it has no health, and it is never a
+## valid target for enemy AI.
+func register_hit_switch(switch_id: int, position: Vector3, radius: float, mode: StringName, effects: Array, starts_hidden: bool = false) -> void:
+	_hit_switches[switch_id] = {
+		"position": position, "radius": radius, "mode": mode,
+		"effects": effects, "hidden": starts_hidden, "spent": false,
+	}
+
+
 ## TERRITORY IS A UNION OF REGIONS, never one rect (ruled 2026-08-29). Confinement itself was
 ## validated and is kept; what human play falsified was the accidental assumption that a
 ## territory equals exactly one WalkablePatch, which read as an ambient enemy "stuck on the
@@ -843,17 +857,27 @@ func _fire_trigger(trigger_id: int) -> Array[Event]:
 	return events
 
 
+## THE ONE WRITER of connection availability. Extracted when TOGGLE joined OPEN and BLOCK
+## (2026-09-03): three effects writing the same state through three copies of "assign, rebuild,
+## announce" is exactly how one of them quietly forgets to rebuild.
+##
+## A no-op change announces nothing, so a gate already open cannot emit a second opening.
+func _set_connection_open(connection_id: int, opened: bool) -> Array[Event]:
+	if bool(_connection_open[connection_id]) == opened:
+		return []
+	_connection_open[connection_id] = opened
+	_rebuild_regions()
+	return [Event.new(tick_count, "connection_changed", {"connection_id": connection_id, "open": opened})]
+
+
 func _apply_floor_effect(effect: Dictionary) -> Array[Event]:
 	var kind: StringName = effect["kind"]
 	var target_id: int = int(effect["target_id"])
 	match String(kind):
 		"open_connection", "block_connection":
-			var opened: bool = kind == &"open_connection"
-			if not _connection_open.has(target_id) or bool(_connection_open[target_id]) == opened:
+			if not _connection_open.has(target_id):
 				return []
-			_connection_open[target_id] = opened
-			_rebuild_regions()
-			return [Event.new(tick_count, "connection_changed", {"connection_id": target_id, "open": opened})]
+			return _set_connection_open(target_id, kind == &"open_connection")
 		"activate_encounter":
 			return _activate_encounter(target_id)
 		"enable_trigger":
@@ -861,6 +885,15 @@ func _apply_floor_effect(effect: Dictionary) -> Array[Event]:
 				return []
 			_trigger_enabled[target_id] = true
 			return [Event.new(tick_count, "floor_trigger_enabled", {"trigger_id": target_id})]
+		"toggle_connection":
+			if not _connection_open.has(target_id):
+				return []
+			return _set_connection_open(target_id, not bool(_connection_open[target_id]))
+		"reveal_switch":
+			if not _hit_switches.has(target_id) or not bool(_hit_switches[target_id]["hidden"]):
+				return []
+			_hit_switches[target_id]["hidden"] = false
+			return [Event.new(tick_count, "switch_revealed", {"switch_id": target_id})]
 		"complete_floor":
 			if _floor_complete:
 				return []
@@ -970,6 +1003,85 @@ func _resolve_hit_on_breakable(attacker_id: int, breakable_id: int, damage: floa
 
 ## Breakables inside a melee swing's cone. Reuses the SAME reach and cone test the combatant
 ## scan applies, against a second small collection -- not a duplicated sweep.
+## AN ACCEPTED ACTIVATION. Returns the events it caused, or nothing when the hit is ignored.
+##
+## ONE PROJECTILE IS ONE ACTIVATION, structurally rather than by cooldown: a shot TERMINATES on
+## the prop it meets, so it cannot register twice, and no multi-projectile weapon exists in the
+## model at all -- there are no pellets, and _spawn_projectile emits exactly one shot per attack.
+## A melee swing resolves its cone once. So the "burst flips the door open, shut, open" hazard
+## has no source today, and the safeguard is the existing contact identity rather than a new
+## repeat-hit framework. IF a spread weapon is ever authored, THIS is the comment that has to be
+## revisited: the guarantee lives in one-contact-per-attack, not in the switch.
+func _resolve_hit_on_switch(switch_id: int) -> Array[Event]:
+	if not _hit_switches.has(switch_id):
+		return []
+	var switch: Dictionary = _hit_switches[switch_id]
+	if bool(switch["hidden"]):
+		return []  # unreachable: a hidden switch is not offered to any hit scan
+	if switch["mode"] == &"one_shot" and bool(switch["spent"]):
+		return []
+	switch["spent"] = true
+	var events: Array[Event] = [Event.new(tick_count, "switch_activated", {
+		"switch_id": switch_id, "mode": switch["mode"],
+	})]
+	for authored_effect: Dictionary in switch["effects"]:
+		events.append_array(_apply_floor_effect(authored_effect))
+	events.append_array(_fire_triggers_watching(&"switch_activated", switch_id))
+	return events
+
+
+## Every VISIBLE switch the melee cone covers. Hidden ones are absent from the scan entirely, so
+## concealment is physical rather than a flag consulted after the fact.
+func _switches_in_cone(attacker_position: Vector3, resolved_aim: Vector3, weapon: Dictionary) -> Array:
+	var hit_ids: Array = []
+	var switch_ids: Array = _hit_switches.keys()
+	switch_ids.sort()
+	for switch_id: int in switch_ids:
+		var switch: Dictionary = _hit_switches[switch_id]
+		if bool(switch["hidden"]):
+			continue
+		var offset: Vector3 = switch["position"] - attacker_position
+		offset.y = 0.0
+		var reach: float = float(weapon.reach) + float(switch["radius"])
+		if offset.length() > reach:
+			continue
+		if offset.length() > 0.001 and rad_to_deg(offset.normalized().angle_to(resolved_aim)) > float(weapon.arc_degrees) * 0.5:
+			continue
+		hit_ids.append(switch_id)
+	return hit_ids
+
+
+## Earliest VISIBLE switch along a projectile's travel segment, as {switch_id, t}, or empty.
+func _find_earliest_switch_hit(start: Vector3, end: Vector3, hit_radius: float) -> Dictionary:
+	var best: Dictionary = {}
+	var switch_ids: Array = _hit_switches.keys()
+	switch_ids.sort()
+	for switch_id: int in switch_ids:
+		var switch: Dictionary = _hit_switches[switch_id]
+		if bool(switch["hidden"]):
+			continue
+		var t: float = _segment_reaches_point(start, end, switch["position"], float(switch["radius"]) + hit_radius)
+		if t < 0.0:
+			continue
+		if best.is_empty() or t < float(best["t"]):
+			best = {"switch_id": switch_id, "t": t}
+	return best
+
+
+## Parametric t at which the swept shot first comes within `radius` of a point, or -1.
+func _segment_reaches_point(start: Vector3, end: Vector3, point: Vector3, radius: float) -> float:
+	var travel: Vector3 = end - start
+	travel.y = 0.0
+	var to_point: Vector3 = point - start
+	to_point.y = 0.0
+	var length_squared: float = travel.length_squared()
+	var t: float = 0.0 if length_squared < 0.000001 else clampf(to_point.dot(travel) / length_squared, 0.0, 1.0)
+	var nearest: Vector3 = start + travel * t
+	var offset: Vector3 = point - nearest
+	offset.y = 0.0
+	return t if offset.length() <= radius else -1.0
+
+
 func _breakables_in_cone(attacker_position: Vector3, resolved_aim: Vector3, weapon: Dictionary) -> Array:
 	var hit_ids: Array = []
 	var breakable_ids: Array = _breakables.keys()
@@ -2228,6 +2340,10 @@ func _resolve_melee_swing(actor_id: int, attacker_position: Vector3, resolved_ai
 	# entirely (see _resolve_hit_on_breakable and the ROADMAP inheritance audit).
 	for breakable_id: int in _breakables_in_cone(attacker_position, resolved_aim, weapon):
 		events.append_array(_resolve_hit_on_breakable(actor_id, breakable_id, float(weapon.damage)))
+	# A switch is struck by the same swing that would break a crate. It takes no damage -- there
+	# is nothing to damage -- so it is a contact, not a hit resolution.
+	for switch_id: int in _switches_in_cone(attacker_position, resolved_aim, weapon):
+		events.append_array(_resolve_hit_on_switch(switch_id))
 
 	return events
 
@@ -2637,6 +2753,7 @@ func _advance_projectiles(dt: float) -> Array[Event]:
 		# penetration is never the default.
 		var actor_hit: Dictionary = _find_earliest_swept_hit(start_position, end_position, projectile.attacker_id, weapon.hit_radius)
 		var breakable_hit: Dictionary = _find_earliest_breakable_hit(start_position, end_position, weapon.hit_radius)
+		var switch_hit: Dictionary = _find_earliest_switch_hit(start_position, end_position, weapon.hit_radius)
 		var world_hit: Dictionary = _find_earliest_solid_hit(start_position, end_position, weapon.hit_radius)
 
 		# THE ORDERING LAW (P34). Smallest authoritative parametric travel distance wins. The
@@ -2646,6 +2763,7 @@ func _advance_projectiles(dt: float) -> Array[Event]:
 		# not because walls are "more important" than actors.
 		var world_first: bool = not world_hit.is_empty() \
 			and (breakable_hit.is_empty() or float(world_hit["t"]) <= float(breakable_hit["t"]) + _TIE_EPSILON) \
+			and (switch_hit.is_empty() or float(world_hit["t"]) <= float(switch_hit["t"]) + _TIE_EPSILON) \
 			and (actor_hit.is_empty() or float(world_hit["t"]) <= float(actor_hit["t"]) + _TIE_EPSILON)
 		if world_first:
 			# A shot stopped by the world has NO impact event of its own, so this is the one
@@ -2659,11 +2777,24 @@ func _advance_projectiles(dt: float) -> Array[Event]:
 			}))
 			expired_ids.append(projectile_id)
 			continue
-		var breakable_first: bool = not breakable_hit.is_empty() and (actor_hit.is_empty() or float(breakable_hit["t"]) <= float(actor_hit["t"]) + _TIE_EPSILON)
+		# The switch joins the SAME ordering law (P34): smallest parametric distance wins, and the
+		# WORLD -> BREAKABLE -> SWITCH -> ACTOR order applies ONLY to exact ties, as a determinism
+		# rule for degenerate geometry. It is not a claim that props matter more than actors.
+		var breakable_first: bool = not breakable_hit.is_empty() \
+			and (switch_hit.is_empty() or float(breakable_hit["t"]) <= float(switch_hit["t"]) + _TIE_EPSILON) \
+			and (actor_hit.is_empty() or float(breakable_hit["t"]) <= float(actor_hit["t"]) + _TIE_EPSILON)
 		if breakable_first:
 			# Stamped with the projectile id so presentation retires the tracer through the same
 			# uniform rule every other terminal event uses.
 			for event in _resolve_hit_on_breakable(projectile.attacker_id, int(breakable_hit["breakable_id"]), float(weapon.damage)):
+				events.append(_stamp_projectile(event, projectile_id))
+			expired_ids.append(projectile_id)
+			continue
+		var switch_first: bool = not switch_hit.is_empty() and (actor_hit.is_empty() or float(switch_hit["t"]) <= float(actor_hit["t"]) + _TIE_EPSILON)
+		if switch_first:
+			# THE SHOT IS SPENT ON IT, which is also what makes one projectile exactly one
+			# activation: it cannot come back round and toggle the same switch again.
+			for event in _resolve_hit_on_switch(int(switch_hit["switch_id"])):
 				events.append(_stamp_projectile(event, projectile_id))
 			expired_ids.append(projectile_id)
 			continue

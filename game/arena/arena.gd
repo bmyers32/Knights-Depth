@@ -319,6 +319,9 @@ func _unpack_floor(plan: FloorPlan) -> void:
 		sim.register_encounter(encounter.encounter_id, encounter.regions, encounter.role, encounter.confines_player, encounter.spawn_at_floor_load)
 	for breakable in plan.breakables:
 		sim.register_breakable(breakable.breakable_id, breakable.position, breakable.radius, breakable.durability)
+	for hit_switch in plan.hit_switches:
+		sim.register_hit_switch(hit_switch.switch_id, hit_switch.position, hit_switch.radius,
+			hit_switch.mode, hit_switch.effects, hit_switch.starts_hidden)
 	for trigger in plan.triggers:
 		sim.register_trigger(trigger.trigger_id, trigger.kind, trigger.region, trigger.source_id, trigger.once, trigger.effects, trigger.starts_enabled)
 
@@ -650,6 +653,14 @@ func _report_events(events: Array[Event]) -> void:
 					_enemies[submerged_id].set_combat_present(false)
 					_enemies[submerged_id].clear_telegraph()
 				_windup_cues.erase(submerged_id)
+			"switch_activated":
+				# A switch is a picture of a rule too: presentation reports the activation and
+				# never decides what it did. The door it opened arrives as its own
+				# connection_changed, through the same path a plate's would.
+				print("switch activated: ", event.payload)
+			"switch_revealed":
+				print("switch revealed: ", event.payload)
+				_floor_builder.set_switch_visible(int(event.payload.get("switch_id", -1)), true)
 			"burrow_aborted":
 				# The burrow failed and the Fang came back up where it went down. Presented
 				# exactly like an emergence, because to the player it IS one -- what differs is

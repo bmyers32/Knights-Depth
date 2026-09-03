@@ -38,6 +38,7 @@ var triggers: Array[FloorTrigger] = []
 var encounters: Array[EncounterSite] = []
 # --- WORLD INTERACTION ---------------------------------------------------------------
 var breakables: Array[BreakablePlan] = []
+var hit_switches: Array[HitSwitchPlan] = []
 
 ## Where the Envoy arrives.
 var entry_point: Vector3 = Vector3.ZERO

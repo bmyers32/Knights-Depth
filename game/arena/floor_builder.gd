@@ -44,6 +44,8 @@ const _SURFACE_COLORS: Dictionary = {
 const _CORRIDOR_COLOR: Color = Color(0.15, 0.16, 0.19)
 const _WALL_COLOR: Color = Color(0.36, 0.35, 0.42)
 const _GATE_CLOSED_COLOR: Color = Color(0.78, 0.28, 0.26)
+## Deliberately unlike the plates (orange/blue) and the crate: a switch is a thing you SHOOT.
+const _SWITCH_COLOR: Color = Color(0.86, 0.84, 0.35)
 ## Deliberately close to the wall colour but lighter: same material family, clearly not a wall.
 const _LIP_COLOR: Color = Color(0.34, 0.35, 0.39)
 const _MARKER_COLOR: Color = Color(0.88, 0.80, 0.42)
@@ -56,6 +58,7 @@ const _PLATE_THICKNESS: float = 0.12
 const _PLATE_MINOR_THICKNESS: float = 0.06
 
 var _gates: Dictionary = {}          # connection_id -> barrier mesh
+var _switches: Dictionary = {}       # switch_id -> hit-switch mesh
 var _gate_barriers: Dictionary = {}  # connection_id -> the sim's authoritative barrier line
 var _plates: Dictionary = {}         # trigger_id -> plate mesh
 var _breakables: Dictionary = {}     # breakable_id -> mesh
@@ -81,6 +84,8 @@ func build(plan: FloorPlan, first_actor_id: int, gate_barriers: Dictionary = {})
 		_build_connection(connection, plan)
 	for breakable in plan.breakables:
 		_build_breakable(breakable)
+	for hit_switch in plan.hit_switches:
+		_build_hit_switch(hit_switch)
 	# A PLATE IS A PICTURE OF A TRIGGER, exactly as a gate is a picture of a rule: the sim fires
 	# on occupancy whether or not this mesh exists. It is drawn from the trigger itself so the
 	# thing you stand on and the thing that fires can never be authored in two places. A DORMANT
@@ -119,6 +124,7 @@ func build(plan: FloorPlan, first_actor_id: int, gate_barriers: Dictionary = {})
 ## would still answer get_children().
 func clear_floor() -> void:
 	_gates.clear()
+	_switches.clear()
 	_plates.clear()
 	_breakables.clear()
 	_elevation_rects.clear()
@@ -148,6 +154,13 @@ func set_gate_closed(connection_id: int, closed: bool) -> void:
 func set_plate_visible(trigger_id: int, shown: bool) -> void:
 	if _plates.has(trigger_id):
 		_plates[trigger_id].visible = shown
+
+
+## A HIDDEN SWITCH IS BUILT AND HIDDEN, never spawned later -- the same rule as a dormant plate.
+## Presentation must not be able to disagree with the sim about whether a world object exists.
+func set_switch_visible(switch_id: int, shown: bool) -> void:
+	if _switches.has(switch_id):
+		_switches[switch_id].visible = shown
 
 
 func remove_breakable(breakable_id: int) -> void:
@@ -277,6 +290,21 @@ func _build_connection(connection: TraversalConnection, plan: FloorPlan) -> void
 func _patch_elevation(plan: FloorPlan, patch_id: int) -> float:
 	var patch: WalkablePatch = plan.patch_by_id(patch_id)
 	return 0.0 if patch == null else patch.elevation
+
+
+## A SWITCH READS AS A TARGET, not as scenery: raised off the ground, emissive, and distinct
+## from both the crate colour and the plate colours, because the verb it asks for is different.
+func _build_hit_switch(hit_switch: HitSwitchPlan) -> void:
+	var size: float = hit_switch.radius * 1.4
+	var mesh: MeshInstance3D = _add_box(
+		Vector3(size, size * 1.6, size),
+		hit_switch.position + Vector3(0.0, elevation_at(hit_switch.position) + size * 0.8, 0.0),
+		_SWITCH_COLOR)
+	mesh.material_override.emission_enabled = true
+	mesh.material_override.emission = _SWITCH_COLOR
+	mesh.material_override.emission_energy_multiplier = 0.6
+	mesh.visible = not hit_switch.starts_hidden
+	_switches[hit_switch.switch_id] = mesh
 
 
 func _build_breakable(breakable: BreakablePlan) -> void:

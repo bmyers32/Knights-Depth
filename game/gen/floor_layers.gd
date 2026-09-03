@@ -36,6 +36,16 @@ const EFFECT_ACTIVATE_ENCOUNTER: StringName = &"activate_encounter"
 ## Turns a dormant controller on. This is how concealment works now: the plate under the crate
 ## exists in the plan from the start, disabled, and breaking the crate ENABLES it.
 const EFFECT_ENABLE_TRIGGER: StringName = &"enable_trigger"
+## FLIPS a connection rather than setting it (2026-09-03). Added narrowly for the toggle switch:
+## "shoot to open, shoot again to close" cannot be said with OPEN and BLOCK alone, because a
+## controller would have to know the current state to choose between them -- and that is
+## conditional scripting, which this vocabulary deliberately does not have. The connection stays
+## authoritative; the effect merely asks it to become its opposite.
+const EFFECT_TOGGLE_CONNECTION: StringName = &"toggle_connection"
+## Makes a hidden hit-switch real. THE LITERAL SENSE OF REVEAL, and the only sense: an authored
+## object that already exists stops being hidden. It is not a signalling channel, and there is
+## deliberately no way to "reveal" something that is not a physical object in the world.
+const EFFECT_REVEAL_SWITCH: StringName = &"reveal_switch"
 ## Marks the floor finished. Deliberately just a fact + an Event: there is no next floor to
 ## descend to yet, and faking one to prove this would be inventing a system to satisfy a test.
 const EFFECT_COMPLETE_FLOOR: StringName = &"complete_floor"
@@ -57,6 +67,10 @@ const TRIGGER_REGION: StringName = &"region_entered"
 ## Both occupancy kinds fire on the FALSE -> TRUE edge, so standing still never re-fires them.
 const TRIGGER_GROUP_OCCUPANCY: StringName = &"group_occupancy"
 const TRIGGER_BREAKABLE_DESTROYED: StringName = &"breakable_destroyed"
+## A hit-switch reaching an accepted activation. Deliberately the same shape as the breakable
+## kind: a source object fires, watchers named against its id respond, and neither knows the
+## other exists.
+const TRIGGER_SWITCH_ACTIVATED: StringName = &"switch_activated"
 const TRIGGER_ENCOUNTER_CLEARED: StringName = &"encounter_cleared"
 
 # --- ENCOUNTER roles ------------------------------------------------------------------
