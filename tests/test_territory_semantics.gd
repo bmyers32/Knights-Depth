@@ -51,6 +51,9 @@ func _arm_player(at: Vector3) -> void:
 	sim.register_shield(PLAYER, 100.0, 1.0, 30, 0.0, 0.5, 6.0, 6, 0)
 
 
+## `confines` registers a SEALING encounter; it is also ACTIVATED here, because sealing is a
+## live fact and not a property of role (ruled 2026-09-03). A registered-but-dormant encounter
+## seals nobody -- the fixture has to start the fight, exactly as a floor does.
 func _add_ooze(at: Vector3, role: StringName, regions: Array[Rect2], confines: bool = false) -> void:
 	sim.register_encounter(ENCOUNTER, regions, role, confines, true)
 	sim.add_entity(ENEMY, at, 1.5, Vector3(-1, 0, 0), RADIUS)
@@ -61,6 +64,10 @@ func _add_ooze(at: Vector3, role: StringName, regions: Array[Rect2], confines: b
 	sim.register_ai(ENEMY, CombatTestHelpers.single_action_repertoire(&"test_slam", 1.9, 10000),
 		at, 2.2, 1.9, 12.0, 20.0, 0, 0, 0.0, 0.0, 0, 0.0, 0, 0, 0, 45)
 	assert_true(sim.assign_actor_encounter(ENEMY, ENCOUNTER), "sanity: bound to its site")
+	if confines:
+		sim.debug_activate_encounter(ENCOUNTER)
+		assert_eq(sim.debug_describe_floor()["active_confinement"], ENCOUNTER,
+			"sanity: a seal fixture must actually be sealing, or it proves nothing")
 	sim.debug_set_ai_active(ENEMY)
 
 
@@ -291,20 +298,21 @@ func test_equidistant_home_candidates_resolve_on_authored_order() -> void:
 	assert_lt(float(chosen[0].x), 0.0, "and it must be the FIRST authored rect on an exact tie")
 
 
-# --- THE MECHANICAL REVISIT TRIGGER --------------------------------------------------------
-
-## GUARDED CONSERVATISM, MADE EXECUTABLE. Hard confinement currently keys on role, which is only
-## sufficient because every non-ambient roster in shipped content is deferred or dead. The moment
-## an authored encounter spawns a non-ambient roster AT FLOOR LOAD, that roster is present and
-## hittable BEFORE its fight seals -- and would meet exactly the invisible boundary this split
-## removed. This asserts no shipped floor does that yet.
-func test_no_shipped_encounter_spawns_a_non_ambient_roster_at_floor_load() -> void:
-	var plan: FloorPlan = DepthGenerator.generate(0, 1)
-	for encounter in plan.encounters:
-		if encounter.role == FloorLayers.ROLE_AMBIENT:
-			continue
-		assert_false(encounter.spawn_at_floor_load,
-			("encounter %d is %s AND spawns at floor load. That is the REVISIT TRIGGER for "
-			+ "SimWorld._hard_encounter_confinement_applies: role is no longer a sufficient "
-			+ "proxy for hard confinement, and activation/seal state must become authoritative.")
-				% [encounter.encounter_id, encounter.role])
+# --- THE MECHANICAL REVISIT TRIGGER — FIRED, AND RETIRED 2026-09-03 -------------------------
+#
+# It existed to catch the day role stopped being a sufficient proxy for hard confinement, and it
+# named the fix: "activation/seal state must become authoritative". That day came, by a road the
+# trigger could not watch. It tested for a non-ambient roster spawning AT FLOOR LOAD; Floor 2
+# instead authored an OPTIONAL, NON-SEALING encounter that activates mid-floor. The roster was
+# walled in behind a door the player could walk through, and the same invisible walls killed a
+# burrowing Fang by refusing every emergence candidate.
+#
+# The proxy is gone: _hard_encounter_confinement_applies now reads live seal state directly, so
+# there is nothing left for this guard to warn about. Deleted rather than left passing -- its
+# failure message gives instructions that are already carried out, and a guard whose stated
+# reason is false teaches the next reader something untrue.
+#
+# WHAT REPLACES IT is not another proxy check but the behaviour itself, in
+# tests/test_doorway_pursuit.gd: an unsealed roster follows the player through an open door, a
+# sealing one does not, and the two differ ONLY in whether the encounter seals -- role held
+# constant across both halves so it cannot silently become the deciding factor again.

@@ -41,8 +41,24 @@ static func generate(seed: int, depth: int) -> FloorPlan:
 	# STRUCTURAL VALIDATION RUNS ON EVERY PLAN, whoever produced it. Placed here rather than in
 	# each layout so a future procedural producer inherits the guards without being asked to
 	# remember them. Detection only -- a plan is never silently repaired.
-	plan.validate()
+	plan.validate(_authored_body_radii(plan))
 	return plan
+
+
+## The combat radius of every enemy this plan places, so the clearance guard can measure real
+## doorways against real bodies. Looked up HERE rather than inside FloorPlan, which must stay a
+## plain data class with no autoload reach.
+static func _authored_body_radii(plan: FloorPlan) -> Dictionary:
+	var radii: Dictionary = {}
+	for encounter in plan.encounters:
+		for spawn: Dictionary in encounter.roster:
+			var key: StringName = spawn.get("enemy_key", &"")
+			if key == &"" or radii.has(key):
+				continue
+			var stats: Resource = ContentDB.get_resource(&"enemy", key)
+			if stats != null:
+				radii[key] = stats.combat_radius
+	return radii
 
 
 ## Derives this floor's seed from the run seed and the depth. Unused by the authored layout but

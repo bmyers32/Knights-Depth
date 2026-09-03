@@ -342,6 +342,12 @@ func test_an_ambient_roster_engages_without_ceremony_and_chases_where_it_likes()
 func test_a_hard_seal_binds_knockback_not_only_locomotion() -> void:
 	sim.register_encounter(ENCOUNTER, [EAST] as Array[Rect2], FloorLayers.ROLE_MANDATORY, true)
 	_add_enemy(ENEMY_A, Vector3(5.0, 0.0, 0.0))
+	# THE SEAL MUST BE LIVE, not merely registered (ruled 2026-09-03). Hard confinement is now a
+	# property of a fight that is actually sealing the player in, rather than of the encounter's
+	# role -- so a fixture asserting a seal has to start one, exactly as a floor does.
+	sim.debug_activate_encounter(ENCOUNTER)
+	assert_eq(sim.debug_describe_floor()["active_confinement"], ENCOUNTER,
+		"sanity: the seal under test must actually be sealing")
 	sim.register_weapon(&"test_shove", 5.0, &"force", 4.0, 90.0, 12.0, 0)
 	sim.set_equipped_weapon(PLAYER, &"test_shove")
 	sim.entities[PLAYER] = Vector3(8.0, 0.0, 0.0)

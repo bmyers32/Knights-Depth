@@ -413,9 +413,13 @@ func _snap(value: float) -> float:
 # procedural producer inherits them without being asked to remember.
 
 
-func validate() -> void:
+## `body_radii` maps an enemy key to its authored combat radius. Supplied by the producer, so
+## this class never reaches for the ContentDB autoload; omit it and the clearance guard simply
+## does not run, which keeps every hand-built test fixture working unchanged.
+func validate(body_radii: Dictionary = {}) -> void:
 	_reject_unnamed_connection_patches()
 	_reject_bypassable_gates()
+	_reject_impassable_apertures(body_radii)
 
 
 ## A connection that does not name the patches it joins cannot be checked by anything above,
@@ -508,3 +512,51 @@ static func _touches(a: Rect2, b: Rect2) -> bool:
 ## Removed rather than left passing: a guard that cannot fail is not evidence, and reading one
 ## as though it were is how a suite starts lying. What it protected is now covered directly by
 ## tests/test_gate_integrity.gd, which fires real shots at real gates in both orientations.
+
+
+## IF A FLOOR AUTHORS A PASSAGE, THE ROSTER MUST ACTUALLY FIT THROUGH IT (ruled 2026-09-03).
+##
+## Nothing checked this. An aperture is the ONLY walkable ground spanning the gap between two
+## disjoint patches, so a body crossing it must fit within its width ACROSS TRAVEL -- and a body
+## wider than that meets an opening it can see, is authored to use, and cannot enter. The floor
+## looks passable and is not, for that actor alone.
+##
+## MEASURED AGAINST EVERY BODY AUTHORED ON THE FLOOR, not against the roster nearest the door.
+## Pursuit, retreat and knockback all move actors through openings their own encounter never
+## mentioned, so "which roster was this door meant for" is not a question the plan can answer
+## honestly. The widest authored body is the truthful bar.
+##
+## THE FIX IS THE FLOOR'S, NOT THE CONTENT'S. This never suggests shrinking an actor: a doorway
+## too small for a shipped body is an authoring error in the doorway.
+func _reject_impassable_apertures(body_radii: Dictionary) -> void:
+	if body_radii.is_empty():
+		return
+	var widest: float = 0.0
+	var widest_key: StringName = &""
+	for encounter in encounters:
+		for spawn: Dictionary in encounter.roster:
+			var key: StringName = spawn.get("enemy_key", &"")
+			var radius: float = float(body_radii.get(key, 0.0))
+			if radius > widest:
+				widest = radius
+				widest_key = key
+	if widest <= 0.0:
+		return
+	for connection in connections:
+		var a: WalkablePatch = patch_by_id(connection.patch_ids.x)
+		var b: WalkablePatch = patch_by_id(connection.patch_ids.y)
+		if a == null or b == null:
+			continue
+		# Only a connection bridging a real GAP is load-bearing; where patches already overlap,
+		# the aperture is not the only ground and its width constrains nothing.
+		var apart_on_x: bool = a.rect.end.x < b.rect.position.x or b.rect.end.x < a.rect.position.x
+		var apart_on_z: bool = a.rect.end.y < b.rect.position.y or b.rect.end.y < a.rect.position.y
+		if apart_on_x == apart_on_z:
+			continue
+		var across: float = connection.aperture.size.y if apart_on_x else connection.aperture.size.x
+		if across - widest * 2.0 <= 0.0:
+			push_error(("FloorPlan: connection %d is %.1f wide across travel, but the widest body authored "
+				+ "on this floor (%s, radius %.2f) needs more than %.1f. That opening is visible, walkable "
+				+ "for the Envoy, and impassable for an actor the floor itself places. Widen the aperture; "
+				+ "never shrink the actor.")
+				% [connection.connection_id, across, widest_key, widest, widest * 2.0])

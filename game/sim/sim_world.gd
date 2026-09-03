@@ -516,32 +516,45 @@ func _legal_bounds_for(actor_id: int) -> WalkableBounds:
 
 ## Does a HARD confinement rule currently bind this actor's body to its site?
 ##
-## GUARDED CONSERVATISM, and deliberately temporary. Today this reduces to "the site is not
-## ambient", because every non-ambient roster in shipped content is either deferred (present
-## only once its encounter activates and seals) or dead. That makes role a SUFFICIENT proxy
-## right now -- it does not make role a synonym for physical solidity, and it must never harden
-## into one.
+## SEALING IS THE AUTHORITY, NOT ROLE (ruled 2026-09-03, after human play). This used to read
+## "the site is not ambient", justified as a proxy that held because every non-ambient roster
+## was either deferred until its encounter "activates and seals" or dead. It carried its own
+## warning that role must never harden into a synonym for physical solidity, and a mechanical
+## revisit trigger for the one way it was expected to break.
 ##
-## THE REVISIT TRIGGER IS MECHANICAL, not remembered: the moment an authored encounter combines
-## spawn_at_floor_load = true with a non-ambient role, a roster becomes physically present and
-## hittable BEFORE its fight is sealed, and would meet an invisible boundary exactly like the
-## ambient defect this split fixed. test_territory_semantics.gd asserts no shipped content does
-## that, and names this function when it fails. At that point activation/seal state -- not role
-## -- must become the authority here.
+## FLOOR 2 BROKE IT A DIFFERENT WAY, which the trigger was too narrow to catch. An OPTIONAL,
+## NON-SEALING encounter guards the shortcut it opens: it activates, but `confines_player` is
+## false, so the player may walk out through an open doorway. The roster could not. Reproduced:
+## the doorway measured LEGAL FOR THE PLAYER AND ILLEGAL FOR THE WATCHER at every point past
+## Route A's edge -- an open door that one side of the fight is walled behind. The same walls
+## then killed the Fang: it burrowed, every emergence candidate rings the player at the authored
+## radius, the player was outside its confined bounds, all candidates were refused as illegal
+## placement, and the fail-safe put it down underground. To the player it simply vanished.
+##
+## THE ASYMMETRY WAS THE BUG. If an encounter does not seal the player in, walling its roster in
+## is not a fight -- it is a room the player can step out of and shoot into. So a roster is hard
+## confined EXACTLY WHILE ITS OWN ENCOUNTER IS THE ONE ACTUALLY SEALING THE PLAYER, which is a
+## live authoritative fact rather than a proxy for one. Everything else leashes (below).
 func _hard_encounter_confinement_applies(actor_id: int) -> bool:
 	var encounter_id: int = int(_actor_encounter[actor_id])
 	if not _encounters.has(encounter_id):
 		return false
-	return _encounters[encounter_id]["role"] != &"ambient"
+	return _active_confinement == encounter_id
 
 
-## THE BEHAVIOURAL DOOR onto the same geometry. Null for anyone who has no ambient home -- which
-## is every actor whose confinement is physical, so they never consult a leash at all.
+## THE BEHAVIOURAL DOOR onto the same geometry: where this actor walks back to, never a wall it
+## meets. Null only for an actor with no site at all, or one whose site is currently sealing --
+## a physically confined actor never consults a leash, because it cannot leave in the first place.
+##
+## EVERY UNSEALED SITE IS NOW A HOME, not only ambient ones. That follows from the ruling above:
+## the moment a non-sealing roster stopped being walled in, it needed somewhere to return to, or
+## it would drift wherever a chase happened to end. Ambient was never special here -- it was
+## simply the only role that had reached this door.
 func _home_territory(actor_id: int) -> WalkableBounds:
 	if not _actor_encounter.has(actor_id):
 		return null
 	var encounter_id: int = int(_actor_encounter[actor_id])
-	if not _encounters.has(encounter_id) or _encounters[encounter_id]["role"] != &"ambient":
+	if not _encounters.has(encounter_id) or _hard_encounter_confinement_applies(actor_id):
 		return null
 	return _encounter_bounds.get(encounter_id, null)
 
@@ -860,6 +873,17 @@ func _apply_floor_effect(effect: Dictionary) -> Array[Event]:
 ## ACTIVATION IS AUTHORED. There is no "the player entered the region, therefore fight" rule
 ## anywhere in this file -- an encounter starts because an effect said so. That generalises the
 ## one thing the last playtest positively liked: the explicit button-then-encounter beat.
+## Activates an encounter through the ORDINARY path, for tests and tools that need a fight to
+## be genuinely live rather than merely registered. Not a second activation route: it calls the
+## same function an authored effect does, so seal state, roster arrival and events are identical.
+##
+## It exists because sealing became a LIVE FACT rather than a property of role (2026-09-03):
+## a registered-but-dormant encounter seals nobody, and a fixture that wants a seal must now say
+## so, exactly as a floor must.
+func debug_activate_encounter(encounter_id: int) -> Array[Event]:
+	return _activate_encounter(encounter_id)
+
+
 func _activate_encounter(encounter_id: int) -> Array[Event]:
 	if String(_encounter_state.get(encounter_id, "")) != "dormant":
 		return []
