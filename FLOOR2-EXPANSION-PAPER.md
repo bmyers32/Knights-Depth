@@ -243,3 +243,83 @@ rather than inventing a phantom attacker.**
 
 Environmental vocabulary beyond the above stays held. No generator, no family framework, no
 reward system.
+
+---
+
+# REVISED — production scale (2026-09-03)
+
+Supersedes Part 2 above. Written against the reference-floor evidence: **a production floor is a
+sequence of many authored beats, not one large room with a fork attached.** No geometry, art or
+encounter layout is copied — only the density and pacing class.
+
+## The diagnosis this revision answers
+
+The floor's problem was never dimensions. **You could see its whole argument from the entry.**
+So the fix is a middle the entry cannot see, and a structure that unfolds — not more metres.
+
+## Sequence
+
+| # | Space | Approx | Beat(s) it carries |
+|---|---|---|---|
+| 1 | **Overlook** | `(-8,-10) 16x8` e3 | entry, orientation. Sees the Landing and **nothing past it** |
+| 2 | **Descent** | `(-4,-18) 8x8` e1.5 | approach; **one-way commitment** at its foot |
+| 3 | **The Landing** | `(-14,-34) 28x16` | first combat pocket, shaped by obstacles |
+| 4a | **The Thicket** | `(-32,-54) 24x16` | west branch: vegetation, blocking rubble, **concealed switch** |
+| 4b | **The Spillway** | `(8,-54) 24x16` | east branch: **timed spike lanes** + a slower obstacle route |
+| 5 | **The Gallery** | `(-26,-72) 52x14` | **the integrated chamber** — enemies + obstacles + destructibles + hazard together |
+| 6 | **The Fork** | (in the Gallery's south wall) | Route A gated / Route B open |
+| 7 | **Route A / Route B** | `(-16,-88) 12x14` / `(4,-88) 12x14` | the choice, unchanged in kind |
+| 8 | **The Vault** | `(18,-86) 12x12` | optional branch, **gated by the Thicket switch** |
+| 9 | **The Junction** | `(-30,-97) 60x10` | rejoin; later encounter, **not visible from entry** |
+| 10 | **The Terrace** | `(-28,-111) 16x12` e1 | final approach and exit |
+
+**Ten spaces, ~12 beats.** The Overlook sees two of them. The Thicket and Spillway hide each
+other. Nothing past the Gallery is legible until you are in it.
+
+## The integrated chamber (§9), in detail
+
+This is the one composition the ruling requires be proven:
+
+- A **Watcher behind blocking rubble** — visible, understood as a threat, and *not yet
+  actionable* because the rubble holds the sightline both ways. **Threat-visible-before-actionable
+  (§10), which is the combat form of visible-before-reachable.**
+- **Obstacles** shaping two approach lanes, so closing is a choice rather than a straight line.
+- A **spike lane** across the shorter approach: the fast way in is the timed way in.
+- Breaking the rubble **changes the fight and opens a lane** — the same act does both.
+
+That is enemy placement + obstacles + destructibles + hazard + progression geometry in one
+authored space, rather than a room with props scattered in it.
+
+## Capability check (§20)
+
+Every beat above is expressible with vocabulary already authorized and landed:
+
+| Beat | Vocabulary | Status |
+|---|---|---|
+| One-way commitment | `TRIGGER_REGION` → `BLOCK_CONNECTION` | shipped (Floor 1) |
+| Obstacle composition | `ObstaclePlan` | **landed today** |
+| Timed hazard | `SpikePadPlan` | **landed today** |
+| Destructible cover / route block | `BreakablePlan.blocking_rect` | **landed today** |
+| Concealment → discovery | `TRIGGER_BREAKABLE_DESTROYED` → `REVEAL_SWITCH` | **landed today** |
+| Remote switch → door | `HitSwitchPlan` → `OPEN_CONNECTION` | **landed today** |
+| Staged encounters | `TRIGGER_REGION` → `ACTIVATE_ENCOUNTER` | shipped |
+| Exit | group occupancy → `COMPLETE_FLOOR` | shipped |
+
+**No new capability is required, so this proceeds** rather than returning.
+
+## Two deliberate omissions
+
+**No party button.** §16 permits one only if the floor earns a genuine mid-floor phase
+transition. The honest phase transition here is the one-way commitment, which needs no
+gathering. Adding a party plate anyway would repeat the mistake the last iteration removed.
+
+**No chain-clear, explosive, delayed or respawning block.** §11 and §19: none of the beats above
+consumes one, and placing one to demonstrate an API is exactly what the ruling forbids. The
+Gallery's rubble is the concrete consumer that would *justify* chain-clear later, if a future
+floor wants a formation rather than a single blocker.
+
+## The Vault, still honest
+
+Access becomes genuinely interesting: find the concealed switch in the Thicket, then hit it. The
+**destination still contains nothing**, and that remains blocked on reward vocabulary. Recorded,
+not disguised — no enemies are placed there to manufacture a reason.
