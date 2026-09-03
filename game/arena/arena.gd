@@ -312,6 +312,7 @@ func _load_floor() -> void:
 func _unpack_floor(plan: FloorPlan) -> void:
 	sim.register_patches(plan.patch_rects())
 	# ONE canonical boundary, handed to the sim exactly as presentation receives it.
+	sim.register_obstacles(plan.obstacle_rects())
 	sim.register_solid_segments(plan.solid_segments())
 	for connection in plan.connections:
 		sim.register_connection(connection.connection_id, connection.aperture, connection.starts_open)

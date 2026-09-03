@@ -273,6 +273,8 @@ var _connection_open: Dictionary = {}    # connection_id -> bool  (THE gate stat
 ## switch_id -> {position, radius, mode, effects, hidden, spent}. A PERSISTENT hit target: it
 ## survives activation, unlike a breakable, which is the whole reason it is not one.
 var _hit_switches: Dictionary = {}
+## Static obstacle footprints, subtracted from every region this floor builds.
+var _obstacle_rects: Array[Rect2] = []
 ## connection_id -> the solid line a CLOSED gate presents, derived from real patch geometry in
 ## _rebuild_regions. THE ONE AUTHORITATIVE ORIENTATION: presentation reads it back through
 ## gate_barrier() rather than deriving its own, so the barrier and the picture of it cannot be
@@ -428,6 +430,7 @@ const STATE_SCOPES: Dictionary = {
 	"_connections": SCOPE_FLOOR,
 	"_connection_open": SCOPE_FLOOR,
 	"_hit_switches": SCOPE_FLOOR,
+	"_obstacle_rects": SCOPE_FLOOR,
 	"_gate_barriers": SCOPE_FLOOR,
 	"_triggers": SCOPE_FLOOR,
 	"_triggers_fired": SCOPE_FLOOR,
@@ -633,6 +636,14 @@ func register_patches(rects: Array[Rect2]) -> void:
 	_rebuild_regions()
 
 
+## Static obstacles, as EXCLUSIONS from walkable space. Registered separately from patches
+## because they are a subtraction rather than an addition -- and kept here so every rebuild
+## re-applies them, instead of surviving only in whatever bounds happened to be built first.
+func register_obstacles(rects: Array[Rect2]) -> void:
+	_obstacle_rects = rects.duplicate()
+	_rebuild_regions()
+
+
 ## A connection owns AVAILABILITY and nothing else -- it is never told which controller changed
 ## it. That is the point of the law: switches, objectives, encounter clears and one-way
 ## commitment all reach it through the same effect and stay indistinguishable from here.
@@ -741,7 +752,7 @@ func _rebuild_regions() -> void:
 	for connection_id in _connections:
 		if bool(_connection_open.get(connection_id, false)):
 			open_rects.append(_connections[connection_id]["aperture"])
-	_bounds = WalkableBounds.new(open_rects)
+	_bounds = WalkableBounds.new(open_rects, _obstacle_rects)
 	for encounter_id in _encounters:
 		var regions: Array = _encounters[encounter_id]["regions"]
 		var clipped: Array[Rect2] = []
@@ -750,7 +761,10 @@ func _rebuild_regions() -> void:
 				var shared: Rect2 = rect.intersection(region)
 				if shared.get_area() > 0.0:
 					clipped.append(shared)
-		_encounter_bounds[encounter_id] = WalkableBounds.new(clipped)
+		# Territories carry the exclusions too: an obstacle inside a fight is solid for the
+		# roster as much as for the player, and a home that ignored them would send an actor
+		# walking back into a column.
+		_encounter_bounds[encounter_id] = WalkableBounds.new(clipped, _obstacle_rects)
 
 
 ## Read-only participation query, so the driver can mirror a deferred roster without poking a

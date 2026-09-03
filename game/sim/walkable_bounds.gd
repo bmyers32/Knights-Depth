@@ -47,10 +47,19 @@ const _BISECT_ITERATIONS: int = 20
 const _EDGE_EPSILON: float = 0.000001
 
 var rects: Array[Rect2] = []
+## STATIC OBSTACLES, subtracted from the union (2026-09-03). A floor is walkable ground MINUS
+## the things standing in it -- authored as exclusions rather than as objects, so obstacles ride
+## the legality law that already exists instead of introducing a second one.
+##
+## They are NOT the same as absent ground: a void is somewhere the floor never was, an obstacle
+## is somewhere the floor is interrupted. Presentation draws the difference; legality does not
+## care, and should not.
+var blockers: Array[Rect2] = []
 
 
-func _init(walkable_rects: Array[Rect2] = []) -> void:
+func _init(walkable_rects: Array[Rect2] = [], obstacle_rects: Array[Rect2] = []) -> void:
 	rects = walkable_rects
+	blockers = obstacle_rects
 
 
 ## XZ projection: Rect2.position/end map to world x/z; world y (height) is ignored because
@@ -65,6 +74,9 @@ func _init(walkable_rects: Array[Rect2] = []) -> void:
 ## ask "is this actor STANDING on this region", which is a different question from "does this
 ## actor's body FIT here" (ruled). Use `fits` for legality, `is_inside`/`contains` for standing.
 func is_inside(point: Vector3) -> bool:
+	for blocker in blockers:
+		if contains(blocker, point.x, point.z):
+			return false
 	for rect in rects:
 		if contains(rect, point.x, point.z):
 			return true
@@ -92,6 +104,13 @@ func fits(point: Vector3, radius: float) -> bool:
 	var max_x: float = point.x + radius
 	var min_z: float = point.z - radius
 	var max_z: float = point.z + radius
+	var body := Rect2(min_x, min_z, radius * 2.0, radius * 2.0)
+	# AN OBSTACLE IS CHECKED FIRST AND SEPARATELY, because it is a subtraction: no amount of
+	# walkable coverage makes standing inside a column legal, so this cannot be folded into the
+	# "is it covered" question below.
+	for blocker in blockers:
+		if blocker.intersects(body) and _circle_reaches(blocker.intersection(body), point.x, point.z, radius):
+			return false
 	# Fast path: the body sits wholly within a single rect. This is the overwhelmingly common
 	# case (anywhere but a threshold or a wall), and it keeps the subtraction below off the
 	# per-tick path for most actors on most ticks.
@@ -102,7 +121,7 @@ func fits(point: Vector3, radius: float) -> bool:
 	# Otherwise: whatever part of the body's bounding box the union does NOT cover is the only
 	# place an illegal overlap can live. If none of that remainder actually reaches the body
 	# circle, the body fits the union even though it fits no single rect.
-	for piece in _uncovered(Rect2(min_x, min_z, radius * 2.0, radius * 2.0)):
+	for piece in _uncovered(body):
 		if _circle_reaches(piece, point.x, point.z, radius):
 			return false
 	return true

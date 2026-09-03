@@ -39,6 +39,7 @@ var encounters: Array[EncounterSite] = []
 # --- WORLD INTERACTION ---------------------------------------------------------------
 var breakables: Array[BreakablePlan] = []
 var hit_switches: Array[HitSwitchPlan] = []
+var obstacles: Array[ObstaclePlan] = []
 
 ## Where the Envoy arrives.
 var entry_point: Vector3 = Vector3.ZERO
@@ -100,6 +101,17 @@ func solid_segments() -> Array[Dictionary]:
 	# passable is a gate question (connection state), never a static-geometry one.
 	for connection in connections:
 		_segments_of(connection.aperture, 0.0, rects, segments)
+	# OBSTACLE FACES ARE SOLID, from the same authored rect that excludes bodies. This is the
+	# whole point: a shot stops exactly where a body would, because both read one fact. Their
+	# faces are INWARD-facing walls, so they are emitted directly rather than through the
+	# uncovered-span derivation, which asks "is there ground beyond this edge" -- and beyond an
+	# obstacle's edge there always is.
+	for obstacle in obstacles:
+		var box: Rect2 = obstacle.rect
+		segments.append({"axis": &"x", "at": box.position.x, "min": box.position.y, "max": box.end.y, "outward": -1.0, "style": &"wall", "elevation": 0.0})
+		segments.append({"axis": &"x", "at": box.end.x, "min": box.position.y, "max": box.end.y, "outward": 1.0, "style": &"wall", "elevation": 0.0})
+		segments.append({"axis": &"z", "at": box.position.y, "min": box.position.x, "max": box.end.x, "outward": -1.0, "style": &"wall", "elevation": 0.0})
+		segments.append({"axis": &"z", "at": box.end.y, "min": box.position.x, "max": box.end.x, "outward": 1.0, "style": &"wall", "elevation": 0.0})
 	return _merge_collinear(_solid_only(_reject_style_conflicts(segments)))
 
 
@@ -292,7 +304,14 @@ func make_bounds() -> WalkableBounds:
 	var open_ids: Dictionary = {}
 	for connection in connections:
 		open_ids[connection.connection_id] = connection.starts_open
-	return WalkableBounds.new(open_walkable_rects(open_ids))
+	return WalkableBounds.new(open_walkable_rects(open_ids), obstacle_rects())
+
+
+func obstacle_rects() -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	for obstacle in obstacles:
+		rects.append(obstacle.rect)
+	return rects
 
 
 func patch_by_id(patch_id: int) -> WalkablePatch:
