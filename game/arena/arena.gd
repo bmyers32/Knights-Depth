@@ -313,6 +313,9 @@ func _unpack_floor(plan: FloorPlan) -> void:
 	sim.register_patches(plan.patch_rects())
 	# ONE canonical boundary, handed to the sim exactly as presentation receives it.
 	sim.register_obstacles(plan.obstacle_rects())
+	for pad in plan.spike_pads:
+		sim.register_spike_pad(pad.pad_id, pad.rect, pad.safe_ticks, pad.active_ticks,
+			pad.phase_offset_ticks, pad.damage, pad.damage_type)
 	sim.register_solid_segments(plan.solid_segments())
 	for connection in plan.connections:
 		sim.register_connection(connection.connection_id, connection.aperture, connection.starts_open)
@@ -654,6 +657,11 @@ func _report_events(events: Array[Event]) -> void:
 					_enemies[submerged_id].set_combat_present(false)
 					_enemies[submerged_id].clear_telegraph()
 				_windup_cues.erase(submerged_id)
+			"hazard_phase_changed":
+				# Presentation PROJECTS the phase; it never owns it. The sim decided this on the
+				# tick, and an animation that disagreed would be lying about where it is safe
+				# to stand.
+				_floor_builder.set_hazard_active(int(event.payload.get("pad_id", -1)), bool(event.payload.get("active", false)))
 			"switch_activated":
 				# A switch is a picture of a rule too: presentation reports the activation and
 				# never decides what it did. The door it opened arrives as its own

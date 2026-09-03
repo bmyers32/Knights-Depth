@@ -40,6 +40,7 @@ var encounters: Array[EncounterSite] = []
 var breakables: Array[BreakablePlan] = []
 var hit_switches: Array[HitSwitchPlan] = []
 var obstacles: Array[ObstaclePlan] = []
+var spike_pads: Array[SpikePadPlan] = []
 
 ## Where the Envoy arrives.
 var entry_point: Vector3 = Vector3.ZERO

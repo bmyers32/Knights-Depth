@@ -48,6 +48,10 @@ const _GATE_CLOSED_COLOR: Color = Color(0.78, 0.28, 0.26)
 const _SWITCH_COLOR: Color = Color(0.86, 0.84, 0.35)
 ## Close to the wall colour on purpose: an obstacle IS a wall, just one standing in the room.
 const _OBSTACLE_COLOR: Color = Color(0.30, 0.31, 0.35)
+## Dull when dormant, hot when out: the phase must be readable at a glance from across a room,
+## because the decision it asks for is a movement decision made at distance.
+const _HAZARD_SAFE_COLOR: Color = Color(0.42, 0.33, 0.30)
+const _HAZARD_ACTIVE_COLOR: Color = Color(0.90, 0.35, 0.22)
 ## Deliberately close to the wall colour but lighter: same material family, clearly not a wall.
 const _LIP_COLOR: Color = Color(0.34, 0.35, 0.39)
 const _MARKER_COLOR: Color = Color(0.88, 0.80, 0.42)
@@ -61,6 +65,7 @@ const _PLATE_MINOR_THICKNESS: float = 0.06
 
 var _gates: Dictionary = {}          # connection_id -> barrier mesh
 var _switches: Dictionary = {}       # switch_id -> hit-switch mesh
+var _hazards: Dictionary = {}        # pad_id -> spike-pad mesh
 var _gate_barriers: Dictionary = {}  # connection_id -> the sim's authoritative barrier line
 var _plates: Dictionary = {}         # trigger_id -> plate mesh
 var _breakables: Dictionary = {}     # breakable_id -> mesh
@@ -90,6 +95,8 @@ func build(plan: FloorPlan, first_actor_id: int, gate_barriers: Dictionary = {})
 		_build_hit_switch(hit_switch)
 	for obstacle in plan.obstacles:
 		_build_obstacle(obstacle)
+	for pad in plan.spike_pads:
+		_build_spike_pad(pad)
 	# A PLATE IS A PICTURE OF A TRIGGER, exactly as a gate is a picture of a rule: the sim fires
 	# on occupancy whether or not this mesh exists. It is drawn from the trigger itself so the
 	# thing you stand on and the thing that fires can never be authored in two places. A DORMANT
@@ -129,6 +136,7 @@ func build(plan: FloorPlan, first_actor_id: int, gate_barriers: Dictionary = {})
 func clear_floor() -> void:
 	_gates.clear()
 	_switches.clear()
+	_hazards.clear()
 	_plates.clear()
 	_breakables.clear()
 	_elevation_rects.clear()
@@ -294,6 +302,29 @@ func _build_connection(connection: TraversalConnection, plan: FloorPlan) -> void
 func _patch_elevation(plan: FloorPlan, patch_id: int) -> float:
 	var patch: WalkablePatch = plan.patch_by_id(patch_id)
 	return 0.0 if patch == null else patch.elevation
+
+
+## The pad's footprint IS its trigger region, exactly as a plate's mesh is -- a hazard that hurt
+## you outside its own picture would be the same lie a plate firing off its own mesh would be.
+func _build_spike_pad(pad: SpikePadPlan) -> void:
+	var centre := Vector3(pad.rect.position.x + pad.rect.size.x * 0.5, 0.0,
+		pad.rect.position.y + pad.rect.size.y * 0.5)
+	var mesh: MeshInstance3D = _add_box(
+		Vector3(pad.rect.size.x, _PLATE_THICKNESS, pad.rect.size.y),
+		centre + Vector3(0.0, elevation_at(centre) + _PLATE_THICKNESS * 0.5, 0.0),
+		_HAZARD_SAFE_COLOR)
+	_hazards[pad.pad_id] = mesh
+
+
+## Mirrors the sim's authoritative phase. Presentation never decides when spikes are out.
+func set_hazard_active(pad_id: int, active: bool) -> void:
+	if not _hazards.has(pad_id):
+		return
+	var material: StandardMaterial3D = _hazards[pad_id].material_override
+	material.albedo_color = _HAZARD_ACTIVE_COLOR if active else _HAZARD_SAFE_COLOR
+	material.emission_enabled = active
+	material.emission = _HAZARD_ACTIVE_COLOR
+	material.emission_energy_multiplier = 0.8 if active else 0.0
 
 
 ## Drawn from the SAME rect that excludes bodies and stops shots. If this mesh and that rect

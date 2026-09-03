@@ -34,6 +34,14 @@ var _weapons: Dictionary = {}  # weapon_id(String) -> Dictionary of resolved wea
 var _equipped_weapon: Dictionary = {}  # actor_id -> weapon_id(String), sim-owned equip state
 var _weapon_loadouts: Dictionary = {}  # actor_id -> Array[String], switch_weapon's fixed cycle order
 var _next_fire_tick: Dictionary = {}  # actor_id -> int, tick_count before which "attack" is rejected
+## DAMAGE SOURCE KINDS (ruled 2026-09-03). A closed pair, deliberately: damage is caused either
+## by an ACTOR, which has an id and can be parried and can earn aggro, or by the ENVIRONMENT,
+## which has neither. Everything else about resolution is identical, and BOTH travel the same
+## authoritative pipeline -- a hazard is not an attacker, but it is also not a second combat
+## system. There is no phantom attacker id anywhere and no environment faction.
+const SOURCE_ACTOR: StringName = &"actor"
+const SOURCE_ENVIRONMENT: StringName = &"environment"
+
 var _projectiles: Dictionary = {}  # projectile_id(int) -> Dictionary of in-flight shot state
 var _next_projectile_id: int = 0
 var _matrix_families: Dictionary = {}  # family(String) -> {"weak_to": String, "resists": String}
@@ -275,6 +283,9 @@ var _connection_open: Dictionary = {}    # connection_id -> bool  (THE gate stat
 var _hit_switches: Dictionary = {}
 ## Static obstacle footprints, subtracted from every region this floor builds.
 var _obstacle_rects: Array[Rect2] = []
+## pad_id -> {rect, safe_ticks, active_ticks, phase_offset, damage, damage_type, was_active}.
+## `was_active` exists only so a PHASE CHANGE can be announced once instead of every tick.
+var _spike_pads: Dictionary = {}
 ## connection_id -> the solid line a CLOSED gate presents, derived from real patch geometry in
 ## _rebuild_regions. THE ONE AUTHORITATIVE ORIENTATION: presentation reads it back through
 ## gate_barrier() rather than deriving its own, so the barrier and the picture of it cannot be
@@ -431,6 +442,7 @@ const STATE_SCOPES: Dictionary = {
 	"_connection_open": SCOPE_FLOOR,
 	"_hit_switches": SCOPE_FLOOR,
 	"_obstacle_rects": SCOPE_FLOOR,
+	"_spike_pads": SCOPE_FLOOR,
 	"_gate_barriers": SCOPE_FLOOR,
 	"_triggers": SCOPE_FLOOR,
 	"_triggers_fired": SCOPE_FLOOR,
@@ -639,6 +651,17 @@ func register_patches(rects: Array[Rect2]) -> void:
 ## Static obstacles, as EXCLUSIONS from walkable space. Registered separately from patches
 ## because they are a subtraction rather than an addition -- and kept here so every rebuild
 ## re-applies them, instead of surviving only in whatever bounds happened to be built first.
+## A timed hazard. Its damage is ENVIRONMENT-sourced and travels the ordinary damage pipeline,
+## so a shield absorbs it, repeated ticks can break that shield, and i-frames gate repeats --
+## all of which is existing law rather than anything this hazard invents.
+func register_spike_pad(pad_id: int, rect: Rect2, safe_ticks: int, active_ticks: int, phase_offset_ticks: int, damage: float, damage_type: StringName) -> void:
+	_spike_pads[pad_id] = {
+		"rect": rect, "safe_ticks": maxi(1, safe_ticks), "active_ticks": maxi(1, active_ticks),
+		"phase_offset": phase_offset_ticks, "damage": damage, "damage_type": damage_type,
+		"was_active": false,
+	}
+
+
 func register_obstacles(rects: Array[Rect2]) -> void:
 	_obstacle_rects = rects.duplicate()
 	_rebuild_regions()
@@ -1713,6 +1736,7 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# displacing actor's own move Command is suppressed this same tick. Ordinary AI is
 	# SUSPENDED underground, but this lifecycle is authoritative and keeps advancing.
 	events.append_array(_advance_burrow())
+	events.append_array(_advance_hazards())
 	# AI (Phase D step 8 Phase 4) decides enemy Commands here, right before dispatch,
 	# so its output (move/attack) feeds through the exact same handlers below a
 	# player's own Commands would — no separate resolution path. It also appends any
@@ -2501,13 +2525,19 @@ func _try_parry(defender_id: int, attacker_id: int) -> Array[Event]:
 ## Threaded as ONE optional parameter and stamped CONDITIONALLY (the established
 ## attack_profile_id precedent) rather than as a new event kind, so every melee-path
 ## payload stays byte-identical and no existing assertion moves.
-func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary, resolved_aim: Vector3, weapon_id: String, attack_profile_id: String = "", projectile_id: int = -1) -> Array[Event]:
+##
+## source_kind (2026-09-03): SOURCE_ACTOR by default, so every existing caller is unchanged byte
+## for byte. SOURCE_ENVIRONMENT differs in exactly two places, both below, and in NOTHING else --
+## i-frames, the damage matrix, the shield meter, shield break, pressure, flinch, knockback and
+## death all resolve identically. That is the point: hazards must not grow a parallel pipeline.
+func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary, resolved_aim: Vector3, weapon_id: String, attack_profile_id: String = "", projectile_id: int = -1, source_kind: StringName = SOURCE_ACTOR) -> Array[Event]:
 	# i-frames fully negate a hit: no damage, no knockback, no status, no meter
 	# interaction — the attack simply doesn't land (locked invariant).
 	if _iframe_ticks_remaining.get(target_id, 0) > 0:
-		return [_stamp_projectile(Event.new(tick_count, "attack_absorbed", {
-			"attacker_id": attacker_id, "target_id": target_id, "reason": "iframes",
-		}), projectile_id)]
+		var absorbed: Dictionary = {"attacker_id": attacker_id, "target_id": target_id, "reason": "iframes"}
+		if source_kind != SOURCE_ACTOR:
+			absorbed["source"] = source_kind
+		return [_stamp_projectile(Event.new(tick_count, "attack_absorbed", absorbed), projectile_id)]
 
 	var family: StringName = _families[target_id]
 	var multiplier: float = _damage_multiplier(weapon.damage_type, family)
@@ -2528,7 +2558,11 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		# own rising edge (_block_start_tick, which already existed) marks the ATTACKER
 		# PARRY EXPOSED. The meter still drained above, deliberately -- a parry's only
 		# extra reward is the offensive punish window, never meter efficiency.
-		blocked.append_array(_try_parry(target_id, attacker_id))
+		# A PARRY EXPOSES ITS ATTACKER, and the environment has none to expose. The shield still
+		# absorbed the damage above -- that is ordinary shield law and applies to hazards exactly
+		# as the ruling requires; only the counter-attack half has nobody to aim at.
+		if source_kind == SOURCE_ACTOR:
+			blocked.append_array(_try_parry(target_id, attacker_id))
 		return blocked
 
 	var hp_before: float = _health[target_id]
@@ -2583,10 +2617,21 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	# passive-acquisition only; a landed hit is an unambiguous "the player is right
 	# here." Harmless no-op for a non-AI target (_ai_state.has check) or a lethal hit
 	# (the target dies this same resolution and AI already skips dead actors).
-	if _allegiance.get(attacker_id, &"enemy") == &"player":
+	# ENVIRONMENT DAMAGE ACQUIRES NO AGGRO. "The floor hurt me, therefore attack the player" is
+	# not an inference the sim gets to make; ordinary perception may still find the player on its
+	# own, which is a different mechanism entirely.
+	if source_kind == SOURCE_ACTOR and _allegiance.get(attacker_id, &"enemy") == &"player":
 		_acquire_aggro(target_id)
 
 	var hit_payload: Dictionary = {
+		# attacker_id is -1 for the environment. TRUTHFULLY absent rather than fabricated: a
+		# consumer that needs to know who did this can ask, and get an honest "nobody".
+		#
+		# The `source` field is stamped CONDITIONALLY below -- the established attack_profile_id
+		# precedent -- so every actor-sourced payload stays byte-identical and no recorded
+		# baseline moves. The canary caught this immediately when the field was unconditional,
+		# which is exactly its job; re-recording a baseline to accommodate a new field would have
+		# thrown away the evidence that nothing else had changed.
 		"attacker_id": attacker_id,
 		"target_id": target_id,
 		"damage": damage,
@@ -2594,6 +2639,8 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		"family": family,
 		"position": knocked_position,
 	}
+	if source_kind != SOURCE_ACTOR:
+		hit_payload["source"] = source_kind
 	# Slice B: profile identity never substitutes for weapon identity -- omitted
 	# entirely (not even an empty string) for the original flat path, so every
 	# existing test's exact payload-key expectations stay untouched.
@@ -3962,6 +4009,73 @@ func _advance_burrow() -> Array[Event]:
 				if tick_count >= int(burrow.deadline_tick):
 					_end_burrow(actor_id)
 	return events
+
+
+## THE HAZARD TICK. Phase is a pure function of tick_count, so two machines running the same
+## floor agree without exchanging anything -- which is what makes this replayable for M3.
+##
+## DAMAGE IS APPLIED EVERY ACTIVE TICK an actor stands on the pad, and i-frames do the rest:
+## the first tick lands, the i-frame window swallows the next several, and the cadence falls out
+## of the defensive law already in place. That is deliberate -- a hazard-specific damage interval
+## would be a second timing system saying the same thing, and the two would eventually disagree.
+func _advance_hazards() -> Array[Event]:
+	var events: Array[Event] = []
+	var pad_ids: Array = _spike_pads.keys()
+	pad_ids.sort()
+	for pad_id: int in pad_ids:
+		var pad: Dictionary = _spike_pads[pad_id]
+		var active: bool = _spike_pad_is_active(pad_id)
+		if active != bool(pad["was_active"]):
+			pad["was_active"] = active
+			events.append(Event.new(tick_count, "hazard_phase_changed", {
+				"pad_id": pad_id, "active": active,
+			}))
+		if not active:
+			continue
+		var actor_ids: Array = _health.keys()
+		actor_ids.sort()
+		for actor_id: int in actor_ids:
+			if _health.get(actor_id, 0.0) <= 0.0 or _combat_absent.has(actor_id):
+				continue
+			var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
+			if not WalkableBounds.contains(pad["rect"], position.x, position.z):
+				continue
+			events.append_array(_resolve_hit_on_target(
+				-1, actor_id, _hazard_profile(pad), Vector3(0.0, 0.0, 1.0), "spike_pad",
+				"", -1, SOURCE_ENVIRONMENT))
+	return events
+
+
+## Pure function of the tick: no stored timer, nothing to fall out of sync, and identical on
+## every machine that reaches this tick with this floor loaded.
+func _spike_pad_is_active(pad_id: int) -> bool:
+	var pad: Dictionary = _spike_pads[pad_id]
+	var cycle: int = int(pad["safe_ticks"]) + int(pad["active_ticks"])
+	return posmod(tick_count + int(pad["phase_offset"]), cycle) >= int(pad["safe_ticks"])
+
+
+## The hazard's damage PROFILE, in the shape the pipeline already consumes. Knockback is zero --
+## spikes are underfoot, not a blow from a direction -- and it grants no flinch and feeds no
+## pressure ledger, because neither belongs to a floor.
+func _hazard_profile(pad: Dictionary) -> Dictionary:
+	return {
+		"damage": pad["damage"], "damage_type": pad["damage_type"],
+		"knockback_distance": 0.0, "contributes_pressure": false,
+		"flinch_capability": "none", "interrupt_strength": 0,
+	}
+
+
+## Read-only hazard snapshot (AGENTS.md Invariable #2: every mechanic must be observable).
+func debug_describe_spike_pad(pad_id: int) -> Dictionary:
+	if not _spike_pads.has(pad_id):
+		return {}
+	var pad: Dictionary = _spike_pads[pad_id]
+	var cycle: int = int(pad["safe_ticks"]) + int(pad["active_ticks"])
+	return {
+		"pad_id": pad_id, "active": _spike_pad_is_active(pad_id),
+		"ticks_into_cycle": posmod(tick_count + int(pad["phase_offset"]), cycle),
+		"cycle_ticks": cycle,
+	}
 
 
 ## RETRY WINDOW EXHAUSTED. P17 authored this under open-arena scope, where every emergence
