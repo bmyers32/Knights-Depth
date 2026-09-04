@@ -21,6 +21,18 @@ extends RefCounted
 ## i-frames, flinch, knockback and status procs, and would make it a valid target for enemy AI.
 ## It shares only DETECTION with the melee cone and the projectile sweep.
 
+## THE WORLD-CONTROL LAW (2026-09-06), living with the seam it governs rather than in a review:
+##
+##     A WORLD-OPERABLE CONTROL IS NOT GATED BY WEAPON TYPE, unless weapon specificity is an
+##     explicit authored mechanic. If an attack can validly strike world props, it can operate
+##     world hit-controls.
+##
+## Operability derives from "can this attack legitimately reach a world target here", never from
+## "what is equipped". That is true by construction rather than by intention: `_resolve_melee_swing`
+## consults the switch cone beside the breakable cone, and the projectile sweep consults the switch
+## sweep beside the breakable sweep. ONE seam, two consumers -- a third weapon class inherits it
+## without being asked to remember.
+
 const MODE_ONE_SHOT: StringName = &"one_shot"
 const MODE_TOGGLE: StringName = &"toggle"
 

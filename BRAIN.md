@@ -919,6 +919,31 @@ occluding.**
 **Applies elsewhere:** any metric that improves while the thing it proxies for gets worse. Ask
 what the metric CANNOT see, and measure that separately rather than trusting the score.
 
+### Three instrument faults in a row produced the same false headline
+**Incident (2026-09-06).** Asked to diagnose why the Vault switch appeared to reject a sword, I
+built a probe. It reported "the sword never operates it, at any distance". That was wrong three
+separate times, and each fault produced the *identical* headline:
+
+1. it read `sim._weapons`, where swords do not live — they resolve through combo profiles;
+2. it wrote equip state directly instead of cycling through the real `switch_weapon` Command;
+3. it sent an unphased `attack`, when melee resolves on a **pressed/released** pair.
+
+**There was no defect.** `_resolve_melee_swing` consults the switch cone beside the breakable
+cone, and the projectile sweep does the same — one seam, two consumers. The law held the whole
+time.
+
+**What caught it was the liveness line**, and only that: *0 attacks resolved; broke a test prop
+at the same spot: false*. A weapon that never swings says nothing about a switch. Without it I
+would have "fixed" a working seam, and the fix would have passed its own test.
+
+**The discipline this sharpens:** when a probe reports a negative, the FIRST question is not "why
+does the game do that" but "did the action I am measuring actually happen". Build the liveness
+assertion before the verdict line, not after the first surprising result — and treat *repeated*
+negatives from a young instrument as evidence about the instrument, not corroboration.
+
+**Cross-reference:** the same law caught the tracer test reading an empty list as "no shot fired",
+and the reveal tool measuring from inside a wall. It has now paid for itself four times.
+
 
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries

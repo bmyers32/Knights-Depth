@@ -275,3 +275,67 @@ func test_one_melee_swing_produces_exactly_one_transition() -> void:
 	assert_eq(activations, 1, "one swing, one activation")
 	assert_eq(transitions, 1, "one activation, one door transition")
 	assert_true(_open(), "and it left the door in the flipped state, not back where it started")
+
+
+# --- 7: THE SHIPPED WEAPONS AGAINST THE SHIPPED CONSUMER (ruled 2026-09-06) ---------------------
+#
+# The earlier melee coverage used a HAND-REGISTERED weapon, which is not the same claim. This
+# drives the real loadout against the real Vault control on the real floor.
+#
+# DIAGNOSIS FIRST, and it found no defect: `_resolve_melee_swing` calls BOTH `_breakables_in_cone`
+# and `_switches_in_cone`, and the projectile sweep calls `_find_earliest_switch_hit`. One shared
+# seam, two consumers -- so "any attack that can strike a prop can operate a control" is true by
+# construction rather than by intention.
+#
+# WHAT LOOKED LIKE A DEFECT WAS THE INSTRUMENT, three times over: it read sim._weapons (where
+# swords do not live), wrote equip state instead of cycling through the real Command, and sent an
+# unphased `attack` when melee resolves on a PRESSED/RELEASED pair. Each fault produced the same
+# false headline. Hence this test drives everything the way the game does.
+
+func test_every_shipped_weapon_operates_the_shipped_vault_control() -> void:
+	var layout: GDScript = load("res://game/gen/layouts/archive_roundabout.gd")
+	for weapon_id: StringName in [&"sword_burn_A", &"wand_A"]:
+		var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+		arena.depth = 2
+		add_child_autofree(arena)
+		var world: SimWorld = arena.sim
+		var envoy_id: int = arena.envoy.actor_id
+		world.debug_override_health(envoy_id, 100000.0)
+
+		var switch_position := Vector3.ZERO
+		for hit_switch: HitSwitchPlan in DepthGenerator.generate(arena.run_seed, 2).hit_switches:
+			if hit_switch.switch_id == layout.S_VAULT:
+				switch_position = hit_switch.position
+		world.debug_destroy_breakable(layout.B_VAULT_COVER)
+
+		# Equipped through the real switch_weapon Command, never by writing sim state.
+		for attempt in 4:
+			if StringName(world._equipped_weapon.get(envoy_id, &"")) == weapon_id:
+				break
+			world.tick([Command.new(world.tick_count, envoy_id, "switch_weapon", {})] as Array[Command], DT)
+			for settle in 20:
+				world.tick([] as Array[Command], DT)
+		assert_eq(StringName(world._equipped_weapon.get(envoy_id, &"")), weapon_id,
+			"sanity: %s must actually be equipped" % weapon_id)
+
+		world.entities[envoy_id] = switch_position + Vector3(-2.0, 0.0, 0.0)
+		var activated: bool = false
+		var attacks: int = 0
+		for tick in 120:
+			var commands: Array[Command] = [] as Array[Command]
+			if tick % 20 == 0:
+				commands.append(Command.new(world.tick_count, envoy_id, "attack", {"aim": Vector3(1, 0, 0), "phase": "pressed"}))
+			elif tick % 20 == 2:
+				commands.append(Command.new(world.tick_count, envoy_id, "attack", {"aim": Vector3(1, 0, 0), "phase": "released"}))
+			for event in world.tick(commands, DT):
+				if event.kind == "melee_swing" or event.kind == "projectile_fired":
+					attacks += 1
+				if event.kind == "switch_activated":
+					activated = true
+			if activated:
+				break
+		# LIVENESS BEFORE VERDICT: silence from an observer is evidence only when the observer is
+		# connected to the behaviour. Zero attacks would say nothing about the switch.
+		assert_gt(attacks, 0, "sanity: %s must actually attack before this can mean anything" % weapon_id)
+		assert_true(activated, "%s must operate the Vault control -- world controls are not weapon-gated" % weapon_id)
+		assert_true(bool(world._connection_open[layout.C_VAULT]), "and the door it names must open")

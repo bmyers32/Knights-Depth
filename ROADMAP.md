@@ -43,6 +43,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P34 | Projectile-vs-world obstruction | **LANDED 2026-08-31 · migration classified B** | Human gate PASSED ("they read naturally"). One authored WALL/LEDGE fact shared by sim + presentation; shots stop on walls and closed gates, pass open ledges |
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P35 | Floor-completion / transition presentation | PROPOSED | Winning a floor gives weaker feedback than dying — a `print()` vs an overlay. Audit existing exit vocabulary first |
+| P36 | Macro composition seam (families, missions, arcade) | HELD | Released only on a human Floor 2 PASS; topology vocabulary already homed in floor_layers.gd |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.

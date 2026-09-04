@@ -87,3 +87,49 @@ const ROLE_AMBIENT: StringName = &"ambient"
 ## and serializes for M3, where floor state is server-authoritative (GAME-RULES §4.1).
 static func effect(kind: StringName, target_id: int) -> Dictionary:
 	return {"kind": kind, "target_id": target_id}
+
+
+# --- AUTHORING VOCABULARY (2026-09-06) -----------------------------------------------------
+#
+# Design terms, not classes. They live here because this file already holds the shared words a
+# floor is authored in, and because the only durable definition of a term must not be a review
+# thread. Nothing below generates anything.
+#
+#
+# SOLID-OBJECT SCALE. Three distinct things, and calling them all "obstacle" hid the difference:
+#
+#   PROP                one hit, removable. Interest comes from grouping and what it conceals,
+#                       never from durability.
+#   SMALL STATIC BLOCKER / GUARD RAIL
+#                       permanent, not a target, shapes a lane or an edge locally.
+#   ARCHITECTURAL MASS  permanent, substantial; carries a spatial, landmark or sightline role.
+#
+# NEW VOCABULARY IS NOT A MANDATE TO CONSUME IT. A guard rail is authored where a concrete edge
+# wants one -- never by sweeping a floor asking which masses could become one.
+#
+#
+# THE THEMED-MASS CONDITION. Large solid geometry is valid; a lone large block whose only
+# apparent function is occupying space or blocking view is not. A mass should participate in the
+# composition of its space -- surrounded by layout, props, hazards or enemies that make it read
+# as belonging. SIZE ALONE IS NOT CONTENT. This does not require several mechanics bolted to
+# every mass; it requires a legible reason to be there.
+#
+#
+# ROUTE TOPOLOGY. The shapes a floor's critical path can take:
+#
+#   LINEAR CHAPTERS       distinct spaces in sequence
+#   FOLD                  the route reverses direction around a mass or edge
+#   BRANCH-AND-RETURN     optional limb off the critical path that rejoins where it left
+#   SIDE POCKET           a short branch-and-return; one room, one reason
+#   FORK-AND-REJOIN       two ways to the same place, both on the critical path
+#   HUB-AND-SPOKES        a centre space that several routes organise around
+#   LOOP                  the route returns to a space already visited, from elsewhere
+#   LOCKED-SHORTCUT LOOP  a loop whose closing link is opened from the far side
+#   LATERAL CHAPTER       a sustained run across the plane rather than along the view axis
+#
+# AND THE CONSTRAINT THAT IS NOT A CHOOSER, stated because it nearly became one:
+#
+#     CAMERA AND REVEAL CONSTRAIN A CHOSEN TOPOLOGY. THEY DO NOT SELECT IT.
+#
+# Floor 2 arrived at folds because folds suited Floor 2, not because the camera prefers them.
+# "Generator = folded snake" would be that accident hardening into an architecture.
