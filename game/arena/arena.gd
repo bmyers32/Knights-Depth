@@ -130,6 +130,9 @@ var _projectile_visuals: Dictionary = {}
 ## SimWorld stays authoritative for position, collision, hit and expiry, and presentation
 ## never feeds anything back -- a tracer/sim disagreement is always a TRACER bug.
 var _projectile_tracers: Dictionary = {}
+## How far above its floor a tracer flies. Presentation only -- the sim resolves every shot on
+## the flat plane, and lifting the picture must never be mistaken for giving shots a height.
+const _MUZZLE_HEIGHT: float = 0.9
 ## actor_id -> {"opens_tick": int, "ends_tick": int, "marked": bool} for the P29 vulnerable
 ## cue. Absolute sim ticks derived from the telegraph Event's OWN tick plus authored
 ## content -- Event.tick is the authoritative timestamp (BRAIN), never tick_count sampled
@@ -487,7 +490,12 @@ func _spawn_tracer(payload: Dictionary) -> void:
 	add_child(tracer)
 	# hit_radius comes from CONTENT, resolved once at setup -- never from the Event, whose
 	# payload must stay free of tunables (and whose shape the backward-compat allow-list pins).
-	tracer.launch(payload.get("position", Vector3.ZERO), payload.get("direction", Vector3.FORWARD), float(visuals.speed), visuals.color, float(visuals.get("hit_radius", 0.0)))
+	# GROUNDED TO THE FLOOR IT WAS FIRED FROM. The sim is FLAT -- every actor position is y=0 --
+	# and presentation lifts actors to their patch elevation on the way out. The tracer was the
+	# one thing that did not get lifted, so a shot fired on a raised platform launched at y=0 and
+	# flew UNDERNEATH it. Authority was never wrong; the picture was.
+	var muzzle: Vector3 = _grounded(payload.get("position", Vector3.ZERO)) + Vector3(0.0, _MUZZLE_HEIGHT, 0.0)
+	tracer.launch(muzzle, payload.get("direction", Vector3.FORWARD), float(visuals.speed), visuals.color, float(visuals.get("hit_radius", 0.0)))
 	_projectile_tracers[int(payload.get("projectile_id", -1))] = tracer
 
 

@@ -974,7 +974,7 @@ func _activate_encounter(encounter_id: int) -> Array[Event]:
 		# A deferred roster becomes PRESENT here -- the same participation flip burrow uses on
 		# emergence, so presentation already knows how to mirror it.
 		_combat_absent.erase(member_id)
-		debug_set_ai_active(member_id)
+		_engage_on_activation(member_id)
 		arrived.append(member_id)
 	return [Event.new(tick_count, "encounter_activated", {
 		"encounter_id": encounter_id, "roster": _encounter_roster[encounter_id].size(),
@@ -1112,10 +1112,16 @@ func _switches_in_cone(attacker_position: Vector3, resolved_aim: Vector3, weapon
 			continue
 		var offset: Vector3 = switch["position"] - attacker_position
 		offset.y = 0.0
+		# THE SAME CONE TEST A BREAKABLE GETS, read from the SAME resolved fields. The first
+		# version recomputed the angle from an `arc_degrees` key that melee profiles do not
+		# carry -- so a sword swung at a switch raised an error instead of pressing it, and the
+		# switch was quietly a gun-only object. Reusing `cone_threshold` is what makes "any
+		# weapon that can hit a crate can hit a switch" true by construction rather than by
+		# intention.
 		var reach: float = float(weapon.reach) + float(switch["radius"])
 		if offset.length() > reach:
 			continue
-		if offset.length() > 0.001 and rad_to_deg(offset.normalized().angle_to(resolved_aim)) > float(weapon.arc_degrees) * 0.5:
+		if offset.length() > 0.001 and resolved_aim.dot(offset.normalized()) < weapon.cone_threshold:
 			continue
 		hit_ids.append(switch_id)
 	return hit_ids
@@ -1716,6 +1722,22 @@ func _acquire_aggro(actor_id: int) -> bool:
 ## actor (which unconditionally sets "idle" internally) -- this exists so the one
 ## place that ever mutates _ai_state stays inside SimWorld even for a debug hook,
 ## instead of arena.gd reaching into the dict directly.
+## AN ACTIVATED ROSTER KNOWS THE FIGHT HAS STARTED (ruled 2026-09-04). Walking into a room that
+## wakes a group must not require damaging one of them before the group understands it is in
+## combat -- the trigger IS the awareness.
+##
+## Named as production law rather than reached through the debug hook it used to share. The
+## behaviour was already correct; routing an authored consequence through a function called
+## `debug_*` is how a later tidy-up deletes a rule it thought was scaffolding.
+##
+## DELIBERATELY NOT AGGRO-BY-DAMAGE: no threat is fabricated and no attacker is invented. The
+## actor simply stops being unaware, and ordinary target rules choose from there -- which is why
+## environment damage still confers nothing.
+func _engage_on_activation(actor_id: int) -> void:
+	_ai_state[actor_id] = "active"
+	_ai_last_in_close_band[actor_id] = tick_count
+
+
 func debug_set_ai_active(actor_id: int) -> void:
 	_ai_state[actor_id] = "active"
 	# Mirrors _acquire_aggro's initialization (minus the engagement opener, which this hook

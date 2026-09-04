@@ -258,13 +258,35 @@ func test_reaching_leg_b_wakes_its_fights() -> void:
 
 # --- 5: CONTENT LAWS ----------------------------------------------------------------------------
 
-func test_ordinary_props_are_one_hit_and_route_blockers_are_not() -> void:
+## EVERY PROP BREAKS IN ONE HIT, route blockers included (ruled 2026-09-04, superseding the
+## earlier split that let a blocker cost more). Durability is not where challenge lives: a prop
+## that soaks swings turns clearing scenery into fighting a low-health enemy. The difficulty of
+## an environmental object is positioning, ordering, consequence and the enemies around it.
+##
+## THE ALTERNATIVE IS EXPLICITNESS: something the player must not be able to remove is an
+## OBSTACLE, unbreakable by construction, rather than a prop with a big number.
+func test_every_prop_breaks_in_one_hit() -> void:
 	for breakable: BreakablePlan in plan.breakables:
-		if breakable.blocking_rect.get_area() > 0.0:
-			assert_gt(breakable.durability, 1.0, "a route blocker may cost more than a swing")
-		else:
-			assert_lte(breakable.durability, 1.0,
-				"breakable %d is scenery and must break in one hit" % breakable.breakable_id)
+		assert_lte(breakable.durability, 1.0,
+			"breakable %d must break in one hit; if it should be permanent, make it an obstacle"
+				% breakable.breakable_id)
+
+
+## AND THE SPIKE LANE MUST BE CROSSABLE ON A COMMITMENT. Its safe window is derived from a
+## MEASURED crossing (114 ticks at the authored speed, body-clear to body-clear) plus grace --
+## not from feel. Pads sharing a lane must also share a phase, or the lane is never wholly safe
+## and no window can satisfy the law.
+func test_the_spike_lane_can_be_crossed_once_it_retracts() -> void:
+	var lane: Rect2 = plan.spike_pads[0].rect
+	var phases: Array = []
+	for pad: SpikePadPlan in plan.spike_pads:
+		lane = lane.merge(pad.rect)
+		phases.append(pad.phase_offset_ticks)
+		assert_gte(pad.safe_ticks, 137,
+			"pad %d gives %d safe ticks; the measured crossing is 114 and needs grace on top"
+				% [pad.pad_id, pad.safe_ticks])
+	assert_eq(phases.min(), phases.max(),
+		"pads sharing one lane must share a phase, or it is never wholly safe: %s" % str(phases))
 
 
 func test_spikes_are_player_facing_only() -> void:

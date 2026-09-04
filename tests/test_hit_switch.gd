@@ -205,3 +205,49 @@ func test_toggle_needs_no_knowledge_of_the_current_state() -> void:
 	assert_true(_open(), "sanity: opened by something else entirely")
 	_shoot()
 	assert_false(_open(), "the switch still flips it, having asked nobody what it was")
+
+
+# --- 6: EVERY WEAPON OPERATES A SWITCH (ruled 2026-09-04) ---------------------------------------
+#
+# A switch is a world target, not a gun target. Special-casing a weapon family would make the
+# verb "shoot it" rather than "hit it", and the player would have to guess which of their
+# weapons the world respects.
+
+func test_a_gun_operates_a_switch() -> void:
+	_switch(&"one_shot", [FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, DOOR)])
+	_shoot()
+	assert_true(_open(), "a projectile weapon must work")
+
+
+func test_a_melee_weapon_operates_a_switch() -> void:
+	_switch(&"one_shot", [FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, DOOR)])
+	# Stand within reach of the switch and swing, rather than firing across the room.
+	sim.entities[PLAYER] = Vector3(-7.0, 0.0, 0.0)
+	sim.register_weapon(&"blade", 12.0, &"force", 3.0, 120.0, 0.0, 0)
+	sim.set_equipped_weapon(PLAYER, &"blade")
+	var events: Array[Event] = sim.tick(
+		[Command.new(sim.tick_count, PLAYER, "attack", {"aim": Vector3(1, 0, 0)})] as Array[Command], DT)
+	for i in 30:
+		events.append_array(sim.tick([] as Array[Command], DT))
+	assert_true(_kinds(events).has("switch_activated"), "a melee swing must work too")
+	assert_true(_open())
+
+
+## THE SHARED FACT: the switch is reached through the same detection every world prop uses, so
+## any attack that can strike a crate can operate it. This asserts the property rather than the
+## two examples, so a third weapon class cannot arrive and quietly not work.
+func test_a_switch_and_a_crate_answer_to_the_same_attacks() -> void:
+	for melee: bool in [true, false]:
+		before_each()
+		_switch(&"one_shot", [FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, DOOR)])
+		sim.register_breakable(9, Vector3(-5.0, 0.0, 3.0), 0.7, 1.0)
+		if melee:
+			sim.entities[PLAYER] = Vector3(-7.0, 0.0, 0.0)
+			sim.register_weapon(&"blade", 12.0, &"force", 3.0, 120.0, 0.0, 0)
+			sim.set_equipped_weapon(PLAYER, &"blade")
+		var events: Array[Event] = sim.tick(
+			[Command.new(sim.tick_count, PLAYER, "attack", {"aim": Vector3(1, 0, 0)})] as Array[Command], DT)
+		for i in 60:
+			events.append_array(sim.tick([] as Array[Command], DT))
+		assert_true(_kinds(events).has("switch_activated"),
+			"%s must operate a world switch" % ("melee" if melee else "ranged"))

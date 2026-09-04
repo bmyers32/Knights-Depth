@@ -165,9 +165,9 @@ static func _spatial(plan: FloorPlan) -> void:
 	# THE SPILLWAY'S SLOW LANE, pushing the safe route wide of the spikes.
 	_obstacle(plan, 4, Rect2(-2.0, -70.0, 4.0, 8.0), 2.4)
 
-	# THE SPIKES, out of step so the fast line is a rhythm rather than one gate.
+	# THE SPIKES. One lane, one rhythm: they retract together so the crossing can be committed to.
 	_spikes(plan, 0, Rect2(4.0, -70.0, 6.0, 6.0), 0)
-	_spikes(plan, 1, Rect2(4.0, -62.0, 6.0, 6.0), 25)
+	_spikes(plan, 1, Rect2(4.0, -62.0, 6.0, 6.0), 0)
 
 
 static func _patch(plan: FloorPlan, patch_id: int, rect: Rect2, elevation: float, surface: StringName) -> void:
@@ -192,8 +192,14 @@ static func _spikes(plan: FloorPlan, pad_id: int, rect: Rect2, offset: int) -> v
 	var pad := SpikePadPlan.new()
 	pad.pad_id = pad_id
 	pad.rect = rect
-	pad.safe_ticks = 55
+	# SAFE_TICKS IS DERIVED, NOT FELT (ruled 2026-09-04). Crossing this lane at the authored
+	# envoy speed, from body-clear on one side to body-clear on the other, MEASURED at 114 ticks
+	# (tools/measure_spike_crossing.gd). 143 is that plus 25% grace, so committing the instant
+	# the spikes drop always gets you across.
+	pad.safe_ticks = 143
 	pad.active_ticks = 35
+	# IN PHASE, deliberately. Out-of-phase pads were prettier and made the law unsatisfiable: a
+	# lane that is never wholly safe cannot be crossed on a commitment, whatever the window.
 	pad.phase_offset_ticks = offset
 	pad.damage = 10.0
 	pad.damage_type = &"force"
@@ -290,9 +296,10 @@ static func _world_objects(plan: FloorPlan) -> void:
 	# ORDINARY PROPS BREAK IN ONE HIT.
 	_breakable(plan, B_VAULT_COVER, Vector3(12.0, 0.0, -73.0), 1.1, 1.0)
 	_breakable(plan, B_BAY_PROP, Vector3(-38.0, 0.0, -124.0), 1.0, 1.0)
-	# THE GALLERY'S RUBBLE: a route decision, so it authors a real cost. It holds the Watcher's
-	# sightline BOTH ways and occupies the lane in front of it -- one act changes fight and route.
-	_breakable(plan, B_GALLERY_RUBBLE, Vector3(-30.0, 0.0, -66.0), 2.0, 46.0, Rect2(-33.0, -68.0, 6.0, 4.0))
+	# THE GALLERY'S RUBBLE. ONE HIT, like every prop (ruled 2026-09-04): durability is not where
+	# challenge lives. Its difficulty is positioning and consequence -- it holds the Watcher's
+	# sightline BOTH ways and occupies the lane in front of it, so one act changes fight and route.
+	_breakable(plan, B_GALLERY_RUBBLE, Vector3(-30.0, 0.0, -66.0), 2.0, 1.0, Rect2(-33.0, -68.0, 6.0, 4.0))
 
 
 static func _breakable(plan: FloorPlan, breakable_id: int, position: Vector3, radius: float, durability: float, blocking_rect: Rect2 = Rect2()) -> void:

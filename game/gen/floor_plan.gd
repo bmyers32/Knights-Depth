@@ -453,6 +453,7 @@ func validate(body_radii: Dictionary = {}) -> void:
 	_reject_bypassable_gates()
 	_reject_impassable_apertures(body_radii)
 	_reject_obstructed_controls()
+	_reject_high_durability_props()
 
 
 ## A connection that does not name the patches it joins cannot be checked by anything above,
@@ -622,3 +623,22 @@ func _reject_obstructed_controls() -> void:
 				push_error(("FloorPlan: hit-switch %d stands inside permanent obstacle %d. Concealment must be "
 					+ "removable; a switch buried in a column is unhittable, not hidden.")
 					% [hit_switch.switch_id, obstacle.obstacle_id])
+
+
+## EVERY ENVIRONMENTAL PROP BREAKS IN ONE HIT (ruled 2026-09-04).
+##
+## Durability is not where challenge lives. A prop that soaks several swings turns clearing
+## scenery into fighting a low-health enemy, and the human read exactly that. The difficulty of
+## an environmental object comes from positioning, ordering, consequence, timing and the enemies
+## around it -- never from its hit points.
+##
+## THE ALTERNATIVE IS EXPLICITNESS, not a bigger number: something the player must NOT be able to
+## remove is an OBSTACLE, which is unbreakable by construction and says so. A high-HP prop is a
+## permanent object wearing a destructible's clothes.
+func _reject_high_durability_props() -> void:
+	for breakable in breakables:
+		if breakable.durability > 1.0:
+			push_error(("FloorPlan: breakable %d has durability %.1f. Every environmental prop breaks in ONE "
+				+ "hit -- challenge comes from positioning and consequence, not from hit points. If it is "
+				+ "meant to be permanent, author it as an ObstaclePlan, which cannot be broken at all.")
+				% [breakable.breakable_id, breakable.durability])

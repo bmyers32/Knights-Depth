@@ -382,3 +382,57 @@ func test_a_burrow_always_resolves_one_way_or_the_other() -> void:
 		assert_ne(outcome, "", "a burrow must never simply never resolve (tight=%s)" % str(tight))
 		assert_false(sim._health.get(ENEMY, 0.0) > 0.0 and sim.debug_is_combat_absent(ENEMY),
 			"and must never leave an actor alive and absent (tight=%s)" % str(tight))
+
+
+# --- 6: AN ACTIVATED ROSTER KNOWS THE FIGHT HAS STARTED (ruled 2026-09-04) ----------------------
+#
+# Walking into a room that wakes a group must not require damaging one of them before the group
+# understands it is in combat. The trigger IS the awareness.
+#
+# NOT aggro-by-damage: nothing is fabricated and no attacker is invented. The actor stops being
+# unaware, and ordinary target rules choose from there -- which is exactly why environment damage
+# still confers nothing.
+
+func test_activating_an_encounter_engages_its_roster_immediately() -> void:
+	_add_enemy(&"watcher", 0.85, Vector3(0.0, 0.0, -17.0), FloorLayers.ROLE_OPTIONAL, false)
+	assert_eq(String(sim._ai_state.get(ENEMY, "")), "active",
+		"the roster is engaged the moment its encounter activates, with no hit required")
+
+
+## AND WITHOUT DETECTION DOING THE WORK. Placed far outside its own detection radius, an
+## activated actor is still engaged -- otherwise "activation engages" would only be true for
+## rooms small enough that detection would have fired anyway.
+func test_activation_engages_beyond_detection_range() -> void:
+	sim.register_encounter(ENCOUNTER, [SOUTH] as Array[Rect2], FloorLayers.ROLE_OPTIONAL, false, true)
+	sim.add_entity(ENEMY, Vector3(-9.0, 0.0, -19.0), 4.0, Vector3(0, 0, 1), 0.85)
+	sim.register_combatant(ENEMY, 500.0, &"watcher", 0, 0.85, &"enemy")
+	sim.register_weapon(&"test_bite", 5.0, &"force", 2.0, 90.0, 0.0, 9999)
+	# Detection 1.0: far too small to notice a player standing across the room.
+	sim.register_ai(ENEMY, CombatTestHelpers.single_action_repertoire(&"test_bite", 2.0, 10000),
+		Vector3(-9.0, 0.0, -19.0), 2.2, 1.9, 1.0, 60.0, 0, 0, 0.0, 0.0, 0, 0.0, 0, 0, 0, 45)
+	assert_true(sim.assign_actor_encounter(ENEMY, ENCOUNTER))
+	assert_ne(String(sim._ai_state.get(ENEMY, "")), "active", "sanity: dormant and unaware to begin with")
+
+	sim.debug_activate_encounter(ENCOUNTER)
+	assert_eq(String(sim._ai_state.get(ENEMY, "")), "active",
+		"activation is the awareness; detection range must not have to agree")
+
+
+## THE THREE SOURCES OF AWARENESS STAY SEPARATE, so a later refactor cannot merge them: an
+## attack confers attacker-specific aggro, activation confers engagement, and the environment
+## confers nothing at all.
+func test_environment_damage_still_confers_no_awareness() -> void:
+	sim.register_encounter(ENCOUNTER, [SOUTH] as Array[Rect2], FloorLayers.ROLE_AMBIENT, false, true)
+	sim.add_entity(ENEMY, Vector3(0.0, 0.0, -17.0), 4.0, Vector3(0, 0, 1), 0.85)
+	sim.register_combatant(ENEMY, 500.0, &"watcher", 0, 0.85, &"enemy")
+	sim.register_weapon(&"test_bite", 5.0, &"force", 2.0, 90.0, 0.0, 9999)
+	sim.register_ai(ENEMY, CombatTestHelpers.single_action_repertoire(&"test_bite", 2.0, 10000),
+		Vector3(0.0, 0.0, -17.0), 2.2, 1.9, 1.0, 60.0, 0, 0, 0.0, 0.0, 0, 0.0, 0, 0, 0, 45)
+	assert_true(sim.assign_actor_encounter(ENEMY, ENCOUNTER))
+	# A pad authored to include enemies, so the damage genuinely lands.
+	sim.register_spike_pad(0, Rect2(-3.0, -20.0, 6.0, 6.0), 1, 10000, 0, 8.0, &"force", [&"player", &"enemy"])
+	sim.entities[PLAYER] = Vector3(0.0, 0.0, -2.0)
+	_run(30)
+	assert_lt(sim._health[ENEMY], 500.0, "sanity: the hazard hurt it")
+	assert_ne(String(sim._ai_state.get(ENEMY, "")), "active",
+		"being hurt by the floor is not being told a fight has started")
