@@ -73,8 +73,8 @@ func _walk_the_floor() -> void:
 	assert_true(_walk_to(Vector3(-2.0, 0.0, -50.0)), "leg 2: into the court")
 	assert_true(_walk_to(Vector3(14.0, 0.0, -62.0)), "east across it, south of its limb")
 	assert_true(_walk_to(Vector3(21.0, 0.0, -70.0)), "to the south lane's mouth")
-	assert_true(_walk_to(Vector3(21.0, 0.0, -87.0)), "into the lane")
-	assert_true(_walk_to(Vector3(2.0, 0.0, -87.0)), "leg 3: west across the hazard lane")
+	assert_true(_walk_to(Vector3(21.0, 0.0, -91.0)), "into the lane")
+	assert_true(_walk_to(Vector3(2.0, 0.0, -91.0)), "leg 3: west across the hazard lane")
 	assert_true(_walk_to(Vector3(-20.0, 0.0, -88.0)), "into the hall")
 	assert_true(_walk_to(Vector3(-39.0, 0.0, -103.0)), "south through the bay's doorway")
 	assert_true(_walk_to(Vector3(-38.0, 0.0, -116.0)), "into the bay")
@@ -336,8 +336,10 @@ func test_the_widest_body_can_walk_every_leg() -> void:
 		# EAST of the court's north-west limb, which is authored to stand there: the lane exists to
 		# prove the room is crossable, not to insist the room is empty.
 		["court, north-east", Vector3(10.0, 0.0, -48.0), Vector3(34.0, 0.0, -48.0)],
-		["court, south", Vector3(-2.0, 0.0, -70.0), Vector3(34.0, 0.0, -70.0)],
-		["south lane", Vector3(2.0, 0.0, -87.0), Vector3(28.0, 0.0, -87.0)],
+		# South of the Court's landmark, which stands at z[-70,-62]: the room is crossable around
+		# its centrepiece, which is the point of having one.
+		["court, south", Vector3(-2.0, 0.0, -72.0), Vector3(34.0, 0.0, -72.0)],
+		["south lane", Vector3(2.0, 0.0, -91.0), Vector3(28.0, 0.0, -91.0)],
 		# NO STRAIGHT LANE IS CLAIMED THROUGH THE HALL: it is an integrated chamber, deliberately
 		# full of masses and a route blocker, and a full-width corridor through it would mean the
 		# composition had failed. What IS claimed is below.
@@ -358,3 +360,77 @@ func test_depth_one_still_authors_the_prototype() -> void:
 	assert_eq(floor_one.spike_pads.size(), 0, "floor 1 gains no hazards")
 	assert_eq(floor_one.obstacles.size(), 0, "no masses")
 	assert_eq(floor_one.hit_switches.size(), 0, "and no switches")
+
+
+# --- 8: LOCAL READABILITY (ruled 2026-09-05) ----------------------------------------------------
+
+## HIDE FUTURE RELATIONSHIPS, NOT THE GROUND UNDER THE PLAYER'S FEET.
+##
+## THE RULE, derived from the camera rather than guessed: the view ray reaches the ground AT the
+## player, descending one unit per unit, so its height d short of the player is exactly d --
+## therefore A MASS OF HEIGHT h COVERS THE PLAYER WHENEVER THEY WALK WITHIN h UNITS OF ITS
+## CAMERA-FACING FACE. The camera sits NORTH of the player, so that is a mass's north side.
+##
+## Three masses on the previous build were within THREE units of a walking line, and the human
+## reported all three independently. This pins the clearance so it cannot creep back.
+func test_no_mass_stands_on_top_of_a_walking_line() -> void:
+	var walking_lines: Array = [
+		Vector3(-46.0, 0.0, -36.0),  # landing
+		Vector3(-20.0, 0.0, -37.0),  # west hall
+		Vector3(-2.0, 0.0, -50.0),   # court, entering
+		Vector3(14.0, 0.0, -62.0),   # court, crossing
+		Vector3(21.0, 0.0, -91.0),   # the spike lane's commitment line
+		Vector3(2.0, 0.0, -91.0),    # its far side
+		Vector3(-39.0, 0.0, -103.0), # the bay's doorway
+		Vector3(-10.0, 0.0, -154.0), # junction
+		Vector3(16.0, 0.0, -154.0),  # junction, east
+	]
+	for obstacle: ObstaclePlan in plan.obstacles:
+		for line: Vector3 in walking_lines:
+			# Only a mass NORTH of the player can come between them and the camera.
+			if line.z >= obstacle.rect.position.y:
+				continue
+			if line.x < obstacle.rect.position.x - 1.0 or line.x > obstacle.rect.end.x + 1.0:
+				continue
+			var gap: float = obstacle.rect.position.y - line.z
+			assert_gte(gap, obstacle.height,
+				"mass %d (height %.1f) is %.1f north of a walking line at %s -- it will cover the Envoy"
+					% [obstacle.obstacle_id, obstacle.height, gap, line])
+
+
+## THE SPIKE LANE'S COMMITMENT EDGE IS CLEAR. The player must be able to read the pads and their
+## state before deciding to go; obstacle avoidance is not part of this hazard.
+func test_the_spike_commitment_edge_is_uncluttered() -> void:
+	var lane: Rect2 = plan.spike_pads[0].rect
+	for pad: SpikePadPlan in plan.spike_pads:
+		lane = lane.merge(pad.rect)
+	# The approach room east of the lane, where the decision is made.
+	for x: float in [lane.end.x + 2.0, lane.end.x + 4.0, lane.end.x + 6.0]:
+		assert_true(sim._bounds.fits(Vector3(x, 0.0, lane.get_center().y), 1.45),
+			"the approach at x=%.0f must be open ground, not something to squeeze past" % x)
+	for obstacle: ObstaclePlan in plan.obstacles:
+		assert_false(obstacle.rect.intersects(lane.grow(3.0)),
+			"mass %d crowds the hazard's commitment edge" % obstacle.obstacle_id)
+
+
+## A STRUCTURE WHOSE ONLY ROLE IS COVERING FAILS THE AUTHORED-PURPOSE TEST. The final-gate block
+## was deleted rather than replaced, and this asserts nothing took its place.
+func test_the_final_approach_carries_no_cover_only_block() -> void:
+	var junction: Rect2 = _patch(L.P_JUNCTION)
+	for obstacle: ObstaclePlan in plan.obstacles:
+		assert_false(obstacle.rect.intersects(junction),
+			"mass %d sits in the final approach; its reveal job belongs to the approach angle"
+				% obstacle.obstacle_id)
+
+
+## THE COURT KEEPS ITS OPEN GROUND. A landmark to orient by, not a clutter chamber.
+func test_the_court_stays_mostly_open() -> void:
+	var court: Rect2 = _patch(L.P_COURT)
+	var occupied: float = 0.0
+	for obstacle: ObstaclePlan in plan.obstacles:
+		occupied += obstacle.rect.intersection(court).get_area()
+	# A HEURISTIC, and named as one: 15% is "you can see across it and fight in it", not a law.
+	# Human perception remains authoritative on whether the Court still breathes.
+	assert_lt(occupied / court.get_area(), 0.15,
+		"the Court is %.0f%% built on; it is a court, and it has to breathe" % (occupied / court.get_area() * 100.0))
+	assert_gt(occupied, 0.0, "but it does have something to orient by")

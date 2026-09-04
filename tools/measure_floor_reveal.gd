@@ -42,10 +42,13 @@ func _init() -> void:
 	_solids = plan.solid_segments()
 	_blockers = []
 	for obstacle in plan.obstacles:
-		_blockers.append({"rect": obstacle.rect, "height": obstacle.height})
+		_blockers.append({"rect": obstacle.rect, "height": obstacle.height, "removable": false})
 	for breakable in plan.breakables:
 		if breakable.blocking_rect.get_area() > 0.0:
-			_blockers.append({"rect": breakable.blocking_rect, "height": 1.8})
+			# TAGGED REMOVABLE. Being hidden behind cover the player can clear in one hit is a
+			# different fact from being hidden behind permanent architecture, and a report that
+			# conflated them would send someone re-authoring a room that was working.
+			_blockers.append({"rect": breakable.blocking_rect, "height": 1.8, "removable": true})
 
 	var extent: Rect2 = plan.patches[0].rect
 	for rect: Rect2 in plan.all_rects():
@@ -76,9 +79,15 @@ func _init() -> void:
 	# ONE STATION PER SPACE, at its centre, derived from the plan. The progression the ruling
 	# asked to see -- entry knows the early floor, fold 1 reveals the middle, fold 2 the late --
 	# is exactly this list read top to bottom.
+	# THE STATION MUST BE SOMEWHERE THE PLAYER COULD STAND. A patch's centre can sit inside a
+	# mass or a route blocker, and measuring "can the Envoy be seen" from inside a solid reports
+	# a covering that no player will ever experience -- which is exactly what the Hall did.
+	var bounds := WalkableBounds.new(plan.all_rects(), plan.obstacle_rects())
 	var stations: Array = [["THE DROP (entry)", plan.entry_point]]
 	for patch: WalkablePatch in plan.patches:
 		var centre := Vector3(patch.rect.get_center().x, 0.0, patch.rect.get_center().y)
+		if not bounds.fits(centre, 0.45):
+			centre = _nearest_standable(bounds, patch.rect, centre)
 		stations.append([String(names.get(patch.patch_id, str(patch.patch_id))).to_lower(), centre])
 	for station in stations:
 		_report(camera, plan, names, station[0], station[1])
@@ -143,6 +152,25 @@ func _fraction_visible(camera: Camera3D, size: Vector2, rect: Rect2) -> float:
 	return float(visible_count) / float(total)
 
 
+## The nearest point inside this space where a body actually fits. Sampled on a grid rather than
+## solved, because the shapes are few and a measurement nobody can check is worth nothing.
+func _nearest_standable(bounds: WalkableBounds, rect: Rect2, from: Vector3) -> Vector3:
+	var best: Vector3 = from
+	var best_distance: float = INF
+	for column in 9:
+		for row in 9:
+			var point := Vector3(
+				rect.position.x + rect.size.x * (float(column) / 8.0), 0.0,
+				rect.position.y + rect.size.y * (float(row) / 8.0))
+			if not bounds.fits(point, 0.45):
+				continue
+			var distance: float = point.distance_to(from)
+			if distance < best_distance:
+				best_distance = distance
+				best = point
+	return best
+
+
 ## LOCAL READABILITY, reported separately from macro reveal (ruled 2026-09-05).
 ##
 ## A mass can score well at hiding future connections and still be bad, because it covers the
@@ -152,7 +180,8 @@ func _fraction_visible(camera: Camera3D, size: Vector2, rect: Rect2) -> float:
 ## HIDE FUTURE RELATIONSHIPS, NOT THE GROUND UNDER THE PLAYER'S FEET.
 func _local_readability(camera: Camera3D, size: Vector2, stand: Vector3) -> String:
 	if _occluded(camera.global_position, stand):
-		return "   *** THE ENVOY ITSELF IS COVERED ***"
+		return "   *** THE ENVOY IS COVERED, by %s ***" % (
+			"REMOVABLE cover" if _covered_only_by_removable(camera.global_position, stand) else "PERMANENT architecture")
 	# The immediate traversable neighbourhood: the ring a player reads while deciding where to
 	# step next. Sampled rather than reasoned about, because "is my own path visible" is exactly
 	# the kind of claim that sounds obvious and is wrong.
@@ -190,6 +219,27 @@ func _route_in_visible(camera: Camera3D, size: Vector2, plan: FloorPlan, patch_i
 		if _fraction_visible(camera, size, other.rect.intersection(rect)) > 0.0:
 			return true
 	return false
+
+
+## Is everything blocking this line something the player could clear? Cover you can break in one
+## hit is a choice; architecture on top of you is a defect.
+func _covered_only_by_removable(from: Vector3, to: Vector3) -> bool:
+	for step in range(1, 60):
+		var along: Vector3 = from.lerp(to, float(step) / 60.0)
+		for blocker in _blockers:
+			if bool(blocker.get("removable", false)):
+				continue
+			if WalkableBounds.contains(blocker["rect"], along.x, along.z) and along.y < float(blocker["height"]):
+				return false
+		for segment in _solids:
+			var on_span: bool = false
+			if segment["axis"] == &"x":
+				on_span = absf(along.x - float(segment["at"])) < 0.35 and along.z >= float(segment["min"]) and along.z <= float(segment["max"])
+			else:
+				on_span = absf(along.z - float(segment["at"])) < 0.35 and along.x >= float(segment["min"]) and along.x <= float(segment["max"])
+			if on_span and along.y < float(segment["elevation"]) + WALL_HEIGHT:
+				return false
+	return true
 
 
 ## Is the line from the camera to this ground point interrupted by something tall enough?

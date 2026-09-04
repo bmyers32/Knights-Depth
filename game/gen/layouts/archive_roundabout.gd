@@ -93,6 +93,12 @@ const S_ALTERNATE := 1    # the toggle, in the puzzle bay
 const B_VAULT_COVER := 0
 const B_HALL_RUBBLE := 1
 const B_BAY_PROP := 2
+const B_COURT_A := 3
+const B_COURT_B := 4
+const B_COURT_C := 5
+const B_COURT_D := 6
+const B_HALL_GREEN_A := 7
+const B_HALL_GREEN_B := 8
 
 const EXIT_PLATE := Rect2(14.0, -170.0, 4.0, 4.0)
 
@@ -124,7 +130,11 @@ static func _spatial(plan: FloorPlan) -> void:
 	_patch(plan, P_VAULT, Rect2(40.0, -66.0, 14.0, 14.0), 0.0, &"arena")
 
 	# LEG 3 — south, then back WEST through the hazard lane into the integrated chamber.
-	_patch(plan, P_SOUTH_LANE, Rect2(0.0, -92.0, 30.0, 10.0), 0.0, &"stone")
+	# MOVED FOUR SOUTH (2026-09-05). The clearance rule is arithmetic, not preference: a height-4
+	# mass shadows anything within four units of its camera-facing face, and the old eight-unit
+	# void between Court and lane could not hold one without darkening the lane's own north strip.
+	# Widening the void was the honest fix; lowering the mass would only have moved the threshold.
+	_patch(plan, P_SOUTH_LANE, Rect2(0.0, -96.0, 30.0, 10.0), 0.0, &"stone")
 	_patch(plan, P_HALL, Rect2(-52.0, -100.0, 50.0, 22.0), 0.0, &"arena")
 
 	# LEG 4 — the alternating doors, the rejoin, and EAST again to the exit.
@@ -135,6 +145,18 @@ static func _spatial(plan: FloorPlan) -> void:
 	_patch(plan, P_TERRACE, Rect2(8.0, -174.0, 18.0, 14.0), 1.0, &"high")
 
 	# --- THE MASSES. Each stands beside what it hides, which is the whole method. ---
+	#
+	# AND EACH KEEPS ITS DISTANCE FROM THE WALKING LINE (ruled 2026-09-05). The view ray reaches
+	# the ground AT the player, descending one unit per unit, so its height d short of the player
+	# is exactly d:
+	#
+	#     A MASS OF HEIGHT h COVERS THE PLAYER WHENEVER THEY WALK WITHIN h UNITS OF ITS
+	#     CAMERA-FACING FACE.
+	#
+	# Three masses here were within THREE units of a walking line and the instrument caught all
+	# three -- the Envoy itself vanished in the south lane, the hall and the junction. At height 4
+	# the rule is: keep walkable ground five units clear of a mass's south face. Every position
+	# below that looks oddly offset is obeying it.
 	#
 	# THEIR FACES ARE KEPT OFF PATCH EDGES, and the apertures likewise. A mass face flush with a
 	# patch's own edge makes the two disagree about one span -- a wall and a ledge claiming the
@@ -150,26 +172,42 @@ static func _spatial(plan: FloorPlan) -> void:
 	# The south lane's near wall -- in TWO limbs, with the lane's own mouth between them. The
 	# first version was one 26-wide slab that covered the aperture it was meant to stand beside,
 	# so the way in was walled up by the wall whose job was to hide it.
-	_mass(plan, 2, Rect2(6.0, -84.0, 11.0, 6.0))
-	_mass(plan, 9, Rect2(25.0, -84.0, 7.0, 6.0))
+	# NORTH OF THE LANE ENTIRELY, flanking its mouth from the void rather than standing in its
+	# north strip. It still hides the lane from the Court -- the ray to the lane passes low over
+	# it -- while the player crossing at z=-87 is now seven units clear instead of three.
+	_mass(plan, 2, Rect2(6.0, -80.0, 11.0, 6.0))
+	_mass(plan, 9, Rect2(25.0, -80.0, 7.0, 6.0))
 	_mass(plan, 3, Rect2(-14.0, -84.0, 8.0, 14.0))
 	# THE HALL'S OWN NEAR WALL. Added during paper measurement, when the Hall read 80% from the
 	# Landing -- whole-room comprehension of a late space. The fix was not a taller mass earlier
 	# but this one, standing 50 units from that viewpoint instead of 25. A space participates in
 	# controlling its own reveal.
-	_mass(plan, 4, Rect2(-58.0, -77.0, 50.0, 6.0))
-	_mass(plan, 5, Rect2(-34.0, -107.0, 26.0, 6.0))
-	_mass(plan, 6, Rect2(-2.0, -150.0, 24.0, 6.0))
+	_mass(plan, 4, Rect2(-58.0, -74.0, 50.0, 6.0))
+	_mass(plan, 5, Rect2(-34.0, -103.0, 26.0, 3.0))
+	# MASS 6 DELETED (ruled 2026-09-05). It screened the terrace approach and did nothing else:
+	# no cover, no lane, no encounter shaping. A structure whose only role is covering fails the
+	# authored-purpose test, and this one also stood ON the junction's walking line. Its reveal
+	# job is handed to the approach angle, and deliberately NOT to a replacement blocker.
 
 	# COMBAT MASSING in the Hall, shaping an approach that now comes from the EAST.
 	_mass(plan, 7, Rect2(-20.0, -98.0, 5.0, 5.0))
 	_mass(plan, 8, Rect2(-34.0, -86.0, 5.0, 5.0))
 
+	# THE COURT'S LANDMARK. The floor's centre needs something to BE, not merely to be large --
+	# a structure to orient by and fight around, with open ground kept on every side of it so the
+	# Court still reads as a court. Its faces are more than five units from any walking line.
+	#
+	# THE CAMERA-FACING FACE IS THE NORTH ONE, since the camera sits north of the player -- so the
+	# clearance that matters is on a mass's NORTH side. The landmark's first placement sat right
+	# on the Court's centre and covered anyone standing just south of it; moved south-east, the
+	# room's main crossing lines pass clear of it and it still reads as the thing to orient by.
+	_mass(plan, 10, Rect2(20.0, -70.0, 8.0, 8.0))
+
 	# THE HAZARD LANE, crossed heading WEST along the south lane. Cadence is set from a measured
 	# crossing, not from feel (tools/measure_spike_crossing.gd), and the pads share a phase
 	# because they form ONE unbroken lane with no safe ground to stop on.
-	_spikes(plan, 0, Rect2(10.0, -92.0, 6.0, 10.0))
-	_spikes(plan, 1, Rect2(16.0, -92.0, 6.0, 10.0))
+	_spikes(plan, 0, Rect2(10.0, -96.0, 6.0, 10.0))
+	_spikes(plan, 1, Rect2(16.0, -96.0, 6.0, 10.0))
 
 
 static func _patch(plan: FloorPlan, patch_id: int, rect: Rect2, elevation: float, surface: StringName) -> void:
@@ -195,11 +233,13 @@ static func _spikes(plan: FloorPlan, pad_id: int, rect: Rect2) -> void:
 	var pad := SpikePadPlan.new()
 	pad.pad_id = pad_id
 	pad.rect = rect
-	# RE-DERIVED FOR THIS LANE, not inherited. The previous lane measured 114 ticks and took 143;
-	# this one is shorter and crossed east-to-west, and measures 99 (tools/measure_spike_crossing).
-	# 124 is that plus 25% grace. Carrying 143 across would have been a number that once meant
-	# something, which is how a derived value quietly becomes a magic one.
-	pad.safe_ticks = 124
+	# 150, RAISED FROM 124 BY HUMAN RULING. The measured crossing is 99 ticks, and 124 -- the
+	# calculated minimum plus 25% -- was falsified in play: a well-timed crossing "barely
+	# succeeds". The calculation was right about the walk and wrong about the beat, because the
+	# beat includes RECOGNISING the opening and deciding to go. 150 leaves ~51 ticks for that.
+	#
+	# The challenge here is reading and committing, not executing inside a frame-perfect budget.
+	pad.safe_ticks = 150
 	pad.active_ticks = 35
 	pad.phase_offset_ticks = 0
 	pad.damage = 10.0
@@ -219,8 +259,8 @@ static func _progression(plan: FloorPlan) -> void:
 	_connect(plan, C_TO_COURT, P_WEST_HALL, P_COURT, Rect2(-9.0, -46.0, 8.0, 8.0), true)
 	# THE VAULT DOOR, opened by the concealed switch standing beside it.
 	_connect(plan, C_VAULT, P_COURT, P_VAULT, Rect2(34.5, -62.0, 7.0, 6.0), false)
-	_connect(plan, C_TO_LANE, P_COURT, P_SOUTH_LANE, Rect2(18.0, -84.0, 6.0, 12.0), true)
-	_connect(plan, C_TO_HALL, P_SOUTH_LANE, P_HALL, Rect2(-5.0, -90.0, 10.0, 6.0), true)
+	_connect(plan, C_TO_LANE, P_COURT, P_SOUTH_LANE, Rect2(18.0, -88.0, 6.0, 16.0), true)
+	_connect(plan, C_TO_HALL, P_SOUTH_LANE, P_HALL, Rect2(-5.0, -94.0, 10.0, 6.0), true)
 	_connect(plan, C_TO_BAY, P_HALL, P_PUZZLE_BAY, Rect2(-42.0, -110.0, 6.0, 12.0), true)
 	# THE ALTERNATING PAIR: west starts OPEN, east CLOSED; the toggle swaps both at once.
 	_connect(plan, C_DOOR_WEST, P_PUZZLE_BAY, P_PUZZLE_WEST, Rect2(-46.0, -129.0, 5.0, 6.0), true)
@@ -303,6 +343,17 @@ static func _world_objects(plan: FloorPlan) -> void:
 	# EVERY PROP BREAKS IN ONE HIT. Challenge is positioning and consequence, never hit points.
 	_breakable(plan, B_VAULT_COVER, Vector3(30.0, 0.0, -66.0), 1.1)
 	_breakable(plan, B_BAY_PROP, Vector3(-46.0, 0.0, -118.0), 1.0)
+	# THE COURT'S CLUSTERS, asymmetric on purpose: a loose group west of the landmark and a
+	# tighter one south-east, so the room has a near side and a far side rather than a pattern.
+	# One hit each -- their interest is where they are, never how long they last.
+	_breakable(plan, B_COURT_A, Vector3(2.0, 0.0, -58.0), 1.0)
+	_breakable(plan, B_COURT_B, Vector3(5.0, 0.0, -62.0), 1.0)
+	_breakable(plan, B_COURT_C, Vector3(24.0, 0.0, -70.0), 1.0)
+	_breakable(plan, B_COURT_D, Vector3(27.0, 0.0, -67.0), 1.0)
+	# THE WEST HALL IS A QUIET CONNECTOR: something to look at, nothing to fight. Two spaces on
+	# this floor carry no combat at all, and that variation is the pacing.
+	_breakable(plan, B_HALL_GREEN_A, Vector3(-26.0, 0.0, -37.0), 1.0)
+	_breakable(plan, B_HALL_GREEN_B, Vector3(-22.0, 0.0, -39.0), 1.0)
 	# THE HALL'S RUBBLE, now placed for an approach from the EAST: it stands between the doorway
 	# and the Watcher, holding that sightline both ways.
 	_breakable(plan, B_HALL_RUBBLE, Vector3(-24.0, 0.0, -89.0), 2.0, Rect2(-27.0, -91.0, 6.0, 4.0))

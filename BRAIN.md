@@ -889,6 +889,36 @@ likely genuine tuning.
 **Applies elsewhere:** attack cadence versus dodge duration; leash radius versus the distance a
 beat asks the player to retreat; any window a player must fit a committed action inside.
 
+### A good macro-occluder can be a failed local-navigation object
+**Incident (2026-09-05).** Floor 2 hid its later chapters well and the human still rejected it:
+the masses doing the hiding were standing on top of the Envoy. Two different questions had been
+collapsed into one word, "visibility":
+
+- **MACRO REVEAL** — what future spaces and connections the player understands.
+- **LOCAL READABILITY** — whether they can see themselves, the ground underfoot, the hazard they
+  are standing on, the control beside them.
+
+Optimising the first had quietly destroyed the second, and the reveal instrument could not see it
+because it only ever asked about distant spaces.
+
+**The arithmetic, once measured, was embarrassingly simple.** The view ray reaches the ground AT
+the player, descending one unit per unit, so its height *d* short of the player is exactly *d*:
+
+> **A mass of height h covers the player whenever they walk within h units of its camera-facing
+> face.**
+
+Three masses sat within THREE units of a walking line. All three were reported by the human
+independently, and once the instrument was taught to ask the local question it named all three
+without being told where to look.
+
+**The stronger finding underneath:** all three were masses whose ONLY authored job was hiding
+something. A structure that also does gameplay work sits where the room wants it — and rooms do
+not want walls on top of the player. **Prefer occluders that have a reason to exist besides
+occluding.**
+
+**Applies elsewhere:** any metric that improves while the thing it proxies for gets worse. Ask
+what the metric CANNOT see, and measure that separately rather than trusting the score.
+
 
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
