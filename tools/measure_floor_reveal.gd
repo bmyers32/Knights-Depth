@@ -89,20 +89,35 @@ func _report(camera: Camera3D, plan: FloorPlan, names: Dictionary, label: String
 	camera.rotation = Vector3(deg_to_rad(-45.0), 0.0, 0.0)
 	var size: Vector2 = Engine.get_main_loop().root.get_visible_rect().size
 
-	# THE FRACTION MATTERS, not merely the yes/no: a sliver of a distant space is a hint, while
-	# most of it on screen is the floor explaining itself before the player has walked anywhere.
-	var seen: Array = []
-	var wholly_or_mostly: int = 0
+	# A GLIMPSE IS GOOD; WHOLE-ROUTE COMPREHENSION IS THE FAILURE (ruled 2026-09-04). So visibility
+	# is classified rather than counted, and the question that separates the two is whether the
+	# player can also see HOW TO GET THERE -- a space whose way in is visible has been solved from
+	# a distance, while the same space without its aperture is foreshadowing.
+	#
+	#   SOLVED       most of it visible AND its way in visible -- the floor explained itself
+	#   ORIENTED     visible with its way in, but only partly -- fine for the space you are in
+	#   FORESHADOW   visible, way in NOT visible -- a glimpse, which is the good case
+	#   hidden       not in view at all
+	var lines: Array = []
+	var solved: int = 0
+	var foreshadowed: int = 0
 	for patch: WalkablePatch in plan.patches:
 		var share: float = _fraction_visible(camera, size, patch.rect)
 		if share <= 0.0:
 			continue
-		if share >= 0.5:
-			wholly_or_mostly += 1
-		seen.append("%s %.0f%%" % [names.get(patch.patch_id, str(patch.patch_id)), share * 100.0])
-	print("FROM %-22s  %d of %d spaces in view, %d of them half or more" % [
-		label, seen.size(), plan.patches.size(), wholly_or_mostly])
-	print("        %s" % ", ".join(seen))
+		var route: bool = _route_in_visible(camera, size, plan, patch.patch_id)
+		var verdict: String = "FORESHADOW"
+		if route and share >= 0.5:
+			verdict = "SOLVED"
+			solved += 1
+		elif route:
+			verdict = "oriented"
+		else:
+			foreshadowed += 1
+		lines.append("%s %.0f%% %s" % [names.get(patch.patch_id, str(patch.patch_id)), share * 100.0, verdict])
+	print("FROM %-22s  %d in view -- %d SOLVED, %d foreshadowed" % [
+		label, lines.size(), solved, foreshadowed])
+	print("        %s" % ", ".join(lines))
 
 
 ## What share of a rect's sample grid lands on screen. Any share above zero counts as "in view",
@@ -126,6 +141,28 @@ func _fraction_visible(camera: Camera3D, size: Vector2, rect: Rect2) -> float:
 				continue
 			visible_count += 1
 	return float(visible_count) / float(total)
+
+
+## Can the player see the WAY IN to this space -- any aperture that joins it to another patch?
+##
+## This is what separates a glimpse from a solved route. A space you can see but cannot see the
+## entrance to still has to be found; a space whose doorway is also on screen has been read.
+func _route_in_visible(camera: Camera3D, size: Vector2, plan: FloorPlan, patch_id: int) -> bool:
+	for connection: TraversalConnection in plan.connections:
+		if connection.patch_ids.x != patch_id and connection.patch_ids.y != patch_id:
+			continue
+		if _fraction_visible(camera, size, connection.aperture) > 0.0:
+			return true
+	# A patch joined by OVERLAP rather than by an authored aperture has no doorway to see, so the
+	# seam it shares with a visible neighbour is its way in. Treated as visible when the neighbour
+	# is: pretending otherwise would flatter every floor built without explicit connections.
+	var rect: Rect2 = plan.patch_by_id(patch_id).rect
+	for other: WalkablePatch in plan.patches:
+		if other.patch_id == patch_id or other.rect.intersection(rect).get_area() <= 0.0:
+			continue
+		if _fraction_visible(camera, size, other.rect.intersection(rect)) > 0.0:
+			return true
+	return false
 
 
 ## Is the line from the camera to this ground point interrupted by something tall enough?
