@@ -62,25 +62,24 @@ func _init() -> void:
 		quit(1)
 		return
 
-	var names: Dictionary = {
-		L.P_OVERLOOK: "OVERLOOK", L.P_DESCENT: "DESCENT", L.P_LANDING: "LANDING",
-		L.P_THICKET: "THICKET", L.P_SPILLWAY: "SPILLWAY", L.P_GALLERY: "GALLERY",
-		L.P_ROUTE_A: "ROUTE A", L.P_ROUTE_B: "ROUTE B", L.P_VAULT: "VAULT",
-		L.P_JUNCTION: "JUNCTION", L.P_TERRACE: "TERRACE",
-	}
+	# NAMES ARE READ FROM THE LAYOUT'S OWN CONSTANTS, never held as a second copy. The previous
+	# version listed them by hand and broke the moment the floor was re-authored -- which is the
+	# same failure mode as a measurement holding its own coordinates.
+	var names: Dictionary = {}
+	for constant_name in L.get_script_constant_map():
+		if String(constant_name).begins_with("P_"):
+			names[int(L.get_script_constant_map()[constant_name])] = String(constant_name).substr(2)
 	print("FLOOR REVEAL — how much is in view from each major standing point")
 	print("   floor extent %s   %d occluders modelled" % [extent, _blockers.size() + _solids.size()])
 	print("")
 
-	var stations: Array = [
-		["THE DROP (entry)", plan.entry_point],
-		["foot of the descent", Vector3(0.0, 0.0, -22.0)],
-		["mid landing", Vector3(0.0, 0.0, -28.0)],
-		["thicket", Vector3(-20.0, 0.0, -46.0)],
-		["spillway", Vector3(20.0, 0.0, -46.0)],
-		["gallery", Vector3(0.0, 0.0, -64.0)],
-		["junction", Vector3(0.0, 0.0, -92.0)],
-	]
+	# ONE STATION PER SPACE, at its centre, derived from the plan. The progression the ruling
+	# asked to see -- entry knows the early floor, fold 1 reveals the middle, fold 2 the late --
+	# is exactly this list read top to bottom.
+	var stations: Array = [["THE DROP (entry)", plan.entry_point]]
+	for patch: WalkablePatch in plan.patches:
+		var centre := Vector3(patch.rect.get_center().x, 0.0, patch.rect.get_center().y)
+		stations.append([String(names.get(patch.patch_id, str(patch.patch_id))).to_lower(), centre])
 	for station in stations:
 		_report(camera, plan, names, station[0], station[1])
 
