@@ -115,8 +115,8 @@ func _report(camera: Camera3D, plan: FloorPlan, names: Dictionary, label: String
 		else:
 			foreshadowed += 1
 		lines.append("%s %.0f%% %s" % [names.get(patch.patch_id, str(patch.patch_id)), share * 100.0, verdict])
-	print("FROM %-22s  %d in view -- %d SOLVED, %d foreshadowed" % [
-		label, lines.size(), solved, foreshadowed])
+	print("FROM %-22s  %d in view -- %d SOLVED, %d foreshadowed%s" % [
+		label, lines.size(), solved, foreshadowed, _local_readability(camera, size, stand)])
 	print("        %s" % ", ".join(lines))
 
 
@@ -141,6 +141,33 @@ func _fraction_visible(camera: Camera3D, size: Vector2, rect: Rect2) -> float:
 				continue
 			visible_count += 1
 	return float(visible_count) / float(total)
+
+
+## LOCAL READABILITY, reported separately from macro reveal (ruled 2026-09-05).
+##
+## A mass can score well at hiding future connections and still be bad, because it covers the
+## Envoy, the ground underfoot, or the hazard being stood on. Those are different questions and
+## a good macro score must not excuse a bad local one.
+##
+## HIDE FUTURE RELATIONSHIPS, NOT THE GROUND UNDER THE PLAYER'S FEET.
+func _local_readability(camera: Camera3D, size: Vector2, stand: Vector3) -> String:
+	if _occluded(camera.global_position, stand):
+		return "   *** THE ENVOY ITSELF IS COVERED ***"
+	# The immediate traversable neighbourhood: the ring a player reads while deciding where to
+	# step next. Sampled rather than reasoned about, because "is my own path visible" is exactly
+	# the kind of claim that sounds obvious and is wrong.
+	var blocked: int = 0
+	var total: int = 0
+	for ring in [4.0, 8.0]:
+		for step in 12:
+			var angle: float = TAU * float(step) / 12.0
+			var point: Vector3 = stand + Vector3(cos(angle), 0.0, sin(angle)) * ring
+			total += 1
+			if _occluded(camera.global_position, point):
+				blocked += 1
+	if blocked == 0:
+		return ""
+	return "   LOCAL PATH %d%% covered" % int(round(float(blocked) / float(total) * 100.0))
 
 
 ## Can the player see the WAY IN to this space -- any aperture that joins it to another patch?
