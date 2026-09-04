@@ -841,6 +841,54 @@ keeps the audit honest.
 save/load (the golden-fixture serializer already round-trips a FloorPlan); any "we need a general
 X" where a specific X already shipped.
 
+### A production law reachable only through debug-named machinery will be mistaken for scaffolding
+**Incident (2026-09-04).** A ruling required that walking into a room which wakes an enemy group
+must engage that group immediately, without the player having to hit someone first. Investigating
+found the behaviour ALREADY CORRECT -- and reached by `_activate_encounter` calling
+`debug_set_ai_active()`. An authored consequence of the floor grammar was living behind a
+`debug_*` surface.
+
+**Why it matters more than tidiness.** Nothing was broken, so nothing would have failed. But the
+next person auditing debug hooks -- exactly the kind of sweep this project runs -- would have read
+that call as leftover scaffolding in a production path and removed it, silently deleting a design
+law that had no other home. The name was the whole risk.
+
+**The discipline:** when a law turns out to be implemented, check what it is CALLED. Give it a
+production name, and give it a test that names the law rather than the mechanism. The rename here
+was not cosmetic: `_engage_on_activation` states a rule, `debug_set_ai_active` states a
+convenience, and only one of those survives a cleanup.
+
+**The test half matters equally.** The regression asserts activation engages an actor placed
+BEYOND its own detection radius -- otherwise "activation engages" would have been indistinguishable
+from "the room was small enough that ambient perception would have fired anyway", and the law would
+have been pinned by a coincidence.
+
+**Applies elsewhere:** any `debug_`/`_tmp`/`_legacy` symbol on a path a shipped feature depends on;
+any test whose name describes the call it makes instead of the rule it protects.
+
+
+### A feel complaint may be an unsatisfiable constraint, not a tuning problem
+**Incident (2026-09-04).** "The spikes cycle too fast" reads as a tuning note. Measuring the thing
+the player was being asked to do -- walk from body-clear on one side of the hazard lane to
+body-clear on the other, at the authored speed -- took **114 ticks**. The authored safe window was
+**55**. The two pads were also out of phase, so the lane was never wholly safe at once.
+
+**No value near 55 could have worked**, and no amount of sitting with the knob would have revealed
+that, because the failure was not that the number was wrong. The requested behaviour did not exist
+anywhere in the parameter space, and one of the parameters made it unreachable at any setting.
+
+**The discipline, and it is a step BEFORE "measure before tuning":** when a complaint names an
+action, first measure whether that action is POSSIBLE. Ask what the player is being asked to do,
+measure how long it takes, and compare it to the window they are given. Only once the answer is
+"possible but badly sized" is it a tuning problem at all.
+
+**The tell:** a complaint phrased as an intention -- "when it drops I should be able to get across"
+-- is a constraint in disguise. A complaint phrased as a sensation -- "it feels twitchy" -- is more
+likely genuine tuning.
+
+**Applies elsewhere:** attack cadence versus dodge duration; leash radius versus the distance a
+beat asks the player to retreat; any window a player must fit a committed action inside.
+
 
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries

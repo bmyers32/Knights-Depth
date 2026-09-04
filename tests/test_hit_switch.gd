@@ -251,3 +251,27 @@ func test_a_switch_and_a_crate_answer_to_the_same_attacks() -> void:
 			events.append_array(sim.tick([] as Array[Command], DT))
 		assert_true(_kinds(events).has("switch_activated"),
 			"%s must operate a world switch" % ("melee" if melee else "ranged"))
+
+
+## ONE ATTACK IS ONE FLIP, FOR MELEE TOO. The projectile half of this was already pinned; the
+## melee path only started working when the cone test was fixed, so it needs its own proof that
+## a single swing does not flip a toggle twice.
+func test_one_melee_swing_produces_exactly_one_transition() -> void:
+	_switch(&"toggle", [FloorLayers.effect(FloorLayers.EFFECT_TOGGLE_CONNECTION, DOOR)])
+	sim.entities[PLAYER] = Vector3(-7.0, 0.0, 0.0)
+	sim.register_weapon(&"blade", 12.0, &"force", 3.0, 120.0, 0.0, 0)
+	sim.set_equipped_weapon(PLAYER, &"blade")
+	var events: Array[Event] = sim.tick(
+		[Command.new(sim.tick_count, PLAYER, "attack", {"aim": Vector3(1, 0, 0)})] as Array[Command], DT)
+	for i in 40:
+		events.append_array(sim.tick([] as Array[Command], DT))
+	var activations: int = 0
+	var transitions: int = 0
+	for event in events:
+		if event.kind == "switch_activated":
+			activations += 1
+		if event.kind == "connection_changed":
+			transitions += 1
+	assert_eq(activations, 1, "one swing, one activation")
+	assert_eq(transitions, 1, "one activation, one door transition")
+	assert_true(_open(), "and it left the door in the flipped state, not back where it started")

@@ -258,13 +258,20 @@ func test_reaching_leg_b_wakes_its_fights() -> void:
 
 # --- 5: CONTENT LAWS ----------------------------------------------------------------------------
 
-## EVERY PROP BREAKS IN ONE HIT, route blockers included (ruled 2026-09-04, superseding the
-## earlier split that let a blocker cost more). Durability is not where challenge lives: a prop
-## that soaks swings turns clearing scenery into fighting a low-health enemy. The difficulty of
-## an environmental object is positioning, ordering, consequence and the enemies around it.
+## EVERY PROP BREAKS IN ONE HIT, ROUTE BLOCKERS INCLUDED.
 ##
-## THE ALTERNATIVE IS EXPLICITNESS: something the player must not be able to remove is an
-## OBSTACLE, unbreakable by construction, rather than a prop with a big number.
+## THIS TEST REPLACES A DELIBERATELY OVERTURNED LAW, and says so on purpose. Until 2026-09-04 the
+## rule here was the opposite for half its cases:
+##
+##     OLD (2026-09-03): ordinary props one-hit, while an authored ROUTE BLOCKER could carry
+##     higher durability because "a route decision may cost more than a swing".
+##     NEW (2026-09-04, human ruling): ALL destructible props are one-hit, blockers included.
+##
+## The old assertion was rewritten rather than deleted, so a later maintainer cannot read the
+## change as accidental coverage loss and "restore" the behaviour. If permanence is wanted, the
+## answer is a different CATEGORY -- an obstacle, unbreakable by construction -- never a prop
+## with a bigger number. Durability is not where challenge lives: a prop that soaks swings turns
+## clearing scenery into fighting a low-health enemy, which is what the human reported.
 func test_every_prop_breaks_in_one_hit() -> void:
 	for breakable: BreakablePlan in plan.breakables:
 		assert_lte(breakable.durability, 1.0,
@@ -272,21 +279,44 @@ func test_every_prop_breaks_in_one_hit() -> void:
 				% breakable.breakable_id)
 
 
-## AND THE SPIKE LANE MUST BE CROSSABLE ON A COMMITMENT. Its safe window is derived from a
-## MEASURED crossing (114 ticks at the authored speed, body-clear to body-clear) plus grace --
-## not from feel. Pads sharing a lane must also share a phase, or the lane is never wholly safe
-## and no window can satisfy the law.
+## THE SPIKE LANE MUST BE CROSSABLE ON A COMMITMENT. The safe window is derived from a MEASURED
+## crossing -- 114 ticks at the authored speed, body-clear to body-clear -- plus grace, not from
+## feel. The prior window was 55, so no amount of tuning around it could have satisfied the law.
+##
+## WHAT THIS PINS IS THE TRAVERSAL COMMITMENT THE PLAYER IS ASKED TO MAKE, not a rule that pads
+## must share a phase. An earlier version of this test asserted equal phase offsets, which banked
+## the wrong law: staggered pads are legitimate vocabulary for a DIFFERENT beat -- cross one
+## timed zone, reassess on safe ground, cross the next -- and forbidding them outright would
+## outlaw a shape nobody rejected. What is forbidden is presenting ONE lane as a single crossing
+## while making that crossing impossible.
+##
+## So the assertion is about the lane the player reads as one: every pad reachable within a single
+## committed crossing must be safe for the whole of it.
 func test_the_spike_lane_can_be_crossed_once_it_retracts() -> void:
 	var lane: Rect2 = plan.spike_pads[0].rect
-	var phases: Array = []
 	for pad: SpikePadPlan in plan.spike_pads:
 		lane = lane.merge(pad.rect)
-		phases.append(pad.phase_offset_ticks)
 		assert_gte(pad.safe_ticks, 137,
 			"pad %d gives %d safe ticks; the measured crossing is 114 and needs grace on top"
 				% [pad.pad_id, pad.safe_ticks])
-	assert_eq(phases.min(), phases.max(),
-		"pads sharing one lane must share a phase, or it is never wholly safe: %s" % str(phases))
+
+	# A SINGLE UNBROKEN LANE: no safe ground between the pads, so the player cannot stop halfway
+	# and the whole span is one commitment. If a future beat wants a mid-lane decision island, it
+	# authors safe ground there, and THEN independent phases become correct rather than cruel.
+	var unbroken: bool = true
+	for pad: SpikePadPlan in plan.spike_pads:
+		for other: SpikePadPlan in plan.spike_pads:
+			if pad.pad_id >= other.pad_id:
+				continue
+			if not pad.rect.intersects(other.rect) and absf(pad.rect.position.y - other.rect.end.y) > 0.01 \
+					and absf(other.rect.position.y - pad.rect.end.y) > 0.01:
+				unbroken = false
+	if unbroken:
+		var offsets: Array = []
+		for pad: SpikePadPlan in plan.spike_pads:
+			offsets.append(pad.phase_offset_ticks)
+		assert_eq(offsets.min(), offsets.max(),
+			"these pads form ONE unbroken lane, so they must retract together: %s" % str(offsets))
 
 
 func test_spikes_are_player_facing_only() -> void:

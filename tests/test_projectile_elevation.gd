@@ -94,3 +94,34 @@ func test_the_authoritative_projectile_stays_on_the_flat_plane() -> void:
 	for projectile_id in arena.sim._projectiles:
 		assert_eq(arena.sim._projectiles[projectile_id]["position"].y, 0.0,
 			"the sim resolves shots on one plane; only the picture is lifted")
+
+
+## AND IT STILL HIDES BEHIND REAL GEOMETRY. Lifting the tracer must not have turned it into
+## something that renders through the world -- the fix was a position correction, and a position
+## correction leaves occlusion exactly where it was.
+##
+## Asserted on the AUTHORITATIVE fact rather than on pixels: a shot fired into a fold wall
+## terminates at the world, so there is no tracer left to see through it.
+func test_a_shot_into_a_fold_wall_still_terminates_at_the_world() -> void:
+	var floor_plan: FloorPlan = DepthGenerator.generate(arena.run_seed, 2)
+	var wall: Rect2 = Rect2()
+	for obstacle: ObstaclePlan in floor_plan.obstacles:
+		if obstacle.height >= 6.0:
+			wall = obstacle.rect
+			break
+	assert_gt(wall.get_area(), 0.0, "sanity: the floor has a fold wall to shoot at")
+
+	# Stand just north of the wall and fire south into it.
+	arena.sim.entities[arena.envoy.actor_id] = Vector3(wall.get_center().x, 0.0, wall.end.y + 3.0)
+	assert_true(_equip_a_gun(arena))
+	var terminated: bool = false
+	for i in 120:
+		var events: Array[Event] = arena.sim.tick(
+			[Command.new(arena.sim.tick_count, arena.envoy.actor_id, "attack", {"aim": Vector3(0, 0, -1)})] as Array[Command], DT)
+		arena._report_events(events)
+		for event in events:
+			if event.kind == "projectile_expired" and String(event.payload.get("reason", "")) == "world":
+				terminated = true
+		if terminated:
+			break
+	assert_true(terminated, "a shot into a solid mass must stop at it, lifted tracer or not")
