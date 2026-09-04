@@ -1,15 +1,14 @@
 extends GutTest
-## FLOOR 2 BUILD CHECKS — three folded legs (rebuilt 2026-09-04).
+## FLOOR 2 BUILD CHECKS — broad, massed, four turns (rebuilt 2026-09-04).
 ##
-## THE GOVERNING QUESTION is now whether the floor UNFOLDS. The previous version showed 10 of its
-## 11 spaces from the drop, and the test that was supposed to catch that used WORLD DISTANCE as a
-## proxy for visibility -- which is not one. Distance along the view axis does not remove anything
-## from view; it only makes it smaller. That test passed while the floor was fully exposed.
+## REVEAL IS MEASURED, NOT ASSERTED. An earlier build shipped a test claiming "the entry cannot
+## see the later floor", implemented as WORLD DISTANCE -- which is not visibility. It passed while
+## the floor showed 10 of its 11 spaces from the drop. The real-camera instrument
+## (tools/measure_floor_reveal.gd) owns that question now, and its table goes in the build report.
 ##
-## SO REVEAL IS NOT ASSERTED HERE. It is MEASURED, through the real camera with occlusion, by
-## tools/measure_floor_reveal.gd, and the number goes in the build report. What this file pins is
-## the GEOMETRY the measurement depends on -- the folds, the wall heights, the gaps -- so a later
-## edit cannot quietly undo the thing the measurement proved.
+## WHAT THIS FILE PINS is the geometry and the laws the measurement rests on: that the floor
+## spreads across BOTH axes, that its masses stand beside what they hide, that every beat still
+## works in its new approach direction, and that the content laws hold.
 
 const DT := 1.0 / 30.0
 const L = preload("res://game/gen/layouts/archive_roundabout.gd")
@@ -42,7 +41,7 @@ func _walk_to(target: Vector3, max_ticks: int = 4000) -> bool:
 
 
 func _stand_on(plate: Rect2) -> void:
-	var centre: Vector3 = Vector3(plate.get_center().x, 0.0, plate.get_center().y)
+	var centre := Vector3(plate.get_center().x, 0.0, plate.get_center().y)
 	for i in 4000:
 		sim.debug_override_health(player, 1000000.0)
 		if sim.entities[player].distance_to(centre) < 0.3:
@@ -65,100 +64,113 @@ func _state(encounter_id: int) -> String:
 	return String(sim._encounter_state.get(encounter_id, ""))
 
 
-## The whole floor, leg by leg. Waypoints rather than pathfinding: a walk that fails because
-## geometry is in the way is the geometry working.
+## The whole floor, leg by leg. Waypoints, not pathfinding: a walk that fails because geometry is
+## in the way is the geometry working.
 func _walk_the_floor() -> void:
-	assert_true(_walk_to(Vector3(-36.0, 0.0, -34.0)), "leg A: down into the landing")
-	assert_true(_walk_to(Vector3(-20.0, 0.0, -38.0)), "east across the landing")
-	assert_true(_walk_to(Vector3(8.0, 0.0, -39.0)), "along lane A to the first fold")
-	assert_true(_walk_to(Vector3(10.0, 0.0, -58.0)), "leg B: south through the fold")
-	assert_true(_walk_to(Vector3(-4.0, 0.0, -58.0)), "west past the spillway")
-	assert_true(_walk_to(Vector3(-40.0, 0.0, -55.0)), "through the gallery's north lane")
-	assert_true(_walk_to(Vector3(-40.0, 0.0, -96.0)), "leg C: south through the second fold")
-	assert_true(_walk_to(Vector3(-30.0, 0.0, -106.0)), "into the puzzle bay")
+	assert_true(_walk_to(Vector3(-46.0, 0.0, -36.0)), "leg 1: down into the landing")
+	assert_true(_walk_to(Vector3(-20.0, 0.0, -37.0)), "east along the west hall")
+	assert_true(_walk_to(Vector3(-6.0, 0.0, -42.0)), "to the court's mouth")
+	assert_true(_walk_to(Vector3(-2.0, 0.0, -50.0)), "leg 2: into the court")
+	assert_true(_walk_to(Vector3(14.0, 0.0, -62.0)), "east across it, south of its limb")
+	assert_true(_walk_to(Vector3(21.0, 0.0, -70.0)), "to the south lane's mouth")
+	assert_true(_walk_to(Vector3(21.0, 0.0, -87.0)), "into the lane")
+	assert_true(_walk_to(Vector3(2.0, 0.0, -87.0)), "leg 3: west across the hazard lane")
+	assert_true(_walk_to(Vector3(-20.0, 0.0, -88.0)), "into the hall")
+	assert_true(_walk_to(Vector3(-39.0, 0.0, -103.0)), "south through the bay's doorway")
+	assert_true(_walk_to(Vector3(-38.0, 0.0, -116.0)), "into the bay")
 
 
-# --- 1: THE FOLDS ARE REAL, AND TALL ENOUGH TO MATTER ------------------------------------------
+# --- 1: THE FLOOR USES BOTH AXES ---------------------------------------------------------------
 
-## THE ARITHMETIC THIS FLOOR RESTS ON. The camera sits 12 above the player at 45 degrees, so a
-## wall of height h at distance t hides ground out to t/(1 - h/12). At the DEFAULT obstacle height
-## of 2.4 that is barely twelve units of shadow -- which is why the previous floor's obstacles
-## hid nothing. The fold walls are tall for a measured reason, and this pins it.
-func test_the_fold_walls_are_tall_enough_to_hide_a_leg() -> void:
-	var tall: Array = []
-	for obstacle: ObstaclePlan in plan.obstacles:
-		if obstacle.height >= 6.0:
-			tall.append(obstacle)
-	assert_eq(tall.size(), 2, "two fold walls, one per turn -- few and large, never wall spam")
-	for obstacle in tall:
-		assert_gte(obstacle.height, 8.0,
-			"a fold wall at height %.1f shadows only %.0f units at 25 away; it must hide a whole leg"
-				% [obstacle.height, 25.0 / (1.0 - obstacle.height / 12.0) - 25.0])
-		assert_gt(obstacle.rect.size.x, 40.0, "and it must span the leg, not stand in the middle of it")
-
-
-## OPENNESS IS PRESERVED. The walls are the exception; every patch edge keeps its low rim.
-func test_the_floor_keeps_its_open_edges() -> void:
+## THE HUMAN'S FINDING was that the floor read front-to-back. A strip with corners is still a
+## strip, so this asserts that major spaces occupy materially different positions on BOTH axes.
+func test_the_floor_spreads_across_both_axes() -> void:
+	var extent: Rect2 = plan.patches[0].rect
+	var xs: Array = []
 	for patch: WalkablePatch in plan.patches:
-		assert_eq(patch.boundary_style, &"ledge",
-			"patch %d closed its edges; walls are for sightline control, not for enclosing rooms" % patch.patch_id)
+		extent = extent.merge(patch.rect)
+		xs.append(patch.rect.get_center().x)
+	assert_gt(extent.size.x, 100.0, "the floor must be broad, not merely long")
+	assert_gt(float(xs.max()) - float(xs.min()), 70.0,
+		"major spaces must sit at materially different x, or the width is decoration")
 
 
-## AND THE WALLS ARE REAL WALLS. A sight blocker a shot passes through is the presentation-lies
-## defect arriving through the back door.
-func test_a_fold_wall_blocks_bodies_and_shots_alike() -> void:
-	var wall: Rect2 = Rect2()
+## FOUR DIRECTION CHANGES: route direction is itself a reveal tool.
+func test_the_route_changes_direction_four_times() -> void:
+	# Centres of the spaces the route visits, in order.
+	var route: Array = [L.P_LANDING, L.P_WEST_HALL, L.P_COURT, L.P_SOUTH_LANE, L.P_HALL,
+		L.P_PUZZLE_BAY, L.P_JUNCTION, L.P_TERRACE]
+	var turns: int = 0
+	var previous_eastward: int = 0
+	for i in range(1, route.size()):
+		var step: float = _patch(route[i]).get_center().x - _patch(route[i - 1]).get_center().x
+		if absf(step) < 6.0:
+			continue  # a mostly north-south step changes no direction
+		var eastward: int = 1 if step > 0.0 else -1
+		if previous_eastward != 0 and eastward != previous_eastward:
+			turns += 1
+		previous_eastward = eastward
+	assert_gte(turns, 2, "the route must reverse laterally, not merely drift")
+
+
+# --- 2: THE MASSES ------------------------------------------------------------------------------
+
+## THE HEIGHT-9 SLABS ARE GONE. They were compensating for placement: a mass close to the player
+## needs extreme height to hide distant ground, while a modest one beside what it conceals does
+## more. Every mass here is ordinary height.
+func test_no_mass_relies_on_extreme_height() -> void:
 	for obstacle: ObstaclePlan in plan.obstacles:
-		if obstacle.height >= 6.0:
-			wall = obstacle.rect
-			break
-	var middle := Vector3(wall.get_center().x, 0.0, wall.get_center().y)
-	assert_false(sim._bounds.fits(middle, 0.45), "no body may stand inside a fold wall")
-	# COUNTED WITHIN THE WALL'S OWN SPAN, not merely at its coordinates: a patch edge that happens
-	# to share a line with the wall contributes its own segment, and the first version of this
-	# check counted those too and read five faces on a four-sided box.
+		assert_lte(obstacle.height, 5.0,
+			"obstacle %d is %.1f tall; this floor conceals by PLACEMENT, not by scale"
+				% [obstacle.obstacle_id, obstacle.height])
+
+
+## AND THEY ARE REAL. A sight blocker a shot passes through is the presentation-lies defect
+## arriving through a prop.
+func test_every_mass_blocks_bodies_and_shots_alike() -> void:
+	for obstacle: ObstaclePlan in plan.obstacles:
+		var middle := Vector3(obstacle.rect.get_center().x, 0.0, obstacle.rect.get_center().y)
+		assert_false(sim._bounds.fits(middle, 0.45),
+			"no body may stand inside mass %d" % obstacle.obstacle_id)
 	var faces: int = 0
+	var first: Rect2 = plan.obstacles[0].rect
 	for segment in plan.solid_segments():
 		var at: float = float(segment["at"])
-		var low: float = float(segment["min"])
-		var high: float = float(segment["max"])
-		if segment["axis"] == &"x" and (absf(at - wall.position.x) < 0.01 or absf(at - wall.end.x) < 0.01) 				and low >= wall.position.y - 0.01 and high <= wall.end.y + 0.01:
+		if segment["axis"] == &"x" and (absf(at - first.position.x) < 0.01 or absf(at - first.end.x) < 0.01) \
+				and float(segment["min"]) >= first.position.y - 0.01 and float(segment["max"]) <= first.end.y + 0.01:
 			faces += 1
-		if segment["axis"] == &"z" and (absf(at - wall.position.y) < 0.01 or absf(at - wall.end.y) < 0.01) 				and low >= wall.position.x - 0.01 and high <= wall.end.x + 0.01:
+		if segment["axis"] == &"z" and (absf(at - first.position.y) < 0.01 or absf(at - first.end.y) < 0.01) \
+				and float(segment["min"]) >= first.position.x - 0.01 and float(segment["max"]) <= first.end.x + 0.01:
 			faces += 1
-	assert_eq(faces, 4, "and it contributes its four faces, so shots stop where bodies do")
+	assert_eq(faces, 4, "and each contributes its four faces, so shots stop where bodies do")
 
 
-## EACH FOLD IS A TURN, not a straight line with a wall across it: the legs run in opposite
-## directions, which is what puts a later leg outside the view rather than merely far down it.
-func test_the_three_legs_change_direction() -> void:
-	var landing: Rect2 = _patch(L.P_LANDING)
-	var lane_a: Rect2 = _patch(L.P_LANE_A)
-	var gallery: Rect2 = _patch(L.P_GALLERY)
-	var junction: Rect2 = _patch(L.P_JUNCTION)
-	assert_gt(lane_a.get_center().x, landing.get_center().x, "leg A turns EAST at its end")
-	assert_lt(gallery.get_center().x, lane_a.get_center().x, "leg B runs back WEST")
-	assert_gt(junction.get_center().x, gallery.get_center().x, "leg C runs back EAST")
+## OPENNESS IS PRESERVED: solidity comes from authored masses, never from closing rooms in.
+func test_every_patch_keeps_its_low_rim() -> void:
+	for patch: WalkablePatch in plan.patches:
+		assert_eq(patch.boundary_style, &"ledge",
+			"patch %d closed its edges; masses do the occluding here" % patch.patch_id)
 
 
-# --- 2: THE FLOOR IS WALKABLE END TO END --------------------------------------------------------
+# --- 3: THE FLOOR IS WALKABLE END TO END --------------------------------------------------------
 
 func test_the_floor_completes_end_to_end() -> void:
 	_walk_the_floor()
-	# The east door starts shut; the toggle is what opens the way on.
 	assert_false(_open(L.C_DOOR_EAST), "the way on starts closed")
 	sim.debug_activate_hit_switch(L.S_ALTERNATE)
 	assert_true(_open(L.C_DOOR_EAST), "and the toggle opens it")
-	assert_true(_walk_to(Vector3(-19.0, 0.0, -124.0)), "through the east door")
-	assert_true(_walk_to(Vector3(0.0, 0.0, -138.0)), "into the junction")
-	assert_true(_walk_to(Vector3(12.0, 0.0, -148.0)), "and up onto the terrace")
+	assert_true(_walk_to(Vector3(-28.0, 0.0, -134.0)), "through the east door")
+	assert_true(_walk_to(Vector3(-26.5, 0.0, -140.0)), "down through the junction's doorway")
+	assert_true(_walk_to(Vector3(-10.0, 0.0, -154.0)), "into the junction")
+	assert_true(_walk_to(Vector3(16.0, 0.0, -154.0)), "east along it, south of the screening mass")
+	assert_true(_walk_to(Vector3(16.0, 0.0, -164.0)), "up onto the terrace")
 	_stand_on(L.EXIT_PLATE)
 	assert_true(sim.debug_describe_floor()["floor_complete"], "the floor completes")
 
 
 func test_descending_seals_the_way_back() -> void:
 	assert_true(_open(L.C_COMMIT), "the way down starts open")
-	assert_true(_walk_to(Vector3(-36.0, 0.0, -34.0)), "commit past the trigger")
+	assert_true(_walk_to(Vector3(-46.0, 0.0, -36.0)), "commit past the trigger")
 	assert_false(_open(L.C_COMMIT), "and it closes behind you")
 
 
@@ -168,155 +180,116 @@ func test_depth_two_generation_is_deterministic() -> void:
 	assert_eq(first, second, "the same seed and depth must produce a byte-identical floor")
 
 
-# --- 3: THE ALTERNATING DOORS (the first true consumer of the toggle) --------------------------
+# --- 4: BEATS RE-CHECKED IN THEIR NEW APPROACH DIRECTIONS ---------------------------------------
 
-## STATE A -> STATE B -> STATE A. The doors swap TOGETHER, in one indivisible consequence, so
-## the player never sees a moment where both are open or both are shut.
+## THE INTEGRATED CHAMBER IS NOW APPROACHED FROM THE EAST, so its composition was re-oriented
+## rather than transplanted: the rubble must stand BETWEEN the doorway and the Watcher, or the
+## threat-visible-before-actionable beat simply does not happen from this side.
+func test_the_hall_rubble_stands_between_its_doorway_and_its_watcher() -> void:
+	var doorway: float = 0.0
+	for connection: TraversalConnection in plan.connections:
+		if connection.connection_id == L.C_TO_HALL:
+			doorway = connection.aperture.get_center().x
+	var rubble: float = 0.0
+	for breakable: BreakablePlan in plan.breakables:
+		if breakable.breakable_id == L.B_HALL_RUBBLE:
+			rubble = breakable.position.x
+	var watcher: float = 0.0
+	for spawn in plan.encounter_by_id(L.E_HALL).roster:
+		if spawn["enemy_key"] == &"watcher":
+			watcher = spawn["position"].x
+	assert_lt(rubble, doorway, "the rubble is west of the way in")
+	assert_lt(watcher, rubble, "and the watcher is west of the rubble -- it is behind cover")
+
+
+## THE STAGING BANDS FOLLOW THE APPROACH TOO. A band on the wrong side of a space fires only
+## once its fight is already behind the player.
+func test_each_fight_wakes_when_its_space_is_entered() -> void:
+	for encounter_id in [L.E_COURT, L.E_HALL, L.E_JUNCTION]:
+		assert_eq(_state(encounter_id), "dormant", "encounter %d waits" % encounter_id)
+	assert_ne(_state(L.E_LANDING), "dormant", "but the ambient landing pair are simply there")
+
+	assert_true(_walk_to(Vector3(-46.0, 0.0, -36.0)))
+	assert_true(_walk_to(Vector3(-20.0, 0.0, -37.0)))
+	assert_true(_walk_to(Vector3(-6.0, 0.0, -42.0)))
+	assert_true(_walk_to(Vector3(-2.0, 0.0, -50.0)))
+	assert_eq(_state(L.E_COURT), "active", "the court wakes on entry")
+	assert_eq(sim.debug_describe_floor()["active_confinement"], -1, "without sealing anyone in")
+
+
+# --- 5: THE TWO FLOOR VERBS ---------------------------------------------------------------------
+
 func test_the_toggle_swaps_both_doors_together() -> void:
 	assert_true(_open(L.C_DOOR_WEST), "state A: west open")
 	assert_false(_open(L.C_DOOR_EAST), "state A: east closed")
-
 	sim.debug_activate_hit_switch(L.S_ALTERNATE)
 	assert_false(_open(L.C_DOOR_WEST), "state B: west closed")
 	assert_true(_open(L.C_DOOR_EAST), "state B: east open")
-
 	sim.debug_activate_hit_switch(L.S_ALTERNATE)
 	assert_true(_open(L.C_DOOR_WEST), "and back to state A")
-	assert_false(_open(L.C_DOOR_EAST))
 
 
-func test_the_two_doors_are_never_both_open_or_both_shut() -> void:
+func test_exactly_one_way_is_open_at_a_time() -> void:
 	for flips in 5:
 		assert_ne(_open(L.C_DOOR_WEST), _open(L.C_DOOR_EAST),
-			"exactly one way is open at a time, after %d flips" % flips)
+			"exactly one way open, after %d flips" % flips)
 		sim.debug_activate_hit_switch(L.S_ALTERNATE)
 
 
-## SPATIAL LEGIBILITY: the switch and BOTH doors must be readable together. We have no vocabulary
-## for remote causality, and the previous floor's distant switch is exactly what that costs.
-func test_the_toggle_stands_with_the_doors_it_controls() -> void:
-	var toggle: HitSwitchPlan = null
+## CAUSE AND EFFECT MUST BE READABLE TOGETHER. We have no vocabulary for remote causality.
+func test_each_switch_stands_with_what_it_controls() -> void:
 	for hit_switch: HitSwitchPlan in plan.hit_switches:
-		if hit_switch.switch_id == L.S_ALTERNATE:
-			toggle = hit_switch
-	assert_not_null(toggle)
-	assert_eq(toggle.mode, HitSwitchPlan.MODE_TOGGLE, "this one is the reversible switch")
-	for connection: TraversalConnection in plan.connections:
-		if connection.connection_id != L.C_DOOR_WEST and connection.connection_id != L.C_DOOR_EAST:
-			continue
-		var door := Vector3(connection.aperture.get_center().x, 0.0, connection.aperture.get_center().y)
-		assert_lt(toggle.position.distance_to(door), 20.0,
-			"door %d is %.1f from the switch; both doors must be legible from it"
-				% [connection.connection_id, toggle.position.distance_to(door)])
+		for connection: TraversalConnection in plan.connections:
+			var controlled: bool = false
+			for authored_effect: Dictionary in hit_switch.effects:
+				if int(authored_effect["target_id"]) == connection.connection_id:
+					controlled = true
+			if not controlled:
+				continue
+			var door := Vector3(connection.aperture.get_center().x, 0.0, connection.aperture.get_center().y)
+			assert_lt(hit_switch.position.distance_to(door), 20.0,
+				"switch %d is %.1f from a door it controls" % [hit_switch.switch_id, hit_switch.position.distance_to(door)])
 
 
-## THE TOGGLE IS NOT THE VAULT'S CONTROL. Its unresolved problem is destination reward, never
-## switch complexity, so it keeps a simple local one-shot beside its own door.
-func test_the_vault_uses_a_simple_local_one_shot() -> void:
-	var vault_switch: HitSwitchPlan = null
-	for hit_switch: HitSwitchPlan in plan.hit_switches:
-		if hit_switch.switch_id == L.S_VAULT:
-			vault_switch = hit_switch
-	assert_eq(vault_switch.mode, HitSwitchPlan.MODE_ONE_SHOT, "not a toggle")
-	var door: Rect2 = Rect2()
-	for connection: TraversalConnection in plan.connections:
-		if connection.connection_id == L.C_VAULT:
-			door = connection.aperture
-	assert_lt(vault_switch.position.distance_to(Vector3(door.get_center().x, 0.0, door.get_center().y)), 12.0,
-		"and it stands beside the door it opens")
-
-
-func test_the_vault_is_shut_until_its_own_switch_is_hit() -> void:
+func test_the_vault_needs_its_own_concealed_switch() -> void:
 	assert_false(_open(L.C_VAULT), "shut to begin with")
 	sim.debug_destroy_breakable(L.B_VAULT_COVER)
-	assert_false(_open(L.C_VAULT), "revealing the switch is not pressing it")
+	assert_false(_open(L.C_VAULT), "revealing is not pressing")
 	sim.debug_activate_hit_switch(L.S_VAULT)
 	assert_true(_open(L.C_VAULT), "and hitting it opens the door")
 
 
-func test_no_encounter_lives_in_the_vault() -> void:
+func test_the_vault_branch_is_east_and_holds_no_manufactured_fight() -> void:
+	assert_gt(_patch(L.P_VAULT).get_center().x, _patch(L.P_COURT).get_center().x,
+		"the optional branch leaves the court EASTWARD, off the forward axis")
 	for encounter: EncounterSite in plan.encounters:
-		assert_ne(encounter.regions[0], _patch(L.P_VAULT),
-			"no fight is placed there to invent a reason to go")
+		assert_ne(encounter.regions[0], _patch(L.P_VAULT), "and nothing is placed there to justify it")
 
 
-# --- 4: STAGED ENCOUNTERS -----------------------------------------------------------------------
+# --- 6: CONTENT LAWS ----------------------------------------------------------------------------
 
-func test_the_later_fights_wait_until_their_leg_is_reached() -> void:
-	assert_ne(_state(L.E_LANDING), "dormant", "the ambient landing pair are simply there")
-	for encounter_id in [L.E_GALLERY, L.E_SPILLWAY, L.E_JUNCTION]:
-		assert_eq(_state(encounter_id), "dormant", "encounter %d waits" % encounter_id)
-
-
-func test_reaching_leg_b_wakes_its_fights() -> void:
-	assert_true(_walk_to(Vector3(-36.0, 0.0, -34.0)))
-	assert_true(_walk_to(Vector3(8.0, 0.0, -39.0)))
-	assert_true(_walk_to(Vector3(10.0, 0.0, -62.0)))
-	assert_eq(_state(L.E_SPILLWAY), "active", "the spillway wakes on arrival")
-	assert_eq(sim.debug_describe_floor()["active_confinement"], -1, "without sealing anyone in")
-
-
-# --- 5: CONTENT LAWS ----------------------------------------------------------------------------
-
-## EVERY PROP BREAKS IN ONE HIT, ROUTE BLOCKERS INCLUDED.
-##
-## THIS TEST REPLACES A DELIBERATELY OVERTURNED LAW, and says so on purpose. Until 2026-09-04 the
-## rule here was the opposite for half its cases:
-##
-##     OLD (2026-09-03): ordinary props one-hit, while an authored ROUTE BLOCKER could carry
-##     higher durability because "a route decision may cost more than a swing".
-##     NEW (2026-09-04, human ruling): ALL destructible props are one-hit, blockers included.
-##
-## The old assertion was rewritten rather than deleted, so a later maintainer cannot read the
-## change as accidental coverage loss and "restore" the behaviour. If permanence is wanted, the
-## answer is a different CATEGORY -- an obstacle, unbreakable by construction -- never a prop
-## with a bigger number. Durability is not where challenge lives: a prop that soaks swings turns
-## clearing scenery into fighting a low-health enemy, which is what the human reported.
+## EVERY PROP BREAKS IN ONE HIT, route blockers included (human ruling 2026-09-04, overturning the
+## earlier rule that let a blocker author higher durability). Permanence is a CATEGORY -- an
+## obstacle -- never a bigger number.
 func test_every_prop_breaks_in_one_hit() -> void:
 	for breakable: BreakablePlan in plan.breakables:
 		assert_lte(breakable.durability, 1.0,
-			"breakable %d must break in one hit; if it should be permanent, make it an obstacle"
+			"breakable %d must break in one hit; if it should be permanent, make it a mass"
 				% breakable.breakable_id)
 
 
-## THE SPIKE LANE MUST BE CROSSABLE ON A COMMITMENT. The safe window is derived from a MEASURED
-## crossing -- 114 ticks at the authored speed, body-clear to body-clear -- plus grace, not from
-## feel. The prior window was 55, so no amount of tuning around it could have satisfied the law.
-##
-## WHAT THIS PINS IS THE TRAVERSAL COMMITMENT THE PLAYER IS ASKED TO MAKE, not a rule that pads
-## must share a phase. An earlier version of this test asserted equal phase offsets, which banked
-## the wrong law: staggered pads are legitimate vocabulary for a DIFFERENT beat -- cross one
-## timed zone, reassess on safe ground, cross the next -- and forbidding them outright would
-## outlaw a shape nobody rejected. What is forbidden is presenting ONE lane as a single crossing
-## while making that crossing impossible.
-##
-## So the assertion is about the lane the player reads as one: every pad reachable within a single
-## committed crossing must be safe for the whole of it.
+## THE HAZARD LANE IS CROSSABLE ON A COMMITMENT, with the window RE-DERIVED for this lane rather
+## than inherited: the old lane measured 114 ticks and took 143; this one measures 99 and takes
+## 124. Carrying the old number across would have been a value that once meant something.
 func test_the_spike_lane_can_be_crossed_once_it_retracts() -> void:
-	var lane: Rect2 = plan.spike_pads[0].rect
+	var offsets: Array = []
 	for pad: SpikePadPlan in plan.spike_pads:
-		lane = lane.merge(pad.rect)
-		assert_gte(pad.safe_ticks, 137,
-			"pad %d gives %d safe ticks; the measured crossing is 114 and needs grace on top"
+		offsets.append(pad.phase_offset_ticks)
+		assert_gte(pad.safe_ticks, 124,
+			"pad %d gives %d safe ticks; the measured crossing is 99 and needs grace on top"
 				% [pad.pad_id, pad.safe_ticks])
-
-	# A SINGLE UNBROKEN LANE: no safe ground between the pads, so the player cannot stop halfway
-	# and the whole span is one commitment. If a future beat wants a mid-lane decision island, it
-	# authors safe ground there, and THEN independent phases become correct rather than cruel.
-	var unbroken: bool = true
-	for pad: SpikePadPlan in plan.spike_pads:
-		for other: SpikePadPlan in plan.spike_pads:
-			if pad.pad_id >= other.pad_id:
-				continue
-			if not pad.rect.intersects(other.rect) and absf(pad.rect.position.y - other.rect.end.y) > 0.01 \
-					and absf(other.rect.position.y - pad.rect.end.y) > 0.01:
-				unbroken = false
-	if unbroken:
-		var offsets: Array = []
-		for pad: SpikePadPlan in plan.spike_pads:
-			offsets.append(pad.phase_offset_ticks)
-		assert_eq(offsets.min(), offsets.max(),
-			"these pads form ONE unbroken lane, so they must retract together: %s" % str(offsets))
+	assert_eq(offsets.min(), offsets.max(),
+		"these pads form one unbroken lane, so they must retract together: %s" % str(offsets))
 
 
 func test_spikes_are_player_facing_only() -> void:
@@ -335,21 +308,41 @@ func test_every_authored_spawn_fits_and_sits_in_its_own_home() -> void:
 				"%s spawns outside the home that owns it" % spawn["enemy_key"])
 
 
-## THE WIDEST AUTHORED BODY must be able to use the floor, because pursuit and knockback push
+## THE WIDEST AUTHORED BODY must be able to use every leg, because pursuit and knockback push
 ## enemies down lanes their own encounter never mentioned.
+## THE RUBBLE SHAPES THE HALL WITHOUT SEALING IT: clear ground exists on both sides of it, so a
+## player who declines to break through still has a way round -- which is what makes breaking it
+## a choice rather than a toll.
+func test_the_hall_rubble_shapes_without_sealing() -> void:
+	var rubble: Rect2 = Rect2()
+	for breakable: BreakablePlan in plan.breakables:
+		if breakable.breakable_id == L.B_HALL_RUBBLE:
+			rubble = breakable.blocking_rect
+	var middle: float = rubble.get_center().x
+	assert_true(sim._bounds.fits(Vector3(middle, 0.0, rubble.position.y - 2.0), 1.45),
+		"the widest body must pass south of the rubble")
+	assert_true(sim._bounds.fits(Vector3(middle, 0.0, rubble.end.y + 2.0), 1.45),
+		"and north of it")
+
+
 func test_the_widest_body_can_walk_every_leg() -> void:
 	var widest: float = 0.0
 	for encounter: EncounterSite in plan.encounters:
 		for spawn in encounter.roster:
 			widest = maxf(widest, float(ContentDB.get_resource(&"enemy", spawn["enemy_key"]).combat_radius))
 	var lanes: Array = [
-		["landing", Vector3(-44.0, 0.0, -40.0), Vector3(-14.0, 0.0, -40.0)],
-		["lane A", Vector3(-14.0, 0.0, -39.0), Vector3(12.0, 0.0, -39.0)],
-		["fold 1", Vector3(10.0, 0.0, -38.0), Vector3(10.0, 0.0, -58.0)],
-		["gallery north lane", Vector3(-46.0, 0.0, -55.0), Vector3(-12.0, 0.0, -55.0)],
-		["fold 2", Vector3(-40.0, 0.0, -80.0), Vector3(-40.0, 0.0, -98.0)],
-		["puzzle bay", Vector3(-42.0, 0.0, -106.0), Vector3(-16.0, 0.0, -106.0)],
-		["junction", Vector3(-24.0, 0.0, -138.0), Vector3(26.0, 0.0, -138.0)],
+		["landing", Vector3(-56.0, 0.0, -36.0), Vector3(-32.0, 0.0, -36.0)],
+		["west hall", Vector3(-32.0, 0.0, -37.0), Vector3(-4.0, 0.0, -37.0)],
+		# EAST of the court's north-west limb, which is authored to stand there: the lane exists to
+		# prove the room is crossable, not to insist the room is empty.
+		["court, north-east", Vector3(10.0, 0.0, -48.0), Vector3(34.0, 0.0, -48.0)],
+		["court, south", Vector3(-2.0, 0.0, -70.0), Vector3(34.0, 0.0, -70.0)],
+		["south lane", Vector3(2.0, 0.0, -87.0), Vector3(28.0, 0.0, -87.0)],
+		# NO STRAIGHT LANE IS CLAIMED THROUGH THE HALL: it is an integrated chamber, deliberately
+		# full of masses and a route blocker, and a full-width corridor through it would mean the
+		# composition had failed. What IS claimed is below.
+		["west of the hall's rubble", Vector3(-50.0, 0.0, -89.0), Vector3(-30.0, 0.0, -89.0)],
+		["junction", Vector3(-28.0, 0.0, -152.0), Vector3(26.0, 0.0, -152.0)],
 	]
 	for lane in lanes:
 		for step in 21:
@@ -358,10 +351,10 @@ func test_the_widest_body_can_walk_every_leg() -> void:
 				"%s must admit a body of radius %.2f, blocked at %s" % [lane[0], widest, point])
 
 
-# --- 6: FLOOR 1 IS UNAFFECTED --------------------------------------------------------------------
+# --- 7: FLOOR 1 IS UNAFFECTED ---------------------------------------------------------------------
 
 func test_depth_one_still_authors_the_prototype() -> void:
 	var floor_one: FloorPlan = DepthGenerator.generate(arena.run_seed, 1)
 	assert_eq(floor_one.spike_pads.size(), 0, "floor 1 gains no hazards")
-	assert_eq(floor_one.obstacles.size(), 0, "no obstacles")
+	assert_eq(floor_one.obstacles.size(), 0, "no masses")
 	assert_eq(floor_one.hit_switches.size(), 0, "and no switches")

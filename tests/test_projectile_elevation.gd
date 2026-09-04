@@ -104,12 +104,15 @@ func test_the_authoritative_projectile_stays_on_the_flat_plane() -> void:
 ## terminates at the world, so there is no tracer left to see through it.
 func test_a_shot_into_a_fold_wall_still_terminates_at_the_world() -> void:
 	var floor_plan: FloorPlan = DepthGenerator.generate(arena.run_seed, 2)
+	# THE LARGEST MASS ON THE FLOOR, whatever its height. An earlier version looked for a wall
+	# taller than 6 -- which was true of the fold slabs and is true of nothing now that the floor
+	# conceals by placement instead of scale. A test that hunts for a retired authoring style
+	# fails for a reason that has nothing to do with what it is checking.
 	var wall: Rect2 = Rect2()
 	for obstacle: ObstaclePlan in floor_plan.obstacles:
-		if obstacle.height >= 6.0:
+		if obstacle.rect.get_area() > wall.get_area():
 			wall = obstacle.rect
-			break
-	assert_gt(wall.get_area(), 0.0, "sanity: the floor has a fold wall to shoot at")
+	assert_gt(wall.get_area(), 0.0, "sanity: the floor has a solid mass to shoot at")
 
 	# Stand just north of the wall and fire south into it.
 	arena.sim.entities[arena.envoy.actor_id] = Vector3(wall.get_center().x, 0.0, wall.end.y + 3.0)

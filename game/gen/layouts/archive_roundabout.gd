@@ -1,123 +1,104 @@
 class_name ArchiveRoundaboutLayout
 extends RefCounted
-## FLOOR 2 — three folded legs (rebuilt 2026-09-04).
+## FLOOR 2 — broad, massed, four turns (rebuilt 2026-09-04 from the approved massing paper).
 ##
-## THE MEASURED PROBLEM: the previous version showed 10 of its 11 spaces from the drop, six of
-## them at half or more. The cause was not size. The floor was laid out ALONG the camera's
-## strongest viewing direction, and it had almost nothing to occlude with.
+## THE MEASURED FAILURE THIS ANSWERS was sharper than "too much is visible". The previous floor
+## had ZERO FORESHADOWED SPACES: everything in view was either SOLVED (enough of it, and its way
+## in, to be understood) or oriented. There was no middle register -- no "something is over
+## there and I do not yet know how to reach it". Spaces were fully explained or absent.
 ##
-## THE CAMERA IS THE CONSTRAINT, and it was measured rather than guessed:
-##   * the view is DEEP AND NARROW -- half-width 13 at the player's own depth, 45.6 at sixty
-##     ahead, widening ~0.54 per unit. So a north-south column of spaces is read end to end, and
-##     lateral offset alone can never win, because the offset needed grows as fast as the floor.
-##   * a wall of height h at distance t hides ground out to t/(1 - h/12). At the DEFAULT obstacle
-##     height of 2.4 that is barely 12 units of shadow -- useless. At height 9 a fold wall hides
-##     the whole of the next leg. THAT is why the walls below are tall, and why they are few.
+## SO THE TARGET IS NOT CONCEALMENT. It is partial knowledge: solve the local space, orient
+## toward the next, occasionally glimpse something beyond it, and learn how it connects only by
+## walking there.
 ##
-## MEASURED AFTER AUTHORING, not predicted: from the drop the floor now shows OVERLOOK 100%,
-## DESCENT 100%, LANDING 88%, LANE A 36% -- four of fourteen spaces, and nothing past the first
-## corner. From the Landing it shows two. The middle leg appears when the player turns into
-## Lane A; the late leg when they reach Fold 2. That is the progression, and it is a number.
+## THE ARITHMETIC THAT REPLACED THE GIANT WALLS. A mass of height h at distance t hides ground
+## out to t/(1 - h/12). Read as a ratio: the SAME modest height covers far more ground standing
+## near what it hides than near the viewer. Height 4 at 45 units shadows to 67; the same mass at
+## 15 units shadows only to 22. The old height-9 slabs were compensating for PLACEMENT, not for
+## physics -- they stood beside the player. Every mass here is height 4 and stands beside the
+## thing it conceals, and the measured reveal is better than the slabs achieved.
 ##
-##   z=-2   +----------+
-##          | OVERLOOK | e3                        LEG A runs SOUTH, west side
-##  -12     +----++----+
-##          | DESCENT  | e1.5    c1 ONE-WAY, sealed behind you
-##  -26     +----++----+
-##  -48 +--------++--------+----------------+
-##      |     LANDING      |     LANE A     |  first fight, then east
-##  -24 +------------------+-------++-------+
-##      ################################  ||   <- FOLD WALL 1 (height 9), gap at the connector
-##  -60                            +------++-+
-##                                 | FOLD 1  |
-##  -76 +-------------------+------++--------+   +--------+
-##      |     GALLERY       |   SPILLWAY     |c8 |  VAULT |   LEG B runs WEST
-##  -52 +---++--------------+----------------+   +--------+
-##      || ################################       <- FOLD WALL 2 (height 9), gap at the west
-## -100 ++--------+
-##      | FOLD 2  |
-## -114 +---------+---------------------+
-##      |      PUZZLE BAY               |   ^ toggle switch, both doors legible
-##      +----[D1]----------[D2]---------+
-## -130 +---------+      +--------------+
-##      |  WEST   |      |    EAST      |   LEG C runs EAST
-##      +---------+      +------++------+
-## -146                  +-------++---------------------+
-##                       |        JUNCTION              |
-##                       +------------++----------------+
-## -162                               +--++------+
-##                                    | TERRACE  | e1  [] all-party exit
-##                                    +----------+
+##        x=-58                x=-4              x=+40
+##  z=-2   +-OVERLOOK-+
+##  -24    +-DESCENT--+          c1 ONE-WAY, sealed behind you
+##  -46  +--LANDING---+---WEST HALL---------+          leg 1: south, then EAST
+##       +------------+#################  # |          <- court's near wall + L-limb
+##  -74                     +---COURT------+--+  +-VAULT-+   leg 2: the broad centre
+##                          |                 +--+       |   (Vault branches EAST)
+##  -84         ####  ######|##########       |  +-------+   <- south lane's near wall
+##  -92                     |   SOUTH LANE----+
+##  -78   ######################                         <- the HALL'S OWN near wall
+## -100  +----------HALL-----------+                     leg 3: back WEST
+## -108   ##############                                 <- puzzle bay's near wall
+## -124  +--PUZZLE BAY--+
+##       +--[D1]--[D2]--+
+## -140  +P WEST+ +P EAST+
+## -158       +------JUNCTION---------+                  leg 4: EAST again
+## -150        ##########                                <- screens the terrace approach
+## -174                    +-TERRACE-+  [] all-party exit
 ##
-## EACH LEG TURNS ACROSS THE VIEW, and a tall architectural mass stands at each fold with the
-## connector as its only gap. That is the whole method: the floor cooperates with the camera
-## instead of pointing down it.
+## THE COURT IS THE FLOOR'S CENTRE OF GRAVITY: a broad open landmark that branches organise
+## around, and the one space that -- measured -- solves nothing at all from inside it.
 ##
-## OPENNESS IS PRESERVED, deliberately. Every patch edge stays a LEDGE with its low rim -- the
-## human liked that and it is not reversed here. The walls are FEW and LARGE, placed only where
-## the floor needs to hide a later chapter. Open local spaces, separated by occluding transitions.
-##
-## THE WALLS ARE REAL WALLS. They exclude bodies, stop shots and are drawn from the same authored
-## rect. A sight blocker that a shot passes through would be the presentation-lies defect P34 was
-## fought over, arriving through the back door.
-##
-## THE ALTERNATING DOORS are the first true consumer of the reversible switch: one toggle in the
-## bay, both doors visible from it, and the doors swap together. Not the Vault -- that stays a
-## simple local one-shot beside its own door, because its unresolved problem is destination
-## reward, never switch complexity.
+## BEATS KEPT, HOMES CHANGED. Every successful beat carried forward, and every one re-checked in
+## its new approach direction rather than transplanted. The integrated chamber now faces an
+## approach from the EAST, so its rubble and its Watcher are oriented for that and not for the
+## north-facing composition they were authored in.
 
 # Patch ids
 const P_OVERLOOK := 0
 const P_DESCENT := 1
 const P_LANDING := 2
-const P_LANE_A := 3
-const P_FOLD1 := 4
-const P_SPILLWAY := 5
-const P_GALLERY := 6
-const P_VAULT := 7
-const P_FOLD2 := 8
-const P_PUZZLE_BAY := 9
-const P_PUZZLE_WEST := 10
-const P_PUZZLE_EAST := 11
-const P_JUNCTION := 12
-const P_TERRACE := 13
+const P_WEST_HALL := 3
+const P_COURT := 4
+const P_VAULT := 5
+const P_SOUTH_LANE := 6
+const P_HALL := 7
+const P_PUZZLE_BAY := 8
+const P_PUZZLE_WEST := 9
+const P_PUZZLE_EAST := 10
+const P_JUNCTION := 11
+const P_TERRACE := 12
 
 # Connection ids
 const C_DESCEND := 0
 const C_COMMIT := 1
-const C_VAULT := 2
-const C_DOOR_WEST := 3
-const C_DOOR_EAST := 4
-const C_TO_TERRACE := 5
+const C_TO_COURT := 2
+const C_VAULT := 3
+const C_TO_LANE := 4
+const C_TO_HALL := 5
+const C_TO_BAY := 6
+const C_DOOR_WEST := 7
+const C_DOOR_EAST := 8
+const C_TO_JUNCTION := 9
+const C_TO_TERRACE := 10
 
 # Encounter ids
 const E_LANDING := 0
-const E_GALLERY := 1
-const E_SPILLWAY := 2
+const E_COURT := 1
+const E_HALL := 2
 const E_JUNCTION := 3
 
 # Trigger ids
 const T_COMMIT := 0
-const T_GALLERY := 1
-const T_SPILLWAY := 2
+const T_COURT := 1
+const T_HALL := 2
 const T_JUNCTION := 3
-const T_EXIT := 4
-const T_VAULT_REVEAL := 5
+const T_VAULT_REVEAL := 4
+const T_EXIT := 5
 
 # World object ids
-const S_VAULT := 0        # concealed one-shot, beside the vault door
+const S_VAULT := 0        # concealed one-shot, beside the Vault door
 const S_ALTERNATE := 1    # the toggle, in the puzzle bay
-const B_VAULT_COVER := 0  # ordinary prop, one hit
-const B_GALLERY_RUBBLE := 1
+const B_VAULT_COVER := 0
+const B_HALL_RUBBLE := 1
 const B_BAY_PROP := 2
 
-const EXIT_PLATE := Rect2(9.0, -158.0, 4.0, 4.0)
+const EXIT_PLATE := Rect2(14.0, -170.0, 4.0, 4.0)
 
-## TALL ENOUGH TO MATTER. A fold wall exists to hide the next chapter, and the arithmetic above
-## says 2.4 would hide twelve units of it. Nine hides the whole of the next leg from the one
-## before -- measured, then raised from seven when the Landing was still reading 40% of the late
-## floor down the western channel.
-const _FOLD_WALL_HEIGHT: float = 9.0
+## EVERY MASS IS THIS TALL. Not a law -- an authored choice for this floor, and the thing the
+## human replay is asked to judge. What IS durable is where they stand: beside what they hide.
+const _MASS_HEIGHT: float = 4.0
 
 
 static func build(plan: FloorPlan) -> void:
@@ -125,49 +106,70 @@ static func build(plan: FloorPlan) -> void:
 	_progression(plan)
 	_world_objects(plan)
 	_encounters(plan)
-	plan.entry_point = Vector3(-36.0, 0.0, -7.0)
-	plan.end_marker = Vector3(11.0, 0.0, -156.0)
+	plan.entry_point = Vector3(-48.0, 0.0, -7.0)
+	plan.end_marker = Vector3(16.0, 0.0, -168.0)
 
 
 # --- SPATIAL ---------------------------------------------------------------------------
 
 static func _spatial(plan: FloorPlan) -> void:
-	# LEG A — entry, descent, first fight, then a lane turning east.
-	_patch(plan, P_OVERLOOK, Rect2(-44.0, -12.0, 16.0, 10.0), 3.0, &"high")
-	_patch(plan, P_DESCENT, Rect2(-40.0, -24.0, 10.0, 12.0), 1.5, &"ramp")
-	_patch(plan, P_LANDING, Rect2(-46.0, -48.0, 34.0, 22.0), 0.0, &"stone")
-	_patch(plan, P_LANE_A, Rect2(-16.0, -44.0, 30.0, 10.0), 0.0, &"stone")
-	_patch(plan, P_FOLD1, Rect2(4.0, -60.0, 12.0, 26.0), 0.0, &"stone")
+	# LEG 1 — down the west side, then EAST.
+	_patch(plan, P_OVERLOOK, Rect2(-56.0, -12.0, 16.0, 10.0), 3.0, &"high")
+	_patch(plan, P_DESCENT, Rect2(-52.0, -24.0, 10.0, 12.0), 1.5, &"ramp")
+	_patch(plan, P_LANDING, Rect2(-58.0, -46.0, 28.0, 20.0), 0.0, &"stone")
+	_patch(plan, P_WEST_HALL, Rect2(-34.0, -42.0, 32.0, 10.0), 0.0, &"stone")
 
-	# LEG B — running back west: the hazard lane, the integrated chamber, the optional branch.
-	_patch(plan, P_SPILLWAY, Rect2(-10.0, -76.0, 28.0, 20.0), 0.0, &"stone")
-	_patch(plan, P_GALLERY, Rect2(-48.0, -78.0, 40.0, 26.0), 0.0, &"arena")
-	_patch(plan, P_VAULT, Rect2(22.0, -72.0, 14.0, 14.0), 0.0, &"arena")
-	_patch(plan, P_FOLD2, Rect2(-46.0, -100.0, 14.0, 26.0), 0.0, &"stone")
+	# LEG 2 — the Court: the floor's centre of gravity, with the Vault branching EAST off it.
+	_patch(plan, P_COURT, Rect2(-4.0, -74.0, 40.0, 30.0), 0.0, &"arena")
+	_patch(plan, P_VAULT, Rect2(40.0, -66.0, 14.0, 14.0), 0.0, &"arena")
 
-	# LEG C — running back east: the alternating doors, the rejoin, the exit.
-	_patch(plan, P_PUZZLE_BAY, Rect2(-44.0, -114.0, 30.0, 16.0), 0.0, &"stone")
-	_patch(plan, P_PUZZLE_WEST, Rect2(-44.0, -130.0, 14.0, 14.0), 0.0, &"stone")
-	_patch(plan, P_PUZZLE_EAST, Rect2(-26.0, -130.0, 14.0, 14.0), 0.0, &"stone")
-	_patch(plan, P_JUNCTION, Rect2(-26.0, -146.0, 54.0, 18.0), 0.0, &"stone")
-	_patch(plan, P_TERRACE, Rect2(4.0, -162.0, 18.0, 14.0), 1.0, &"high")
+	# LEG 3 — south, then back WEST through the hazard lane into the integrated chamber.
+	_patch(plan, P_SOUTH_LANE, Rect2(0.0, -92.0, 30.0, 10.0), 0.0, &"stone")
+	_patch(plan, P_HALL, Rect2(-52.0, -100.0, 50.0, 22.0), 0.0, &"arena")
 
-	# THE TWO FOLD WALLS. Few and large, per the ruling -- one architectural mass at each turn,
-	# with the connector as its only gap. Not wall spam, and not a perimeter: everywhere else the
-	# floor keeps its open low-rim edges.
-	_obstacle(plan, 0, Rect2(-48.0, -52.0, 50.0, 4.0), _FOLD_WALL_HEIGHT)
-	_obstacle(plan, 1, Rect2(-30.0, -86.0, 50.0, 4.0), _FOLD_WALL_HEIGHT)
+	# LEG 4 — the alternating doors, the rejoin, and EAST again to the exit.
+	_patch(plan, P_PUZZLE_BAY, Rect2(-50.0, -124.0, 28.0, 16.0), 0.0, &"stone")
+	_patch(plan, P_PUZZLE_WEST, Rect2(-50.0, -140.0, 12.0, 12.0), 0.0, &"stone")
+	_patch(plan, P_PUZZLE_EAST, Rect2(-34.0, -140.0, 12.0, 12.0), 0.0, &"stone")
+	_patch(plan, P_JUNCTION, Rect2(-30.0, -158.0, 58.0, 16.0), 0.0, &"stone")
+	_patch(plan, P_TERRACE, Rect2(8.0, -174.0, 18.0, 14.0), 1.0, &"high")
 
-	# THE GALLERY'S APPROACH MASSES. Ordinary height: these are cover and approach angles, not
-	# chapter dividers, and they should not hide the room they shape.
-	_obstacle(plan, 2, Rect2(-38.0, -70.0, 5.0, 5.0), 2.4)
-	_obstacle(plan, 3, Rect2(-22.0, -62.0, 5.0, 5.0), 2.4)
-	# THE SPILLWAY'S SLOW LANE, pushing the safe route wide of the spikes.
-	_obstacle(plan, 4, Rect2(-2.0, -70.0, 4.0, 8.0), 2.4)
+	# --- THE MASSES. Each stands beside what it hides, which is the whole method. ---
+	#
+	# THEIR FACES ARE KEPT OFF PATCH EDGES, and the apertures likewise. A mass face flush with a
+	# patch's own edge makes the two disagree about one span -- a wall and a ledge claiming the
+	# same line -- and FloorPlan refuses the conflict rather than picking a winner. Every offset
+	# below that looks arbitrary is avoiding exactly that.
+	# The Court's near wall, and an L-limb turning it north so the Court's mouth is round a
+	# corner rather than straight down the view from the Landing.
+	_mass(plan, 0, Rect2(-29.0, -58.0, 26.0, 6.0))
+	# The limb sits EAST of the mouth, screening it from the Court's interior rather than
+	# standing in front of it -- the first placement blocked the very doorway it was meant to
+	# hide, which the floor walk caught immediately.
+	_mass(plan, 1, Rect2(2.0, -53.0, 6.0, 10.0))
+	# The south lane's near wall -- in TWO limbs, with the lane's own mouth between them. The
+	# first version was one 26-wide slab that covered the aperture it was meant to stand beside,
+	# so the way in was walled up by the wall whose job was to hide it.
+	_mass(plan, 2, Rect2(6.0, -84.0, 11.0, 6.0))
+	_mass(plan, 9, Rect2(25.0, -84.0, 7.0, 6.0))
+	_mass(plan, 3, Rect2(-14.0, -84.0, 8.0, 14.0))
+	# THE HALL'S OWN NEAR WALL. Added during paper measurement, when the Hall read 80% from the
+	# Landing -- whole-room comprehension of a late space. The fix was not a taller mass earlier
+	# but this one, standing 50 units from that viewpoint instead of 25. A space participates in
+	# controlling its own reveal.
+	_mass(plan, 4, Rect2(-58.0, -77.0, 50.0, 6.0))
+	_mass(plan, 5, Rect2(-34.0, -107.0, 26.0, 6.0))
+	_mass(plan, 6, Rect2(-2.0, -150.0, 24.0, 6.0))
 
-	# THE SPIKES. One lane, one rhythm: they retract together so the crossing can be committed to.
-	_spikes(plan, 0, Rect2(4.0, -70.0, 6.0, 6.0), 0)
-	_spikes(plan, 1, Rect2(4.0, -62.0, 6.0, 6.0), 0)
+	# COMBAT MASSING in the Hall, shaping an approach that now comes from the EAST.
+	_mass(plan, 7, Rect2(-20.0, -98.0, 5.0, 5.0))
+	_mass(plan, 8, Rect2(-34.0, -86.0, 5.0, 5.0))
+
+	# THE HAZARD LANE, crossed heading WEST along the south lane. Cadence is set from a measured
+	# crossing, not from feel (tools/measure_spike_crossing.gd), and the pads share a phase
+	# because they form ONE unbroken lane with no safe ground to stop on.
+	_spikes(plan, 0, Rect2(10.0, -92.0, 6.0, 10.0))
+	_spikes(plan, 1, Rect2(16.0, -92.0, 6.0, 10.0))
 
 
 static func _patch(plan: FloorPlan, patch_id: int, rect: Rect2, elevation: float, surface: StringName) -> void:
@@ -176,31 +178,30 @@ static func _patch(plan: FloorPlan, patch_id: int, rect: Rect2, elevation: float
 	patch.rect = rect
 	patch.elevation = elevation
 	patch.surface = surface
+	# LOW-RIM EDGES EVERYWHERE. Solidity comes from authored masses, never from closing rooms in.
 	patch.boundary_style = &"ledge"
 	plan.patches.append(patch)
 
 
-static func _obstacle(plan: FloorPlan, obstacle_id: int, rect: Rect2, height: float) -> void:
+static func _mass(plan: FloorPlan, obstacle_id: int, rect: Rect2) -> void:
 	var obstacle := ObstaclePlan.new()
 	obstacle.obstacle_id = obstacle_id
 	obstacle.rect = rect
-	obstacle.height = height
+	obstacle.height = _MASS_HEIGHT
 	plan.obstacles.append(obstacle)
 
 
-static func _spikes(plan: FloorPlan, pad_id: int, rect: Rect2, offset: int) -> void:
+static func _spikes(plan: FloorPlan, pad_id: int, rect: Rect2) -> void:
 	var pad := SpikePadPlan.new()
 	pad.pad_id = pad_id
 	pad.rect = rect
-	# SAFE_TICKS IS DERIVED, NOT FELT (ruled 2026-09-04). Crossing this lane at the authored
-	# envoy speed, from body-clear on one side to body-clear on the other, MEASURED at 114 ticks
-	# (tools/measure_spike_crossing.gd). 143 is that plus 25% grace, so committing the instant
-	# the spikes drop always gets you across.
-	pad.safe_ticks = 143
+	# RE-DERIVED FOR THIS LANE, not inherited. The previous lane measured 114 ticks and took 143;
+	# this one is shorter and crossed east-to-west, and measures 99 (tools/measure_spike_crossing).
+	# 124 is that plus 25% grace. Carrying 143 across would have been a number that once meant
+	# something, which is how a derived value quietly becomes a magic one.
+	pad.safe_ticks = 124
 	pad.active_ticks = 35
-	# IN PHASE, deliberately. Out-of-phase pads were prettier and made the law unsatisfiable: a
-	# lane that is never wholly safe cannot be crossed on a commitment, whatever the window.
-	pad.phase_offset_ticks = offset
+	pad.phase_offset_ticks = 0
 	pad.damage = 10.0
 	pad.damage_type = &"force"
 	plan.spike_pads.append(pad)
@@ -209,35 +210,39 @@ static func _spikes(plan: FloorPlan, pad_id: int, rect: Rect2, offset: int) -> v
 # --- PROGRESSION -----------------------------------------------------------------------
 
 static func _progression(plan: FloorPlan) -> void:
-	_connect(plan, C_DESCEND, P_OVERLOOK, P_DESCENT, Rect2(-37.5, -13.5, 5.0, 3.0), true)
-	# THE ONE-WAY COMMITMENT: the floor's real phase transition, and why it needs no party plate.
-	_connect(plan, C_COMMIT, P_DESCENT, P_LANDING, Rect2(-37.5, -27.5, 5.0, 6.0), true)
+	_connect(plan, C_DESCEND, P_OVERLOOK, P_DESCENT, Rect2(-49.5, -13.5, 5.0, 3.0), true)
+	# THE ONE-WAY COMMITMENT: this floor's real phase transition, and why it needs no party plate.
+	_connect(plan, C_COMMIT, P_DESCENT, P_LANDING, Rect2(-49.5, -27.5, 5.0, 6.0), true)
+	# WIDE ENOUGH TO ACTUALLY OVERLAP THE COURT. An earlier version was nudged west to dodge a
+	# boundary-style conflict and ended up overlapping the Court by half a unit -- a doorway that
+	# validated cleanly and that no body could pass through.
+	_connect(plan, C_TO_COURT, P_WEST_HALL, P_COURT, Rect2(-9.0, -46.0, 8.0, 8.0), true)
 	# THE VAULT DOOR, opened by the concealed switch standing beside it.
-	_connect(plan, C_VAULT, P_SPILLWAY, P_VAULT, Rect2(16.5, -67.0, 6.0, 5.0), false)
-	# THE ALTERNATING PAIR. West starts OPEN, east CLOSED; the toggle swaps both at once.
-	_connect(plan, C_DOOR_WEST, P_PUZZLE_BAY, P_PUZZLE_WEST, Rect2(-39.0, -117.0, 5.0, 6.0), true)
-	_connect(plan, C_DOOR_EAST, P_PUZZLE_BAY, P_PUZZLE_EAST, Rect2(-21.0, -117.0, 5.0, 6.0), false)
-	_connect(plan, C_TO_TERRACE, P_JUNCTION, P_TERRACE, Rect2(10.0, -151.0, 5.0, 6.0), true, false)
+	_connect(plan, C_VAULT, P_COURT, P_VAULT, Rect2(34.5, -62.0, 7.0, 6.0), false)
+	_connect(plan, C_TO_LANE, P_COURT, P_SOUTH_LANE, Rect2(18.0, -84.0, 6.0, 12.0), true)
+	_connect(plan, C_TO_HALL, P_SOUTH_LANE, P_HALL, Rect2(-5.0, -90.0, 10.0, 6.0), true)
+	_connect(plan, C_TO_BAY, P_HALL, P_PUZZLE_BAY, Rect2(-42.0, -110.0, 6.0, 12.0), true)
+	# THE ALTERNATING PAIR: west starts OPEN, east CLOSED; the toggle swaps both at once.
+	_connect(plan, C_DOOR_WEST, P_PUZZLE_BAY, P_PUZZLE_WEST, Rect2(-46.0, -129.0, 5.0, 6.0), true)
+	_connect(plan, C_DOOR_EAST, P_PUZZLE_BAY, P_PUZZLE_EAST, Rect2(-31.0, -129.0, 5.0, 6.0), false)
+	_connect(plan, C_TO_JUNCTION, P_PUZZLE_EAST, P_JUNCTION, Rect2(-29.5, -144.0, 6.0, 8.0), true)
+	_connect(plan, C_TO_TERRACE, P_JUNCTION, P_TERRACE, Rect2(14.0, -162.0, 5.0, 6.0), true, false)
 
-	_trigger(plan, T_COMMIT, FloorLayers.TRIGGER_REGION, Rect2(-40.0, -36.0, 8.0, 8.0), [
+	_trigger(plan, T_COMMIT, FloorLayers.TRIGGER_REGION, Rect2(-52.0, -36.0, 10.0, 8.0), [
 		FloorLayers.effect(FloorLayers.EFFECT_BLOCK_CONNECTION, C_COMMIT),
 	], false)
-	# STAGED: each leg's fight begins on arrival, at the ENTRANCE band of its space.
-	#
-	# THE BANDS ARE DEEP ON PURPOSE. A narrow one is a trigger the player can stride over between
-	# ticks, and a staging beat that sometimes does not happen is worse than no staging at all.
-	_trigger(plan, T_SPILLWAY, FloorLayers.TRIGGER_REGION, Rect2(-8.0, -64.0, 24.0, 11.0), [
-		FloorLayers.effect(FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, E_SPILLWAY),
+	# STAGED FIGHTS, banded at the ENTRANCE each space is actually approached from -- and the
+	# approach directions changed with the rebuild, so these are re-placed rather than carried.
+	# The Court is entered from the NORTH-WEST; the Hall from the EAST; the Junction from the WEST.
+	_trigger(plan, T_COURT, FloorLayers.TRIGGER_REGION, Rect2(-4.0, -54.0, 20.0, 10.0), [
+		FloorLayers.effect(FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, E_COURT),
 	], false)
-	_trigger(plan, T_GALLERY, FloorLayers.TRIGGER_REGION, Rect2(-46.0, -64.0, 34.0, 9.0), [
-		FloorLayers.effect(FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, E_GALLERY),
+	_trigger(plan, T_HALL, FloorLayers.TRIGGER_REGION, Rect2(-12.0, -96.0, 10.0, 16.0), [
+		FloorLayers.effect(FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, E_HALL),
 	], false)
-	_trigger(plan, T_JUNCTION, FloorLayers.TRIGGER_REGION, Rect2(-24.0, -138.0, 50.0, 9.0), [
+	_trigger(plan, T_JUNCTION, FloorLayers.TRIGGER_REGION, Rect2(-28.0, -152.0, 14.0, 10.0), [
 		FloorLayers.effect(FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, E_JUNCTION),
 	], false)
-	# BREAKING THE COVER REVEALS THE SWITCH BEHIND IT. Dropped by accident in the fold rebuild,
-	# which left the switch permanently hidden and the Vault permanently shut -- caught by the
-	# build checks rather than by a human finding a door that never opened.
 	_trigger(plan, T_VAULT_REVEAL, FloorLayers.TRIGGER_BREAKABLE_DESTROYED, Rect2(), [
 		FloorLayers.effect(FloorLayers.EFFECT_REVEAL_SWITCH, S_VAULT),
 	], false, B_VAULT_COVER)
@@ -270,21 +275,23 @@ static func _trigger(plan: FloorPlan, trigger_id: int, kind: StringName, region:
 # --- WORLD OBJECTS ---------------------------------------------------------------------
 
 static func _world_objects(plan: FloorPlan) -> void:
-	# THE VAULT'S CONTROL, beside its own door: concealed, one-shot, obvious cause and effect.
+	# THE VAULT'S CONTROL, beside its own door on the Court's east side: concealed, one-shot,
+	# obvious cause and effect. Not the toggle -- the Vault's unresolved problem is destination
+	# reward, never switch complexity.
 	var vault_switch := HitSwitchPlan.new()
 	vault_switch.switch_id = S_VAULT
-	vault_switch.position = Vector3(14.0, 0.0, -73.0)
+	vault_switch.position = Vector3(32.0, 0.0, -66.0)
 	vault_switch.radius = 0.7
 	vault_switch.mode = HitSwitchPlan.MODE_ONE_SHOT
 	vault_switch.starts_hidden = true
 	vault_switch.effects = [FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, C_VAULT)]
 	plan.hit_switches.append(vault_switch)
 
-	# THE ALTERNATING TOGGLE, in the bay with BOTH doors in front of it. Its two effects fire
-	# together, so the doors swap in one indivisible consequence rather than in sequence.
+	# THE ALTERNATING TOGGLE, in the bay with BOTH doors in front of it. Its effects fire
+	# together, so the doors swap in one indivisible consequence.
 	var toggle := HitSwitchPlan.new()
 	toggle.switch_id = S_ALTERNATE
-	toggle.position = Vector3(-30.0, 0.0, -104.0)
+	toggle.position = Vector3(-38.0, 0.0, -114.0)
 	toggle.radius = 0.8
 	toggle.mode = HitSwitchPlan.MODE_TOGGLE
 	toggle.effects = [
@@ -293,21 +300,20 @@ static func _world_objects(plan: FloorPlan) -> void:
 	]
 	plan.hit_switches.append(toggle)
 
-	# ORDINARY PROPS BREAK IN ONE HIT.
-	_breakable(plan, B_VAULT_COVER, Vector3(12.0, 0.0, -73.0), 1.1, 1.0)
-	_breakable(plan, B_BAY_PROP, Vector3(-38.0, 0.0, -124.0), 1.0, 1.0)
-	# THE GALLERY'S RUBBLE. ONE HIT, like every prop (ruled 2026-09-04): durability is not where
-	# challenge lives. Its difficulty is positioning and consequence -- it holds the Watcher's
-	# sightline BOTH ways and occupies the lane in front of it, so one act changes fight and route.
-	_breakable(plan, B_GALLERY_RUBBLE, Vector3(-30.0, 0.0, -66.0), 2.0, 1.0, Rect2(-33.0, -68.0, 6.0, 4.0))
+	# EVERY PROP BREAKS IN ONE HIT. Challenge is positioning and consequence, never hit points.
+	_breakable(plan, B_VAULT_COVER, Vector3(30.0, 0.0, -66.0), 1.1)
+	_breakable(plan, B_BAY_PROP, Vector3(-46.0, 0.0, -118.0), 1.0)
+	# THE HALL'S RUBBLE, now placed for an approach from the EAST: it stands between the doorway
+	# and the Watcher, holding that sightline both ways.
+	_breakable(plan, B_HALL_RUBBLE, Vector3(-24.0, 0.0, -89.0), 2.0, Rect2(-27.0, -91.0, 6.0, 4.0))
 
 
-static func _breakable(plan: FloorPlan, breakable_id: int, position: Vector3, radius: float, durability: float, blocking_rect: Rect2 = Rect2()) -> void:
+static func _breakable(plan: FloorPlan, breakable_id: int, position: Vector3, radius: float, blocking_rect: Rect2 = Rect2()) -> void:
 	var breakable := BreakablePlan.new()
 	breakable.breakable_id = breakable_id
 	breakable.position = position
 	breakable.radius = radius
-	breakable.durability = durability
+	breakable.durability = 1.0
 	breakable.blocking_rect = blocking_rect
 	plan.breakables.append(breakable)
 
@@ -316,22 +322,25 @@ static func _breakable(plan: FloorPlan, breakable_id: int, position: Vector3, ra
 
 static func _encounters(plan: FloorPlan) -> void:
 	_encounter(plan, E_LANDING, P_LANDING, FloorLayers.ROLE_AMBIENT, true, [
-		{"enemy_key": &"ooze", "position": Vector3(-22.0, 0.0, -40.0)},
-		{"enemy_key": &"fang", "position": Vector3(-36.0, 0.0, -34.0)},
+		{"enemy_key": &"ooze", "position": Vector3(-38.0, 0.0, -38.0)},
+		{"enemy_key": &"fang", "position": Vector3(-50.0, 0.0, -32.0)},
 	] as Array[Dictionary])
-	# THE INTEGRATED CHAMBER: a Watcher behind rubble that holds the line both ways, Fangs coming
-	# round the approach masses, and the player choosing whether to break through or go around.
-	_encounter(plan, E_GALLERY, P_GALLERY, FloorLayers.ROLE_OPTIONAL, false, [
-		{"enemy_key": &"watcher", "position": Vector3(-30.0, 0.0, -73.0)},
-		{"enemy_key": &"fang", "position": Vector3(-44.0, 0.0, -60.0)},
-		{"enemy_key": &"fang", "position": Vector3(-16.0, 0.0, -73.0)},
+	# THE COURT: open ground, so the fight here is about space rather than cover.
+	_encounter(plan, E_COURT, P_COURT, FloorLayers.ROLE_OPTIONAL, false, [
+		{"enemy_key": &"fang", "position": Vector3(10.0, 0.0, -64.0)},
+		{"enemy_key": &"ooze", "position": Vector3(24.0, 0.0, -56.0)},
 	] as Array[Dictionary])
-	_encounter(plan, E_SPILLWAY, P_SPILLWAY, FloorLayers.ROLE_OPTIONAL, false, [
-		{"enemy_key": &"fang", "position": Vector3(14.0, 0.0, -60.0)},
+	# THE INTEGRATED CHAMBER, re-oriented for an EAST approach: the Watcher stands deep west with
+	# the rubble between it and the doorway, so the threat is visible and not yet actionable, and
+	# the Fangs come round the masses while the player chooses to break through or go around.
+	_encounter(plan, E_HALL, P_HALL, FloorLayers.ROLE_OPTIONAL, false, [
+		{"enemy_key": &"watcher", "position": Vector3(-42.0, 0.0, -89.0)},
+		{"enemy_key": &"fang", "position": Vector3(-25.0, 0.0, -83.0)},
+		{"enemy_key": &"fang", "position": Vector3(-30.0, 0.0, -96.0)},
 	] as Array[Dictionary])
 	_encounter(plan, E_JUNCTION, P_JUNCTION, FloorLayers.ROLE_OPTIONAL, false, [
-		{"enemy_key": &"ooze", "position": Vector3(4.0, 0.0, -138.0)},
-		{"enemy_key": &"fang", "position": Vector3(20.0, 0.0, -138.0)},
+		{"enemy_key": &"ooze", "position": Vector3(-4.0, 0.0, -153.0)},
+		{"enemy_key": &"fang", "position": Vector3(16.0, 0.0, -153.0)},
 	] as Array[Dictionary])
 
 

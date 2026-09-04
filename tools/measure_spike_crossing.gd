@@ -43,19 +43,40 @@ func _init() -> void:
 	for connection: TraversalConnection in plan.connections:
 		sim.register_connection(connection.connection_id, connection.aperture, connection.starts_open)
 
-	# Start with the body fully clear on the NORTH side, and finish fully clear on the SOUTH.
-	var start := Vector3(lane.get_center().x, 0.0, lane.end.y + envoy.combat_radius + 0.1)
-	var finish_z: float = lane.position.y - envoy.combat_radius - 0.1
-	sim.add_entity(PLAYER, start, envoy.move_speed, Vector3(0, 0, -1), envoy.combat_radius)
+	# THE CROSSING AXIS IS DERIVED, NOT ASSUMED. The first version always walked north-to-south
+	# and silently produced nothing when a lane was crossed east-to-west -- an instrument that
+	# only works on one floor's orientation is an instrument that will lie on the next one.
+	# Travel runs along the LONGER axis of the space the lane sits in, which is the direction the
+	# lane is a barrier across.
+	var host: Rect2 = Rect2()
+	for patch: WalkablePatch in plan.patches:
+		if patch.rect.intersection(lane).get_area() > 0.0 and patch.rect.get_area() > host.get_area():
+			host = patch.rect
+	var along_x: bool = host.size.x >= host.size.y
+	var clearance: float = envoy.combat_radius + 0.1
+	var start: Vector3
+	var direction: Vector3
+	var finish: float
+	if along_x:
+		start = Vector3(lane.end.x + clearance, 0.0, lane.get_center().y)
+		direction = Vector3(-1, 0, 0)
+		finish = lane.position.x - clearance
+	else:
+		start = Vector3(lane.get_center().x, 0.0, lane.end.y + clearance)
+		direction = Vector3(0, 0, -1)
+		finish = lane.position.y - clearance
+	sim.add_entity(PLAYER, start, envoy.move_speed, direction, envoy.combat_radius)
 	sim.register_combatant(PLAYER, envoy.max_health, envoy.family, 0, envoy.combat_radius, &"player")
-	print("   commit from %s, clear at z=%.2f  (%.1f units of travel)" % [start, finish_z, start.z - finish_z])
+	print("   host space %s -> crossing runs along %s" % [host, "x" if along_x else "z"])
+	print("   commit from %s, clear at %s=%.2f" % [start, "x" if along_x else "z", finish])
 
 	var ticks: int = 0
 	for tick in 600:
-		if sim.entities[PLAYER].z <= finish_z:
+		var here: float = sim.entities[PLAYER].x if along_x else sim.entities[PLAYER].z
+		if here <= finish:
 			ticks = tick
 			break
-		sim.tick([Command.new(sim.tick_count, PLAYER, "move", {"direction": Vector3(0, 0, -1)})] as Array[Command], DT)
+		sim.tick([Command.new(sim.tick_count, PLAYER, "move", {"direction": direction})] as Array[Command], DT)
 	if ticks == 0:
 		print("   REFUSING TO REPORT: the crossing never completed -- the walk is obstructed, so")
 		print("   this would be measuring geometry rather than cadence. Final %s" % sim.entities[PLAYER])
