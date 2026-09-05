@@ -1,129 +1,151 @@
-# Floor 2 — Final Composition Amendment (§J)
+# Floor 2 — Final Composition Amendment (§J, complete)
 
-Compact. **No coordinates moved.** Base `121ed25`, 803/803 green.
+**No coordinates moved.** Base `61e50e2`, 803/803 green. Every rect below is checked for
+separation and connectivity; nothing here is sketched.
+
+Already closed: **Vault switch — no defect** (one shared seam; the symptom was my instrument
+failing three times). **Corner snag — retired**, resolved by the layout correction.
 
 ---
 
-## 1. Two dispositions already closed
+## A. Mass dispositions
 
-**Vault switch — no defect.** The law holds by construction: `_resolve_melee_swing` consults the
-switch cone beside the breakable cone, and the projectile sweep does the same. One seam, two
-consumers. Both shipped weapons operate the real control on the real floor, now regression-pinned.
-The symptom was my instrument failing three times in the same direction; the liveness assertion
-caught it.
+The inventory split masses by **where they stand**, and that is the disposition rule:
 
-**Corner snag — retired, resolved by layout correction.** Probed on synthetic geometry so a
-general defect would have to appear away from Floor 2's coordinates. Sliding along an oblique
-face, hugging a face while rounding it, and threading a gap are all clean. The only stalls are
-bodies driven head-on into a face or pressed into a concave corner — the clamp working.
+### Remove — 2
 
-## 2. The two purposeless masses, and how I picked them
-
-Inventorying every mass by **area** and **where it stands** produced a clean split:
-
-| | Masses | Area | Where |
+| Mass | Size | Where | Why it goes |
 |---|---|---|---|
-| **Participate** | 1, 7, 8, 10 | 25–64 | **inside a space** — the Court's landmark and screening limb, the Hall's combat massing |
-| **Hide only** | 0, 2, 3, 4, 5, 9 | 42–300 | **in the void between spaces** |
+| **4** | `50 × 6` = **300** | void north of the Hall | the largest object on the floor; screens only |
+| **0** | `26 × 6` = **156** | void north of the Court | screens only |
 
-> **Every mass that participates stands inside a room. Every mass that only hides stands in the
-> gaps between rooms.** That is the themed-mass condition restated as a fact about this floor,
-> and it is why the void-dwellers read as blockers: they belong to no space, so they look placed
-> rather than built.
+Their reveal work transfers to route shape (§D), which is the priority order: topology before
+blocks.
 
-**Delete the two largest void-dwellers:**
+### Retain — with the reason each states
 
-- **Mass 4** — `50 × 6 = 300`, the largest object on the floor, north of the Hall. Hides only.
-- **Mass 0** — `26 × 6 = 156`, north of the Court. Hides only.
+| Mass | Size | Role beyond hiding |
+|---|---|---|
+| **1** | `6 × 10` | screens the Court's mouth **and** shapes its north-west corner as combat space |
+| **7** | `5 × 5` | Hall combat massing — one of the two approach lanes to the rubble |
+| **8** | `5 × 5` | Hall combat massing — the other |
+| **10** | `8 × 8` | the Court's landmark; the thing the floor's centre is *for* |
+| **2, 3, 5, 9** | 42–112 | screens only, **kept this pass** — removing six things at once makes the next replay unattributable. If they still read as blockers, they go next, and I would rather be told than guess. |
 
-Their reveal job goes to route shape (§3), per the priority order: topology before blocks.
+### Guard rail — none
 
-**Masses 2, 3, 5, 9 stay for now** — they are small, and deleting six things at once would make
-the next replay unattributable. If the human still reads them as blockers, they go next.
+No concrete edge currently wants one. New vocabulary is not a mandate to consume it.
 
-**No guard rail is proposed.** No concrete edge currently wants one, and new vocabulary is not a
-mandate to consume it.
+---
 
-## 3. Less centreline folding — and where the optional path goes
+## B. Pre-Hall room identity — **the South Lane, unblock-then-commit**
 
-Critical-path x today: `-44 → -18 → +16 → +15 → -27 → -36 → -1 → +17`. The **−27/−36 return is
-the fold that still reads as a snake.**
+**Choosing the literal reading** rather than leaving the ambiguity open: the room immediately
+before the Hall is the **South Lane**. (The West Hall keeps its quiet-connector identity — a floor
+wants a breath somewhere, and it has one.)
 
-**Proposal: shorten the westward return, and give the west to the OPTIONAL path instead.**
+**Composition:** a formation of one-hit props across the lane's **eastern** approach, before the
+spike pads.
 
-```
-  CRITICAL PATH (labelled)                     OPTIONAL
-  Landing  -44 ──► West Hall -18 ──► Court +16
-                                        │
-                                   South Lane +15
-                                        │
-                    Hall  -4  ◄─────────┘            ◄── SIDE POCKET at -40
-                      │                                   (branch-and-return)
-                  Puzzle Bay -6
-                      │
-                  Junction +12 ──► Terrace +17
-```
+**What the player reads and does:** *clear the way in, then commit to the crossing.* Two beats in
+sequence, each legible on its own — break through the formation, then read the spike phase and
+walk. The props sit **east of the pads**, deliberately, so clearing them never eats into the
+crossing window that was just tuned to 150 ticks. Choosing which part of the formation to break is
+the small decision; the hazard is the large one.
 
-- The Hall and Puzzle Bay move **east** (≈ −27 → −4, −36 → −6), so the critical path's westward
-  swing is roughly a third of what it was.
-- **The far west becomes an optional SIDE POCKET** hanging off the Hall — a branch-and-return
-  that leaves and rejoins at the same point. The region still gets used; it stops being something
-  the critical path must fold into.
+Uses only shipped vocabulary: one-hit props plus the existing pads.
 
-That answers "less serpentine" and "add a branch-and-return" with **one** change rather than two.
+---
 
-**Critical vs optional, explicitly:**
+## C. Optional side path — **the West Pocket**
 
-| Critical | Optional |
+A branch-and-return in the ground the Hall vacates when it shortens.
+
+| | |
 |---|---|
-| Landing · West Hall · Court · South Lane · Hall · Puzzle Bay · Junction · Terrace | **Vault** (east off the Court) · **Side Pocket** (west off the Hall) |
+| **Leaves** | the Hall's **west end**, through one aperture at `x[-38,-28] z[-92,-84]` |
+| **Occupies** | `(-56,-98) 20 × 18` — the far west, off the critical path entirely |
+| **Contains** | a small fight (Fang pair) and a search cluster of one-hit props |
+| **Returns** | through the same aperture it left by — a true branch-and-return, not a shortcut |
+| **Why enter** | it is plainly visible from the Hall, it is the only room on the floor that asks nothing of you, and the fight is optional |
 
-Two optional limbs, on opposite sides of the floor, neither on the forward axis.
+**Honest note, not papered over:** its payoff today is a fight and a search cluster. Like the
+Vault, it is a natural home for a reward once that vocabulary exists — and **the floor now has two
+optional limbs both awaiting the same thing.** That is a real observation about the floor's
+economy rather than a defect in the geometry, and I would rather record it than invent loot.
 
-## 4. The pre-Hall room
+---
 
-**Flagging an ambiguity rather than guessing silently:** the room immediately before the Hall is
-the **South Lane**, which already has a clear identity (the hazard, and nothing else — deliberately).
-I read "pre-Hall room" as the space that still lacks one, and take that to be the **West Hall** —
-currently a quiet connector with two vegetation props.
+## D. Critical vs optional route
 
-**Proposed identity: unblock-the-path.** A formation of one-hit props partly across its eastern
-end, so leaving it means choosing which part of the formation to clear. Smallest composition that
-gives the room a job, uses only shipped vocabulary, and needs no new mechanic.
+```
+   x=-56        -30       -4        +16        +40
+    │            │         │         │          │
+    ├ OVERLOOK ──┤                                        (NW)
+    ├ DESCENT    │
+    ├ LANDING ───┼──► WEST HALL ──────► COURT ──► VAULT   (east: the broad middle)
+    │            │                        │       ▲
+    │            │                   SOUTH LANE   └─ optional, east
+    │            │                        │
+    │  ┌─────────┴── HALL ◄───────────────┘               (one westward step)
+    │  │              │
+    ├──┤ WEST POCKET  │                                   optional, west
+    │  └──────────────┤
+    │             PUZZLE BAY
+    │                 │
+    │            [D1]─┴─[D2]
+    │                     └──► JUNCTION ──► TERRACE ──► exit   (east again)
+```
 
-**If you meant the South Lane instead, say so** — I would leave it alone, because a room whose
-identity is "one clean hazard idea" is already authored.
+**Critical:** Landing · West Hall · Court · South Lane · Hall · Puzzle Bay · Junction · Terrace
+**Optional:** **Vault** (east off the Court) · **West Pocket** (west off the Hall)
 
-## 5. Per-space composition
+### Why this stops reading as a folded snake
 
-| Space | Identity | Mobs | Props / hazards |
-|---|---|---|---|
-| Landing | first contact, open | ambient Ooze + Fang | none — the introduction stays legible |
-| **West Hall** | **unblock-the-path** | none | prop formation across the east end |
-| Court | landmark, open movement | Fang + Ooze around the landmark | landmark, two asymmetric clusters |
-| Vault *(optional)* | destination | none | empty — payoff still blocked on reward vocabulary |
-| South Lane | one hazard idea | none | two spikes, nothing else |
-| Hall | integrated encounter | Watcher behind rubble, 2 Fangs | rubble, two combat masses |
-| **Side Pocket** *(optional)* | **branch-and-return fight** | small group | one prop cluster; rejoins where it left |
-| Puzzle Bay | the switch beat | none | toggle, two doors, one search prop |
-| Junction | staged fight, two lanes | Ooze + Fang | none |
-| Terrace | arrival | none | exit plate only |
+| | Now | Proposed |
+|---|---|---|
+| Lateral reversals on the critical path | 3 | **2** |
+| Deepest westward return mid-route | **x = −36** | **x = −16** |
+| Optional limbs | 1 | **2, on opposite sides** |
+| Footprint | 112 × 172 | 112 × 172 (unchanged — this is composition, not growth) |
 
-**Three spaces carry no combat. Two carry no props.** That variation is the pacing.
+The floor stops returning to the far west on the *critical* path; the west is instead occupied by
+**optional** geometry. Regions used: north-west (entry), east (Court/Vault), centre (lane),
+west-centre (Hall/Bay), far west (Pocket, optional), east again (Junction/Terrace). **Six regions,
+one westward step.**
 
-## 6. What is not in this pass
+Separation verified: Hall/South Lane, P-West/Junction, Pocket/Hall, Bay/Hall all remain disjoint,
+so every gate and aperture keeps working.
 
-No explosive/delayed/chain-clear/respawning blocks, no reward economy, no family dressing, no
-generator. The floor has room for all of them without structural change — which is the
-extensibility clear, and it is why they are not needed to reach it.
+---
+
+## E. Per-space composition
+
+| Space | Primary purpose | Mobs | Traps | Props / obstacles |
+|---|---|---|---|---|
+| **Landing** | first contact, read the room | ambient Ooze + Fang | — | **none — deliberately empty**, the introduction stays legible |
+| **West Hall** | quiet connector, a breath | — | — | vegetation only |
+| **Court** | landmark; fight around a structure | Fang + Ooze | — | landmark mass, two asymmetric clusters, **open ground kept** |
+| **Vault** *(opt)* | destination | — | — | empty, honestly |
+| **South Lane** | **unblock, then commit** | — | two spikes | prop formation east of the pads |
+| **Hall** | integrated encounter | Watcher behind rubble, 2 Fangs | — | rubble blocker, two combat masses |
+| **West Pocket** *(opt)* | optional fight + search | Fang pair | — | search cluster |
+| **Puzzle Bay** | the switch beat | — | — | toggle, two doors, one search prop |
+| **Junction** | staged fight, two lanes | Ooze + Fang | — | **none — open ground** |
+| **Terrace** | arrival | — | — | exit plate only |
+
+**Four spaces carry no combat. Three carry no props. Two are deliberately empty.** That variation
+is the pacing, and it is why the floor should not read as uniformly decorated.
 
 ---
 
 ## Ruling wanted
 
-1. **Delete masses 4 and 0**; keep 2, 3, 5, 9 for now.
-2. **Hall + Puzzle Bay move east; Side Pocket takes the west** as a branch-and-return.
-3. **West Hall = unblock-the-path** — or tell me you meant the South Lane.
-4. **The composition table.**
+1. **Remove masses 4 and 0**; retain 1, 7, 8, 10; keep 2, 3, 5, 9 one more pass.
+2. **South Lane = unblock-then-commit** (props east of the pads).
+3. **West Pocket** as the branch-and-return, with its payoff honestly deferred.
+4. **The route reshape** — Hall shortens west, Puzzle Bay and Junction shift east.
+5. **The composition table.**
 
-On approval: author, re-measure local readability and macro reveal, full suite, then replay.
+On approval: author, re-measure local readability and macro reveal, full suite, hand over for
+replay. No generator, no new vocabulary, no structural change beyond the above.
