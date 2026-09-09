@@ -89,21 +89,30 @@ func test_newly_spread_burn_does_not_chain_within_the_same_tick() -> void:
 	assert_true(sim._status_instances.has(3), "C catches it once B becomes an eligible source on a later tick")
 
 
-func test_hit_applied_burn_can_spread_back_to_an_overlapping_source_via_contact() -> void:
-	# A hit-driven application never touches _contact_transmitted_pairs (only the
-	# contact-spread phase does) -- so if the "attacker" that just ignited a target via
-	# a weapon hit remains overlapping it, the target can spread it back once its own
-	# grace clears, since this specific pair has never transmitted via contact before.
+## LAW OVERTURNED 2026-09-08, deliberately and individually.
+##
+## This test previously asserted the OPPOSITE: that a hit-applied Burn CAN spread back to the
+## attacker who applied it, on the reasoning that the pair had never transmitted by contact before
+## so nothing forbade it. The reasoning was correct about the machinery and wrong about the game.
+##
+## It was falsified in play. Melee requires standing next to the thing you hit, so an Envoy who
+## Burned an enemy and followed up caught their own Burn within two ticks -- reproduced in
+## tools/diagnose_self_burn.gd, and a plausible contributor to an Arena death report that read
+## simply as "I die too fast". Ordinary follow-up attacks must not be self-punishing in a way the
+## weapon never communicates.
+##
+## The assertion is inverted rather than deleted, and the old expectation is written out above, so
+## that a future reader finds the ruling instead of an absence.
+func test_hit_applied_burn_does_not_spread_back_to_the_attacker_who_applied_it() -> void:
 	_register(1, Vector3.ZERO, 1.0, &"enemy")
 	_register(2, Vector3(1, 0, 0), 1.0, &"enemy")
 	sim._apply_status(2, &"burn", "hit", 1, "sword_burn_test")  # simulates 1's melee hit landing on 2
 	_tick_noop()  # grace for 2
 	var events := _tick_noop()  # 2 now eligible; 1 still overlapping and unburned
-	var applied := _events_of_kind(events, "status_applied")
-	assert_eq(applied.size(), 1)
-	assert_eq(applied[0].payload.get("target_id"), 1)
-	assert_eq(applied[0].payload.get("source_actor_id"), 2)
-	assert_eq(applied[0].payload.get("application_source"), "spread")
+	assert_eq(_events_of_kind(events, "status_applied").size(), 0,
+		"an affliction does not return to the actor that caused it")
+	assert_false(sim._status_instances.has(1), "so actor 1 is not set alight by its own weapon")
+	assert_true(sim._status_instances.has(2), "while its target keeps burning, as it should")
 
 
 # --- Allegiance ---
@@ -319,3 +328,137 @@ func test_spread_applied_status_has_no_source_weapon_id() -> void:
 	assert_eq(applied.size(), 1)
 	assert_eq(applied[0].payload.get("application_source"), "spread")
 	assert_null(applied[0].payload.get("source_weapon_id"), "source_weapon_id must be absent for spread applications")
+
+
+# --- ORIGINAL SOURCE (ruled 2026-09-08) ---------------------------------------------------------
+#
+# A STATUS DOES NOT COME HOME. Melee requires standing next to the thing you hit, so before this
+# an Envoy who Burned an enemy and followed up caught their own Burn in two ticks -- reproduced in
+# play and then in tools/diagnose_self_burn.gd. The rule forbids exactly one thing: an affliction
+# returning to the actor it came from.
+#
+# THE DEFECT WAS REPRESENTATIONAL, not a missing conditional. An instance recorded what it was and
+# how long it had left, never who caused it, so an enemy the player set alight and an enemy that
+# had always been burning were indistinguishable the moment after application. These tests pin the
+# owner surviving application, spread, chains, ticking and reporting -- because a rule about
+# ownership is only as good as the field it reads.
+
+func _ignite_by(actor_id: int, owner_id: int) -> void:
+	sim._apply_status(actor_id, &"burn", "hit", owner_id, "sword")
+
+
+func test_a_status_does_not_spread_back_to_the_actor_who_applied_it() -> void:
+	_register(1, Vector3.ZERO, 1.0, &"player")
+	_register(2, Vector3(1, 0, 0), 1.0, &"enemy")  # overlapping: melee distance
+	_ignite_by(2, 1)
+	_tick_noop()  # grace
+	var events := _tick_noop()
+	assert_eq(_events_of_kind(events, "status_applied").size(), 0,
+		"the Envoy must not catch the Burn they applied by standing where melee requires")
+	assert_false(sim._status_instances.has(1), "and must not be Burning")
+
+
+## THE CONTROL, and the reason the rule is narrow rather than an immunity: the SAME contact, the
+## same allegiances, the same distance -- only the ownership differs.
+func test_an_enemy_origin_status_still_reaches_the_player() -> void:
+	_register(1, Vector3.ZERO, 1.0, &"player")
+	_register(2, Vector3(1, 0, 0), 1.0, &"enemy")
+	_ignite_by(2, 2)  # the enemy is burning for its own reasons
+	_tick_noop()
+	var events := _tick_noop()
+	assert_eq(_events_of_kind(events, "status_applied").size(), 1,
+		"an affliction the player did not cause still spreads to them")
+	assert_true(sim._status_instances.has(1))
+
+
+func test_an_unowned_status_still_reaches_the_player() -> void:
+	_register(1, Vector3.ZERO, 1.0, &"player")
+	_register(2, Vector3(1, 0, 0), 1.0, &"enemy")
+	_ignite(2)  # no actor source at all -- environmental or seeded
+	_tick_noop()
+	_tick_noop()
+	assert_true(sim._status_instances.has(1), "unowned Burn is nobody's to come home to")
+
+
+## THE CHAIN IS THE TEST THAT MATTERS. Reassigning ownership to each carrier would make the rule
+## true for one hop and false for two -- the player would simply be burned by the long way round.
+func test_the_original_source_survives_a_two_hop_chain() -> void:
+	_register(1, Vector3.ZERO, 1.0, &"player")
+	_register(2, Vector3(1.5, 0, 0), 1.0, &"enemy")     # touches 3, not 1
+	_register(3, Vector3(3.0, 0, 0), 1.0, &"enemy")
+	# 1 <-> 2 are 1.5 apart (radii sum 2.0) so they DO touch; move the player out of reach first.
+	sim.entities[1] = Vector3(-4.0, 0.0, 0.0)
+	_ignite_by(2, 1)                                    # the player lit enemy 2
+	_tick_noop()
+	_tick_noop()                                        # 2 -> 3
+	assert_true(sim._status_instances.has(3), "precondition: the chain's second hop happened")
+	assert_eq(int(sim._status_instances[3].owner_actor_id), 1,
+		"enemy 3 carries the PLAYER as owner, not the enemy that passed it on")
+
+	# Now walk the player into contact with the far end of the chain.
+	sim.entities[1] = Vector3(2.0, 0.0, 0.0)
+	_tick_noop()
+	_tick_noop()
+	assert_false(sim._status_instances.has(1),
+		"and it still cannot come home, two carriers later")
+
+
+func test_a_hit_applied_status_records_its_attacker_as_owner() -> void:
+	_register(1, Vector3.ZERO, 1.0, &"player")
+	_register(2, Vector3(50, 0, 0), 1.0, &"enemy")
+	_ignite_by(2, 1)
+	assert_eq(int(sim._status_instances[2].owner_actor_id), 1)
+
+
+## PROVENANCE HAS TO SURVIVE TO THE DAMAGE, not merely to the application. A DoT that kills you a
+## hundred ticks after it landed is otherwise unattributable -- which is exactly the position an
+## Arena death report left us in.
+func test_the_status_tick_reports_its_original_source() -> void:
+	sim.register_status(&"burn", DAMAGE_PER_TICK, 1, DURATION)  # tick every frame
+	_register(1, Vector3.ZERO, 1.0, &"player")
+	_register(2, Vector3(50, 0, 0), 1.0, &"enemy")
+	_ignite_by(2, 1)
+	var resolved: Array = []
+	for _i in 4:
+		resolved.append_array(_events_of_kind(_tick_noop(), "status_resolved"))
+	assert_gt(resolved.size(), 0, "sanity: the DoT must actually be ticking, or this measures nothing")
+	assert_eq(int(resolved[0].payload["source_actor_id"]), 1,
+		"the tick names who caused it")
+	assert_eq(int(resolved[0].payload["actor_id"]), 2, "and who is taking it")
+
+
+## NO FABRICATED SOURCE. An affliction nobody owns reports no actor, rather than inventing one to
+## fill a column.
+func test_an_unowned_status_tick_reports_no_source_at_all() -> void:
+	sim.register_status(&"burn", DAMAGE_PER_TICK, 1, DURATION)
+	_register(2, Vector3(50, 0, 0), 1.0, &"enemy")
+	_ignite(2)
+	var resolved: Array = []
+	for _i in 4:
+		resolved.append_array(_events_of_kind(_tick_noop(), "status_resolved"))
+	assert_gt(resolved.size(), 0, "sanity: it must be ticking")
+	assert_false(resolved[0].payload.has("source_actor_id"),
+		"an unowned affliction reports no owner rather than a made-up one")
+
+
+func test_ownership_and_spread_are_deterministic() -> void:
+	var first: Array = _ownership_run()
+	before_each()
+	var second: Array = _ownership_run()
+	assert_eq(first, second, "identical state and commands must produce identical provenance")
+
+
+func _ownership_run() -> Array:
+	_register(1, Vector3.ZERO, 1.0, &"player")
+	_register(2, Vector3(1.5, 0, 0), 1.0, &"enemy")
+	_register(3, Vector3(3.0, 0, 0), 1.0, &"enemy")
+	sim.entities[1] = Vector3(-4.0, 0.0, 0.0)
+	_ignite_by(2, 1)
+	var trace: Array = []
+	for _i in 6:
+		_tick_noop()
+		for actor_id in [1, 2, 3]:
+			trace.append([actor_id,
+				sim._status_instances.has(actor_id),
+				int(sim._status_instances.get(actor_id, {}).get("owner_actor_id", -99))])
+	return trace

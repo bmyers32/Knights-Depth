@@ -4377,18 +4377,35 @@ func _decide_attack_commands(actor_id: int, selected_action_id: String, player_i
 ## (snapshotted by the caller under the autonomous-phase law) so a chain can never
 ## contain more remaining duration than its source had; still capped at the
 ## configured duration as a defensive floor/ceiling, never a fresh full copy.
-func _apply_status(target_id: int, status_id: StringName, application_source: String, source_actor_id: int, source_weapon_id: String, inherited_duration: int = -1) -> Event:
+## owner_actor_id is the ORIGINAL source of this affliction, which is NOT always the actor that
+## just applied it. On a hit the two are the same. On a contact spread they differ: the carrier
+## transmits, the owner is whoever lit the first fire. OWNER_FROM_SOURCE keeps every ordinary
+## caller reading exactly as it did.
+##
+## THE TWO ARE KEPT SEPARATE ON PURPOSE. source_actor_id still means "who applied this, now", and
+## the hit-establishes-aggro rule below still reads it -- so a player-transmitted spread still
+## wakes its target and nothing about aggro moves. Merging them would have quietly changed which
+## actor a spread aggroes, which is not what this fix is for.
+const OWNER_FROM_SOURCE: int = -2
+
+func _apply_status(target_id: int, status_id: StringName, application_source: String, source_actor_id: int, source_weapon_id: String, inherited_duration: int = -1, owner_actor_id: int = OWNER_FROM_SOURCE) -> Event:
 	var new_id: String = String(status_id)
 	var existing: Dictionary = _status_instances.get(target_id, {})
 	var can_apply: bool = existing.is_empty() or existing.id == new_id or _status_priority.get(new_id, 0) >= _status_priority.get(existing.id, 0)
 	if can_apply:
 		var config: Dictionary = _status_config[new_id]
 		var duration: int = config.duration_ticks if inherited_duration < 0 else min(inherited_duration, config.duration_ticks)
+		# THE OWNER IS PERSISTED, and that is the whole fix. Before this, an instance recorded what
+		# it was and how long it had left but never who caused it -- so the moment a status existed,
+		# the sim could no longer tell an enemy the player set alight from one that had always been
+		# burning. "Do not spread a status back to its source" was therefore not an unenforced rule,
+		# it was an unrepresentable one.
 		_status_instances[target_id] = {
 			"id": new_id,
 			"ticks_remaining": duration,
 			"next_tick": tick_count + config.tick_interval_ticks,
 			"applied_tick": tick_count,
+			"owner_actor_id": source_actor_id if owner_actor_id == OWNER_FROM_SOURCE else owner_actor_id,
 		}
 		# Hit-establishes-aggro (locked defect fix): a status APPLICATION (fresh apply
 		# or refresh) attributable to the player also activates the target's AI,
@@ -4524,7 +4541,15 @@ func _advance_contact_spread() -> Array[Event]:
 	for actor_id in _status_instances.keys():
 		var instance: Dictionary = _status_instances[actor_id]
 		if instance.applied_tick < tick_count and _health.get(actor_id, 0.0) > 0.0:
-			eligible_sources[actor_id] = {"status_id": instance.id, "remaining_duration": instance.ticks_remaining}
+			eligible_sources[actor_id] = {
+				"status_id": instance.id,
+				"remaining_duration": instance.ticks_remaining,
+				# CARRIED, NEVER REASSIGNED. A two-hop chain (player -> enemy A -> enemy B) leaves
+				# B's Burn still owned by the player, so it can never come back round to them by a
+				# longer road. Reassigning ownership to each carrier would make the rule true for
+				# one hop and false for two, which is worse than not having it.
+				"owner_actor_id": int(instance.get("owner_actor_id", -1)),
+			}
 
 	# RULED (P17 burrow): Burn CONTINUES ticking underground -- _advance_status_ticks is
 	# deliberately untouched -- but contact SPREAD does not occur, because a body that is not
@@ -4553,12 +4578,20 @@ func _advance_contact_spread() -> Array[Event]:
 				continue  # recipient already has an active status -- not "unburned"
 			if _allegiance.get(source_id, &"enemy") == &"player" and _allegiance.get(recipient_id, &"enemy") == &"player":
 				continue  # player -> player spread is explicitly rejected this session
-			collected.append({"recipient": recipient_id, "source": source_id, "status_id": eligible_sources[source_id].status_id, "remaining_duration": eligible_sources[source_id].remaining_duration, "pair_key": pair_key})
+			# A STATUS DOES NOT COME HOME (ruled 2026-09-08). Melee requires standing next to the
+			# thing you hit, so without this an Envoy who Burns an enemy and then follows up is
+			# set alight by their own weapon within two ticks -- reproduced, not theorised
+			# (tools/diagnose_self_burn.gd). This forbids exactly one thing: the affliction
+			# returning to the actor it came from. Enemy-origin Burn, environmental fire and any
+			# future authored source still reach the player untouched.
+			if int(eligible_sources[source_id].owner_actor_id) == recipient_id:
+				continue
+			collected.append({"recipient": recipient_id, "source": source_id, "status_id": eligible_sources[source_id].status_id, "remaining_duration": eligible_sources[source_id].remaining_duration, "owner_actor_id": eligible_sources[source_id].owner_actor_id, "pair_key": pair_key})
 
 	collected.sort_custom(func(x, y): return x.recipient < y.recipient if x.recipient != y.recipient else x.source < y.source)
 	for entry in collected:
 		_contact_transmitted_pairs[entry.pair_key] = true
-		events.append(_apply_status(entry.recipient, entry.status_id, "spread", entry.source, "", entry.remaining_duration))
+		events.append(_apply_status(entry.recipient, entry.status_id, "spread", entry.source, "", entry.remaining_duration, entry.owner_actor_id))
 	return events
 
 
@@ -4604,7 +4637,15 @@ func _advance_status_ticks() -> Array[Event]:
 		if entry.outcome.has("damage"):
 			var remaining_health: float = _health[actor_id] - entry.outcome.damage
 			_health[actor_id] = remaining_health
-			events.append(Event.new(tick_count, "status_resolved", {"actor_id": actor_id, "status_id": entry.status_id, "damage": entry.outcome.damage}))
+			# PROVENANCE ON THE TICK, not merely on the application. A DoT that kills you a hundred
+			# ticks after it was applied is otherwise unattributable, which is exactly the position
+			# the Arena death report left us in. Omitted entirely when nothing owns it -- an
+			# environmental or seeded affliction reports no actor rather than a fabricated one.
+			var resolved_payload: Dictionary = {"actor_id": actor_id, "status_id": entry.status_id, "damage": entry.outcome.damage}
+			var owner: int = int(instance.get("owner_actor_id", -1))
+			if owner >= 0:
+				resolved_payload["source_actor_id"] = owner
+			events.append(Event.new(tick_count, "status_resolved", resolved_payload))
 			if remaining_health <= 0.0:
 				events.append(Event.new(tick_count, "died", {"actor_id": actor_id}))
 				# Burn is the ONLY route to death underground (an absent actor cannot be hit), so

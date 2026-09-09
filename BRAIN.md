@@ -1030,3 +1030,63 @@ playtest validation.
    being absorbed. Generalizes to every future milestone gate and code freeze:
    distinguish "don't add scope" (always binding) from "don't repair the instrument"
    (never intended).
+
+12. **Spatial role is not decided by whether gameplay happens there.** A HALLWAY may hold
+   enemies, hazards, breakables and pressure and remain a hallway; what makes it one is
+   elongation and directional flow, not emptiness. A ROOM is a broader footprint the player
+   substantially occupies. Floor 2 cost three iterations to this: a trap became a "spike
+   room", the room was then widened again so a junction could meet it, and the result was a
+   chamber whose shape was argued for by its contents rather than by its spatial job.
+   **How to use it:** when a space is about to be created, ask what the player DOES there
+   spatially — travel, or occupy? Answer that before asking what it contains.
+   **Corollary:** a route decision needs no gameplay beat attached to it. A T-junction may be
+   a hallway with three mouths and nothing in it.
+
+13. **A destination owns its reveal.** Route length, bends, entrance orientation and the
+   destination's own architecture hide the next space; a fifty-unit connector made tall to
+   conceal a room is solving the room's problem in the wrong place. Established after four
+   screening masses were deleted across four passes, each one having been authored to hide
+   something rather than to do anything. **The generalisation:** when the floor is too short
+   to hide itself, the fix is floor, not walls. Length and branching are the reveal tool.
+
+14. **Connector boundary height is authored, never implied.** A TraversalConnection is not a
+   doorway; it may be a hallway. Aperture flanks were emitted as full-height wall
+   unconditionally, so every connector on a floor got the doorway treatment and read as a
+   trench. **What it does NOT license:** flat, boundary-less walkways — the correction to
+   "too tall" is "low", not "absent", and the pass that conflated those produced a floor with
+   no visible edges at all.
+
+15. **Two functions documented as complements must be tested as complements.** solid_segments()
+   and open_edge_segments() are one derivation read two ways: a boundary is a wall or it is a
+   rim, and every boundary is exactly one. They were kept in step by hand, so when connection
+   flanks learned a style, one call site got the argument and the other did not -- and every
+   rimmed connector was filtered out of BOTH sets. No wall, no lip, and a hallway whose edges
+   were simply absent. The human saw it immediately; the code could have said so first.
+   **How to use it:** any pair of functions whose docstrings claim to partition a set should
+   carry a test asserting the partition, not a comment asserting it.
+
+16. **An overlap is not a doorway.** Two patches sharing ground need no aperture, so they get
+   none, and the player is given no punctuation between one space and the next -- the "patch
+   soup" read. Floor 2's oldest instance was not in any of the rooms being iterated on: the
+   Landing and the West Hall had overlapped by 40 square units since the floor was first
+   authored, joined by that overlap and nothing else. **How to use it:** connectivity that
+   works is not the same as architecture that reads. Check for shared ground before blaming
+   the newest geometry.
+
+17. **Recording and observing are two different questions, at every layer.** The damage ledger
+   was proven to RECORD (a test drove real events through the real reporting path) and still
+   showed the human nothing, because it printed only on death and they did not die. Fixed to
+   the HUD -- and then the HUD label was 500px wide, so the readout ran off the end while a
+   test asserting "the text contains the number" passed. Two layers, same mistake.
+   **How to use it:** for any instrument built to inform a human, pin the data reaching the
+   surface AND the surface being able to show it. "The value was set" is not "the value was
+   seen".
+
+18. **A status must not come home.** Melee requires standing next to the thing you hit, so an
+   offensive status that spreads on contact returns to its own applier within two ticks unless
+   forbidden. The defect was REPRESENTATIONAL, not a missing conditional: a status instance
+   stored what it was and how long it had left, never who caused it, so an enemy the player set
+   alight and an enemy that had always been burning were indistinguishable the moment after
+   application. **The general form:** before writing a rule about provenance, check that
+   provenance is stored. An unrepresentable law is not an unenforced one.
+

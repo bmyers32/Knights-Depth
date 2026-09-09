@@ -90,10 +90,10 @@ func _init() -> void:
 			centre = _nearest_standable(bounds, patch.rect, centre)
 		stations.append([String(names.get(patch.patch_id, str(patch.patch_id))).to_lower(), centre])
 	for station in stations:
-		_report(camera, plan, names, station[0], station[1])
+		_report(camera, plan, names, station[0], station[1], bounds)
 
 
-func _report(camera: Camera3D, plan: FloorPlan, names: Dictionary, label: String, stand: Vector3) -> void:
+func _report(camera: Camera3D, plan: FloorPlan, names: Dictionary, label: String, stand: Vector3, bounds: WalkableBounds) -> void:
 	camera.position = camera._resolve_position(stand)
 	camera.rotation = Vector3(deg_to_rad(-45.0), 0.0, 0.0)
 	var size: Vector2 = Engine.get_main_loop().root.get_visible_rect().size
@@ -125,7 +125,7 @@ func _report(camera: Camera3D, plan: FloorPlan, names: Dictionary, label: String
 			foreshadowed += 1
 		lines.append("%s %.0f%% %s" % [names.get(patch.patch_id, str(patch.patch_id)), share * 100.0, verdict])
 	print("FROM %-22s  %d in view -- %d SOLVED, %d foreshadowed%s" % [
-		label, lines.size(), solved, foreshadowed, _local_readability(camera, size, stand)])
+		label, lines.size(), solved, foreshadowed, _local_readability(camera, size, stand, bounds)])
 	print("        %s" % ", ".join(lines))
 
 
@@ -178,7 +178,7 @@ func _nearest_standable(bounds: WalkableBounds, rect: Rect2, from: Vector3) -> V
 ## a good macro score must not excuse a bad local one.
 ##
 ## HIDE FUTURE RELATIONSHIPS, NOT THE GROUND UNDER THE PLAYER'S FEET.
-func _local_readability(camera: Camera3D, size: Vector2, stand: Vector3) -> String:
+func _local_readability(camera: Camera3D, size: Vector2, stand: Vector3, bounds: WalkableBounds) -> String:
 	if _occluded(camera.global_position, stand):
 		return "   *** THE ENVOY IS COVERED, by %s ***" % (
 			"REMOVABLE cover" if _covered_only_by_removable(camera.global_position, stand) else "PERMANENT architecture")
@@ -191,10 +191,17 @@ func _local_readability(camera: Camera3D, size: Vector2, stand: Vector3) -> Stri
 		for step in 12:
 			var angle: float = TAU * float(step) / 12.0
 			var point: Vector3 = stand + Vector3(cos(angle), 0.0, sin(angle)) * ring
+			# ONLY GROUND THE PLAYER COULD STAND ON IS PATH. A ring point inside a mass or a wall
+			# is not "covered path" -- it is an object, and counting it inflated the Hall to 29%
+			# purely because the Hall has cover in it. The instrument reported a floor defect that
+			# was its own sampling: the same class of error as measuring from a patch centre that
+			# sits inside solid geometry.
+			if not bounds.fits(point, 1.45):
+				continue
 			total += 1
 			if _occluded(camera.global_position, point):
 				blocked += 1
-	if blocked == 0:
+	if blocked == 0 or total == 0:
 		return ""
 	return "   LOCAL PATH %d%% covered" % int(round(float(blocked) / float(total) * 100.0))
 

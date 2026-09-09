@@ -57,7 +57,7 @@ func before_each() -> void:
 
 ## THE EXACT REPRODUCTION: stand on the raised terrace, fire, and look at where the tracer is.
 func test_a_shot_fired_on_the_raised_terrace_flies_above_it() -> void:
-	var terrace: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(L.P_TERRACE).rect
+	var terrace: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(L.P_OVERLOOK).rect
 	var stand := Vector3(terrace.get_center().x, 0.0, terrace.get_center().y)
 	arena.sim.entities[arena.envoy.actor_id] = stand
 	var surface: float = arena._floor_builder.elevation_at(stand)
@@ -88,7 +88,7 @@ func test_a_shot_fired_on_flat_ground_also_flies_above_it() -> void:
 ## THE SIM IS UNTOUCHED BY ANY OF THIS. Its projectile stays on the flat plane, because giving
 ## shots a real height would be a combat-law change wearing a presentation fix's clothes.
 func test_the_authoritative_projectile_stays_on_the_flat_plane() -> void:
-	var terrace: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(L.P_TERRACE).rect
+	var terrace: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(L.P_OVERLOOK).rect
 	arena.sim.entities[arena.envoy.actor_id] = Vector3(terrace.get_center().x, 0.0, terrace.get_center().y)
 	assert_true(_equip_a_gun(arena))
 	for projectile_id in arena.sim._projectiles:

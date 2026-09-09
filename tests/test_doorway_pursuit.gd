@@ -436,3 +436,55 @@ func test_environment_damage_still_confers_no_awareness() -> void:
 	assert_lt(sim._health[ENEMY], 500.0, "sanity: the hazard hurt it")
 	assert_ne(String(sim._ai_state.get(ENEMY, "")), "active",
 		"being hurt by the floor is not being told a fight has started")
+
+
+## AND THEN ORDINARY LAW RESUMES — the second half, kept deliberately separate from the first.
+##
+## THESE TWO WERE BRIEFLY CONFLATED and the conflation was wrong. A previous pass read "activation
+## engages" as "an active encounter may never disengage", and added an exception saying so. That
+## exception is RETIRED (ruled 2026-09-08): activation must establish real immediate engagement,
+## and nothing more. Once the ordinary predicate genuinely becomes true the actor may give up, and
+## reacquire when the player returns. Two laws, two tests, so neither can quietly absorb the other.
+func test_engagement_established_by_activation_still_obeys_the_ordinary_leash() -> void:
+	sim.register_encounter(ENCOUNTER, [SOUTH] as Array[Rect2], FloorLayers.ROLE_MANDATORY, false, true)
+	sim.add_entity(ENEMY, Vector3(-9.0, 0.0, -19.0), 4.0, Vector3(0, 0, 1), 0.85)
+	sim.register_combatant(ENEMY, 500.0, &"watcher", 0, 0.85, &"enemy")
+	sim.register_weapon(&"test_bite", 5.0, &"force", 2.0, 90.0, 0.0, 9999)
+	# Detection 1 and leash 2: the room stays its authored size and the RANGES shrink, so the
+	# predicate can be crossed by walking a few units rather than by building a bigger world.
+	sim.register_ai(ENEMY, CombatTestHelpers.single_action_repertoire(&"test_bite", 2.0, 10000),
+		Vector3(-9.0, 0.0, -19.0), 2.2, 1.9, 1.0, 2.0, 0, 0, 0.0, 0.0, 0, 0.0, 0, 0, 0, 45)
+	assert_true(sim.assign_actor_encounter(ENEMY, ENCOUNTER))
+	sim._next_fire_tick[ENEMY] = 1_000_000
+
+	sim.debug_activate_encounter(ENCOUNTER)
+	assert_eq(String(sim._ai_state.get(ENEMY, "")), "active", "activation engages it -- law one")
+
+	# Far outside the leash: the ordinary predicate is genuinely true, not merely arranged.
+	sim.entities[PLAYER] = Vector3(9.0, 0.0, -9.0)
+	sim.tick([] as Array[Command], DT)
+	assert_eq(String(sim._ai_state.get(ENEMY, "")), "idle",
+		"and ordinary separation may end that pursuit -- law two, not forbidden by law one")
+
+	# And it comes back. A disengage that could never reverse would be a different defect.
+	sim.entities[PLAYER] = Vector3(-9.0, 0.0, -19.5)
+	sim.tick([] as Array[Command], DT)
+	assert_eq(String(sim._ai_state.get(ENEMY, "")), "active",
+		"reacquiring normally when the player returns within range")
+
+
+## AND AMBIENT BEHAVES THE SAME WAY, pinned separately because ambient and activated rosters
+## reached this rule by different roads and a future change could easily move one without the
+## other.
+func test_an_ambient_roster_still_gives_up_at_its_radius_leash() -> void:
+	sim.register_encounter(ENCOUNTER, [SOUTH] as Array[Rect2], FloorLayers.ROLE_AMBIENT, false, true)
+	sim.add_entity(ENEMY, Vector3(-9.0, 0.0, -19.0), 4.0, Vector3(0, 0, 1), 0.85)
+	sim.register_combatant(ENEMY, 500.0, &"watcher", 0, 0.85, &"enemy")
+	sim.register_weapon(&"test_bite", 5.0, &"force", 2.0, 90.0, 0.0, 9999)
+	sim.register_ai(ENEMY, CombatTestHelpers.single_action_repertoire(&"test_bite", 2.0, 10000),
+		Vector3(-9.0, 0.0, -19.0), 2.2, 1.9, 1.0, 2.0, 0, 0, 0.0, 0.0, 0, 0.0, 0, 0, 0, 45)
+	assert_true(sim.assign_actor_encounter(ENEMY, ENCOUNTER))
+	sim.debug_set_ai_active(ENEMY)
+	sim.tick([] as Array[Command], DT)
+	assert_eq(String(sim._ai_state.get(ENEMY, "")), "idle",
+		"an ambient actor still drops pursuit past its leash, however it was made active")

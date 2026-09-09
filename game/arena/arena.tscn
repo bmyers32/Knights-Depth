@@ -28,7 +28,7 @@ transform = Transform3D(0.8660254, 0.38302222, -0.32139382, 0, 0.64278764, 0.766
 [node name="SeedLabel" type="Label" parent="SeedHud"]
 offset_left = 12.0
 offset_top = 8.0
-offset_right = 512.0
+offset_right = 1180.0
 offset_bottom = 34.0
 theme_override_font_sizes/font_size = 16
 text = "seed --"

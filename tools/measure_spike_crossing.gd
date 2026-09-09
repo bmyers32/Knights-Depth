@@ -27,13 +27,45 @@ func _init() -> void:
 	var db: Object = Engine.get_main_loop().root.get_node("ContentDB")
 	var envoy: Resource = db.get_resource(&"envoy", &"default")
 
-	# The hazard lane is the union of every pad that shares the crossing.
-	var lane: Rect2 = plan.spike_pads[0].rect
+	# ONE LANE PER HOST ROOM (corrected 2026-09-08). The floor now authors hazards in two
+	# different chapters, and merging every pad on it produced a single "lane" spanning 82 units
+	# of mostly void, whose crossing measured 249 ticks -- a number describing nothing that
+	# exists. The tool was reporting its own assumption that a floor has exactly one hazard.
+	# GROUPED BY CONTIGUITY, not by host room (corrected again 2026-09-08). Grouping by room was
+	# right while every hazard was a crossing, and wrong the moment the Arena authored three
+	# SEPARATE clusters inside one space -- merging those produced a single lane covering ground
+	# that is mostly safe, and then measured a crossing of it. Pads that touch are one hazard.
+	var lanes: Dictionary = {}
+	var pads_of: Dictionary = {}
+	var groups: Array = []
 	for pad: SpikePadPlan in plan.spike_pads:
-		lane = lane.merge(pad.rect)
-	print("SPIKE LANE CROSSING")
-	print("   lane %s  (%d pads merged)   envoy speed %.2f  radius %.2f" % [
-		lane, plan.spike_pads.size(), envoy.move_speed, envoy.combat_radius])
+		var merged: bool = false
+		for g in groups.size():
+			if (groups[g] as Rect2).grow(0.5).intersects(pad.rect):
+				groups[g] = (groups[g] as Rect2).merge(pad.rect)
+				merged = true
+				break
+		if not merged:
+			groups.append(pad.rect)
+	for g in groups.size():
+		lanes[g] = groups[g]
+		pads_of[g] = 0
+		for pad: SpikePadPlan in plan.spike_pads:
+			if (groups[g] as Rect2).grow(0.5).intersects(pad.rect):
+				pads_of[g] += 1
+	print("SPIKE LANE CROSSINGS -- %d hazard lane(s)" % lanes.size())
+	var lane_ids: Array = lanes.keys()
+	lane_ids.sort()
+	for lane_id: int in lane_ids:
+		_measure(plan, envoy, lane_id, lanes[lane_id], int(pads_of[lane_id]))
+	return
+
+
+func _measure(plan: FloorPlan, envoy: Resource, lane_id: int, lane: Rect2, pad_count: int) -> void:
+	print("")
+	print("HAZARD GROUP %d" % lane_id)
+	print("   lane %s  (%d pads)   envoy speed %.2f  radius %.2f" % [
+		lane, pad_count, envoy.move_speed, envoy.combat_radius])
 
 	var sim: Object = load("res://game/sim/sim_world.gd").new()
 	sim.set_damage_matrix({}, 1.5, 0.5)
@@ -88,11 +120,16 @@ func _init() -> void:
 	for slack in [0.20, 0.25]:
 		print("   with %.0f%% grace -> SAFE_TICKS must be at least %d" % [slack * 100.0, ceili(ticks * (1.0 + slack))])
 	print("")
-	print("   authored today: safe %d / active %d per pad" % [
-		plan.spike_pads[0].safe_ticks, plan.spike_pads[0].active_ticks])
 	var phases: Array = []
 	for pad: SpikePadPlan in plan.spike_pads:
+		if not lane.intersects(pad.rect):
+			continue
+		print("   authored today: safe %d / active %d per pad" % [pad.safe_ticks, pad.active_ticks])
 		phases.append(pad.phase_offset_ticks)
+		break
+	for pad: SpikePadPlan in plan.spike_pads:
+		if lane.intersects(pad.rect) and phases.size() < pad_count:
+			phases.append(pad.phase_offset_ticks)
 	print("   phase offsets: %s" % str(phases))
 	if phases.size() > 1 and phases.min() != phases.max():
 		print("   NOTE: the pads are OUT OF PHASE, so this lane is never wholly safe at once --")

@@ -353,11 +353,16 @@ func _floor_extent_of(plan: FloorPlan) -> Rect2:
 ## §1.3's visibility law, satisfied ON SCREEN rather than in stdout: a printed seed is
 ## unavailable in exactly the shipped build a playtest runs, which is the build whose floor
 ## someone will want to reproduce.
+## The seed line, kept so the damage line can be appended to it without re-deriving either.
+var _seed_provenance: String = ""
+
+
 func _update_seed_label(plan: FloorPlan) -> void:
 	# SEED HONESTY: while the layout is authored, SAY SO. A seed printed beside a fixed floor
 	# would advertise procedural variety that does not exist yet.
 	var provenance: String = "authored layout" if plan.authored_layout else "generated"
-	_seed_label.text = "seed %d · depth %d · %s · %s" % [plan.run_seed, plan.depth, plan.stratum_id, provenance]
+	_seed_provenance = "seed %d · depth %d · %s · %s" % [plan.run_seed, plan.depth, plan.stratum_id, provenance]
+	_seed_label.text = _seed_provenance
 
 
 func _physics_process(delta: float) -> void:
@@ -391,6 +396,9 @@ func _physics_process(delta: float) -> void:
 		_process_debug_burrow_trigger()
 		commands = envoy.build_commands(sim.tick_count)
 	var events: Array[Event] = sim.tick(commands, delta)
+	# ON SCREEN WHILE THEY PLAY, not only in a death report they may never trigger. Presentation
+	# only: it reads the ledger and writes a label, and touches no gameplay state.
+	_seed_label.text = _seed_provenance + "   |   " + damage_ledger.compact()
 	envoy.sync_from_sim(_grounded(sim.entities[envoy.actor_id]))
 	for actor_id: int in _enemies.keys():
 		var actor: Node3D = _enemies[actor_id]
@@ -509,8 +517,17 @@ func _despawn_tracer(projectile_id: int) -> void:
 
 ## Dev-only observability (AGENTS.md Invariable #2: every mechanic must be
 ## observable) — a real debug overlay/event log is future work (rule of two).
+## THE LEDGER LIVES ON THE REAL REPORTING PATH, not beside it. Every mechanic this project has
+## mis-diagnosed was mis-diagnosed by an observer that was not actually connected -- so it is fed
+## from inside the same loop presentation already uses, and a test drives a real hit and a real
+## status tick through this exact function to prove it.
+const _DAMAGE_LEDGER := preload("res://game/ui/damage_ledger.gd")
+var damage_ledger: RefCounted = _DAMAGE_LEDGER.new()
+
+
 func _report_events(events: Array[Event]) -> void:
 	for event in events:
+		damage_ledger.record(event, envoy.actor_id)
 		# Tracer lifecycle is handled ONCE, ahead of the match, deliberately: a shot has
 		# FIVE terminal exits (hit / blocked / shield_broken / attack_absorbed /
 		# projectile_expired) and per-arm handling would silently leak a tracer the first
@@ -535,6 +552,11 @@ func _report_events(events: Array[Event]) -> void:
 					envoy.clear_charge_ready()
 			"hit":
 				print("hit: ", event.payload)
+			"status_resolved":
+				# Printed because a DoT is the one damage source with no on-screen cause -- the
+				# thing that killed the Envoy a hundred ticks after it was applied.
+				if event.payload.get("actor_id") == envoy.actor_id:
+					print("player status tick: ", event.payload)
 			"windup_interrupted":
 				print("windup interrupted: ", event.payload)
 				# A cancelled action must stop advertising a window that no longer exists
@@ -553,6 +575,11 @@ func _report_events(events: Array[Event]) -> void:
 					# shouldn't be one — a dead actor can't be re-hit — but this keeps
 					# the overlay a one-time transition regardless) can't show it twice.
 					_envoy_alive = false
+					# THE ONE MOMENT THE ATTRIBUTION IS WANTED. "I died too fast" is untunable;
+					# this turns it into a breakdown with a cause attached.
+					print(damage_ledger.summary())
+					for row in damage_ledger.rows:
+						print("   ", damage_ledger.describe(row))
 					_failure_overlay.show_failure()
 				elif _enemies.has(actor_id):
 					_enemies[actor_id].queue_free()

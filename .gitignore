@@ -7,3 +7,10 @@
 
 # Python bytecode from scripts/ (guard.py + its adversarial tests)
 __pycache__/
+
+# REFERENCE SCREENSHOTS FROM OTHER GAMES — NEVER COMMITTED (Prime Directive 5, GAME-RULES 1.7).
+# This folder is a working scratch space for design reference the developer drops in for review.
+# Some of it is other studios' copyrighted material, and none of it may enter this repo's history
+# even untracked-by-accident: `git add -A` would otherwise take it. Design PRINCIPLES read from
+# reference are fine and are how the craft works; the FILES are not ours to carry.
+screenshots from human/

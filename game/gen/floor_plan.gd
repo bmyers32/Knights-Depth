@@ -98,10 +98,12 @@ func solid_segments() -> Array[Dictionary]:
 	var segments: Array[Dictionary] = []
 	for patch in patches:
 		_segments_of_patch(patch, rects, segments)
-	# Aperture SIDES are walls like any other: a corridor has flanks. Whether the corridor is
-	# passable is a gate question (connection state), never a static-geometry one.
+	# Aperture SIDES are boundaries like any other: a corridor has flanks. Whether the corridor is
+	# passable is a gate question (connection state), never a static-geometry one -- and HOW TALL
+	# those flanks stand is an authoring question, not a fact about corridors. A doorway through an
+	# enclosed room wants a wall; a hallway between two open spaces wants a rim.
 	for connection in connections:
-		_segments_of(connection.aperture, 0.0, rects, segments)
+		_segments_of(connection.aperture, 0.0, rects, segments, connection.flank_style)
 	# OBSTACLE FACES ARE SOLID, from the same authored rect that excludes bodies. This is the
 	# whole point: a shot stops exactly where a body would, because both read one fact. Their
 	# faces are INWARD-facing walls, so they are emitted directly rather than through the
@@ -137,8 +139,15 @@ func open_edge_segments() -> Array[Dictionary]:
 	var segments: Array[Dictionary] = []
 	for patch in patches:
 		_segments_of_patch(patch, rects, segments)
+	# THE COMPLEMENT HAS TO BE AN ACTUAL COMPLEMENT (fixed 2026-09-09). This call omitted the
+	# connection's flank style and so re-derived every aperture as `wall` -- while solid_segments()
+	# derived the same flanks as `ledge`. A rimmed connector was therefore dropped by BOTH filters:
+	# no wall from one, no lip from the other, and a hallway whose edges simply were not there.
+	#
+	# The two functions are documented as the same pass read two ways, and they were kept in step
+	# by hand until one of them was changed. There is now a test asserting they stay complements.
 	for connection in connections:
-		_segments_of(connection.aperture, 0.0, rects, segments)
+		_segments_of(connection.aperture, 0.0, rects, segments, connection.flank_style)
 	return _merge_collinear(_ledge_only(_reject_style_conflicts(segments)))
 
 
@@ -234,15 +243,15 @@ static func _segments_of_patch(patch: WalkablePatch, rects: Array[Rect2], out: A
 		_uncovered_span(rect.position.x, rect.end.x, rects, false, rect.end.y, 1.0))
 
 
-static func _segments_of(rect: Rect2, elevation: float, rects: Array[Rect2], out: Array[Dictionary]) -> void:
+static func _segments_of(rect: Rect2, elevation: float, rects: Array[Rect2], out: Array[Dictionary], style: StringName = &"wall") -> void:
 	# WEST edge: solid wherever the strip immediately west of it is not walkable.
-	_emit(out, &"x", rect.position.x, -1.0, elevation, &"wall",
+	_emit(out, &"x", rect.position.x, -1.0, elevation, style,
 		_uncovered_span(rect.position.y, rect.end.y, rects, true, rect.position.x, -1.0))
-	_emit(out, &"x", rect.end.x, 1.0, elevation, &"wall",
+	_emit(out, &"x", rect.end.x, 1.0, elevation, style,
 		_uncovered_span(rect.position.y, rect.end.y, rects, true, rect.end.x, 1.0))
-	_emit(out, &"z", rect.position.y, -1.0, elevation, &"wall",
+	_emit(out, &"z", rect.position.y, -1.0, elevation, style,
 		_uncovered_span(rect.position.x, rect.end.x, rects, false, rect.position.y, -1.0))
-	_emit(out, &"z", rect.end.y, 1.0, elevation, &"wall",
+	_emit(out, &"z", rect.end.y, 1.0, elevation, style,
 		_uncovered_span(rect.position.x, rect.end.x, rects, false, rect.end.y, 1.0))
 
 
@@ -454,6 +463,7 @@ func validate(body_radii: Dictionary = {}) -> void:
 	_reject_impassable_apertures(body_radii)
 	_reject_obstructed_controls()
 	_reject_high_durability_props()
+	_reject_props_off_floor()
 
 
 ## A connection that does not name the patches it joins cannot be checked by anything above,
@@ -623,6 +633,37 @@ func _reject_obstructed_controls() -> void:
 				push_error(("FloorPlan: hit-switch %d stands inside permanent obstacle %d. Concealment must be "
 					+ "removable; a switch buried in a column is unhittable, not hidden.")
 					% [hit_switch.switch_id, obstacle.obstacle_id])
+
+
+## AN AUTHORED GAMEPLAY PROP STANDS ON AUTHORED FLOOR (ruled 2026-09-08).
+##
+## THE CAUSE THIS GUARDS AGAINST IS DRIFT, NOT TYPOS. A prop is authored at an absolute
+## coordinate while the room it belongs to is authored as a rect; move the room and the prop
+## stays behind. Floor 2 shipped exactly that -- a breakable, targetable search prop left
+## standing in void when its bay moved east -- and nothing objected, because every other guard
+## asks whether an object is legally placed relative to OTHER objects, not whether it is
+## anywhere at all.
+##
+## Apertures count as floor: a prop in a doorway is a deliberate composition, and one of the
+## floor's route blockers lives in exactly that position. Presentation-only decoration is not a
+## BreakablePlan and is therefore out of scope by construction -- this rule is about objects the
+## player can target and destroy.
+func _reject_props_off_floor() -> void:
+	for breakable in breakables:
+		var x: float = breakable.position.x
+		var z: float = breakable.position.z
+		var on_floor: bool = false
+		for patch in patches:
+			if WalkableBounds.contains(patch.rect, x, z):
+				on_floor = true
+		for connection in connections:
+			if WalkableBounds.contains(connection.aperture, x, z):
+				on_floor = true
+		if not on_floor:
+			push_error(("FloorPlan: breakable %d stands at (%.1f, %.1f), which is on no patch and in no "
+				+ "aperture. A prop the player can target must stand on ground the player can reach -- "
+				+ "this is what a room moving out from under its own contents looks like.")
+				% [breakable.breakable_id, x, z])
 
 
 ## EVERY ENVIRONMENTAL PROP BREAKS IN ONE HIT (ruled 2026-09-04).

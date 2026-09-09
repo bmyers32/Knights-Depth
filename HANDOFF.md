@@ -1,40 +1,47 @@
 # HANDOFF
-Milestone: **2 — Procedural depths. IN PROGRESS.** First M2 gate work has landed.
+Milestone: **2 — Procedural depths. IN PROGRESS.**
 
-**M2 FLOOR GRAMMAR: PASS (Breon), CONFIRMED ON REPLAY 2026-08-29.** Hidden plate, party plate,
-exit and open ledges all pass; no-E grammar reads as natural. **Two foundations remain before
-the grammar scales: P33 obstacle navigation (recon returned, awaiting option choice) and P34
-projectile-vs-world (direction approved, questions open).** Boots clean.
+**FLOOR 2 SPATIAL / TOPOLOGY GATE: PASS (Breon, 2026-09-09).**
+> "Overall I like the floor... I am satisfied with the progress and what was generated with
+> respect to the floor plan... I think we are done iterating this floor right now."
+
+**SCOPE: spatial composition only** — topology, rooms, connectors. NOT content density, reward
+economy, hazard roster, enemy tuning, art, or procedural rules. Cleanup is allowed WITHOUT
+reopening the gate; only a regression proving the spatial plan invalid reopens it.
 Public M1 build: https://bmyers32.itch.io/knight-depths
 
 ## Where things stand
-A floor is now **a continuous, stateful traversal space whose available routes change in
-response to player actions** — four independent layers, none parenting another:
-`WalkablePatch[]` · `TraversalConnection[]` + `FloorTrigger[]` · `EncounterSite[]` ·
-`InteractablePlan[]` + `BreakablePlan[]`. **Encounter region != physical room.**
+Floor 2 is a **308 x 150 production-scale floor** — deliberately far wider than deep — built from
+four independent layers: `WalkablePatch[]` · `TraversalConnection[]` + `FloorTrigger[]` ·
+`EncounterSite[]` · `BreakablePlan[]`.
 
-One hand-authored floor implements the whole grammar:
-START → one-way commitment → hall wrapping a **void** → route **visible but blocked** →
-branch (west solves, east is inhabited) → **break the crate** → reveals a switch → opens the
-route → **PARTY BUTTON** (rear seals + forward opens + roster arrives + fight begins, one
-atomic record) → clear → ramp → raised ground → switch → endpoint.
+    COURT --north hall--> T --west--> spike hall (pads + 2 Watchers) --> OPTIONAL WEST loop
+                            +--east--> long hall, one bend --> WORKS (fight to a control
+                                       behind it) --> ARENA --> REWARD HALL + exit
 
-## Next action — CHOOSE P33's OPTION, then close P34's questions
-**P33 IS BUILT** (rub ticks 203 -> 0; arrival 321 -> 202 on the real geometry). Play the fight
-and watch whether the roster now FOLLOWS around the neck instead of grinding on the jamb.
+**THE ARENA**: party plate at dead centre, a symmetrical four-arm spike cross around it, and
+**three true waves** chained by ordinary `encounter_cleared` triggers — no wave manager was
+needed or built. The plate closes the way back and starts wave 1 in one atomic record. All
+arms and all ten spawns are on screen when their wave wakes (measured).
 
-**P34 is next**: direction and all four questions ruled; implement to the recorded rulings.
-**Procedural scaling waits on both** — bigger folded layouts would only multiply what these
-leave broken.
+## Next action — the MACRO COMPOSITION seam (Floor 2 no longer blocks it)
+The question is no longer "can we author a convincing second floor" — it is **how authored
+layouts, floor families/variants, missions, boss sequences and depth composition fit together
+without prematurely building a generic generator.**
 
-### FROZEN CRITERION (verbatim — the verdict is rendered against this exact sentence)
-> "The floor passes only if it feels like traversing and interacting with a place — seeing
-> somewhere before you can reach it, finding what opens the way — rather than moving between
-> generated arenas."
+**Procedural generation stays fenced until that seam is defined** — name the seam first.
 
-**FLAG:** sealed-encounter difficulty remains UNJUDGED, and independent of the grammar verdict
-(30 HP Envoy dies to the roster in ~40 s; sealing removes retreat). Roster size is the first
-knob. Not retuned blind — combat values are fenced and this is a human call.
+## Closed baselines from the Floor 2 arc — do not reopen without new evidence
+Weapon-agnostic controls · props one-hit · enemies immune to spike pads · shield absorbs
+environmental spike damage · 150-tick spike window (measured 99) · activation engages a roster
+immediately, ordinary disengage/reacquire resumes after · true encounter-clear wave chaining ·
+**self-Burn return-to-owner fix + persistent status provenance** · `_reject_props_off_floor` ·
+connector flank-style **complement** regression · ledger visible on HUD · projectile elevation.
+
+## Concepts introduced this arc
+Room vs connector (role, not contents) · low-rim vs walled boundary as an AUTHORED connector
+property · destination owns its reveal · overlap is not a doorway · status provenance ·
+segment-view complement. Full entries: BRAIN.md 12–18.
 
 ## Open items / live fences
 - **NUMERIC FENCE (M1, unchanged).** `close_frustration_ticks = 90` · Survey package ·
