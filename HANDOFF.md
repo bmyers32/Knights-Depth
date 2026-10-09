@@ -18,30 +18,29 @@ ordinary `encounter_cleared` triggers — no wave manager was needed or built. F
 reasoning behind every coordinate: FLOOR-AUTHORING-NOTES.md.
 
 ## P36 SLICE A — DONE (2026-10-09). Floors are CONTENT.
-`AuthoredLayout` (.tres) -> `LayoutCompiler` -> the same `FloorPlan`. The coordinate-bearing
-builders are **deleted** (reasoning preserved in FLOOR-AUTHORING-NOTES.md), so there is ONE
-authoritative representation. Records carry semantic `key`s — `target_key = &"C_VAULT"` rather
-than `target_id = 3` — and the compiler resolves them **within the referenced layer**, rejecting
-duplicates, dangling and wrong-layer references. `generate(seed, depth)` unchanged.
+`AuthoredLayout` (.tres) -> `LayoutCompiler` -> the same `FloorPlan`; the builders are
+**deleted** (reasoning in FLOOR-AUTHORING-NOTES.md). Records carry semantic `key`s, resolved
+**within the referenced layer**; keys never reach a compiled plan. `generate(seed, depth)` unchanged.
 **Deferred by rule of two:** FloorSequence/FloorFamily/role, one consumer each. **Arcade/Gate
 direction is ROADMAP P6/P37 and is NOT BUILT.**
+**The macro composition seam** (layouts, families, missions, depth composition) is unnamed;
+procedural generation stays fenced until it is. Audit: P36-MACRO-COMPOSITION-AUDIT.md.
+
+## CANONICAL SNAPSHOT — REPAIRED (2026-10-09, `69e4905`)
+`FloorPlan.to_dict()` carries every runtime field. `test_floor_plan_snapshot_coverage.gd` finds
+fields by reflection, changes ONE value at a time and requires the snapshot to change; a value
+it cannot change is reported, never skipped. **Two goldens:** depth 1 (re-recorded, additive
+only) and depth 2 (`floor_plan_golden_depth2.json`, FIRST recorded today — a baseline going
+forward, NOT proof of what Floor 2 was before). Suite: 847/847.
 
 ## Next action — in this order
-1. **Repair the canonical snapshot.** `to_dict()` omits `obstacles`, `spike_pads`,
-   `hit_switches`, `breakable.blocking_rect` and `connection.flank_style` — three whole layers
-   the golden gate does not protect. Expand coverage and re-record DELIBERATELY, because the
-   serialization widened, never because a floor changed.
-2. **Repair the vocabulary/IP guard.** A PreToolUse hook: run bare it scans nothing and exits 0,
-   and most edits arrive via Bash so it rarely fires. It substring-matches, so `navi` trips on
-   `NavigationServer`. Give /gate a real repo scan, kill false positives, prove banned content
-   is rejected.
-3. **The smallest playable M2 multi-floor expedition** — that consumer decides the minimal run
+1. **Repair the vocabulary/IP guard** (start with `/kickoff`). A PreToolUse hook: run bare it
+   scans nothing and exits 0, and most edits arrive via Bash so it rarely fires. It
+   substring-matches, so `navi` trips on `NavigationServer`. Give /gate a real repo scan, kill
+   false positives, prove banned content is rejected. **Until then /gate's IP/vocabulary item
+   can only be PARTIAL** — a manual term search of the diff is the honest stand-in.
+2. **The smallest playable M2 multi-floor expedition** — that consumer decides the minimal run
    state and whether `depth` must finally split.
-
-## The macro composition seam
-How authored layouts, families, missions, boss sequences and depth composition fit together
-**without prematurely building a generic generator**. Procedural generation stays fenced until
-that seam is named. Audit: P36-MACRO-COMPOSITION-AUDIT.md.
 
 ## Closed baselines from the Floor 2 arc — do not reopen without new evidence
 Weapon-agnostic controls · props one-hit · enemies immune to spike pads · shield absorbs
@@ -103,7 +102,7 @@ connector flank-style **complement** regression · ledger visible on HUD · proj
 ## Commands
 - Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd`
 - New `class_name`? `--headless --import` first. Boot check: `--headless --quit-after 120`.
-- Tools: `record_floor_plan_golden.gd` (re-baseline — deliberate only) ·
+- Tools: `record_floor_plan_golden.gd` (records BOTH floors; re-baseline — deliberate only) ·
   `diagnose_ooze_pursuit.gd` · `record_family_locomotion.gd` ·
   `diagnose_projectile_geometry.gd` · `measure_survey_cadence.gd`
 
@@ -117,4 +116,5 @@ placement-refuses vs displacement-clamps · overlapping rects as connectivity ·
 legality regions at one seam · camera lerp · rect-subtraction body fit · edge-triggered
 occupancy · retiring vocabulary at zero consumers · **Resource vs RefCounted for serialisable
 content** · **authored data vs compiled runtime identity** · **layer-scoped key resolution** ·
-**complement invariants between paired functions** · **PreToolUse hooks are not repo audits**.
+**complement invariants between paired functions** · **PreToolUse hooks are not repo audits** ·
+**mutation-based coverage (prove values, not names)**.

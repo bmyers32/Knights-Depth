@@ -1136,3 +1136,14 @@ playtest validation.
    comment asserting it. **Where else:** include/exclude filters, enabled/disabled queries,
    serialise/deserialise pairs.
 
+23. **A golden gate is only as wide as its serializer.** `FloorPlan.to_dict()` was hand-written
+   and nothing watched it, so three layers added after it (obstacles, spike pads, hit switches)
+   never reached the fixture — and the one recorded floor contained none of them anyway. The
+   gate stayed green through a month of Floor 2 work it could not see. **Failure if ignored:** a
+   byte-identical fixture is read as "nothing changed" when it means "nothing I serialize
+   changed"; the unprotected fields drift silently behind a passing gate. **How to use it:**
+   give every hand-written snapshot a reflection scan that changes one field at a time and
+   requires the output to change — values, not names — and record a fixture from content that
+   actually exercises each field. **Where else:** save files (M4), net snapshots (M3), any
+   canonical form compared for equality.
+
