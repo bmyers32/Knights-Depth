@@ -1,5 +1,13 @@
 class_name BreakablePlan
-extends RefCounted
+extends Resource
+## SERIALISABLE AS CONTENT (P36 Slice A). The base changed from RefCounted to Resource and the
+## authored fields gained @export, so an authored floor can live in a .tres instead of in a
+## builder function. Nothing else about this class moved: the same values, the same consumers,
+## the same meaning. Resource IS a RefCounted, so every existing holder is unaffected.
+##
+## THE COMPILER NEVER HANDS A LOADED RECORD STRAIGHT TO A FloorPlan -- it copies into a fresh
+## instance (LayoutCompiler). A .tres is cached and shared by path, and a plan that aliased it
+## would let one run's state leak into the next.
 ## WORLD INTERACTION layer: a minimal destructible prop.
 ##
 ## SCOPE FENCE, and it is a hard one. This exists ONLY to test
@@ -16,16 +24,22 @@ extends RefCounted
 ## cleanly, so props get their own registry and share only DETECTION with the melee cone and
 ## the projectile sweep.
 
-var breakable_id: int = -1
-var position: Vector3 = Vector3.ZERO
-var radius: float = 0.7
+## AUTHORING IDENTITY (P36 Slice A). A stable, human-readable name for this record, used by
+## content cross-references and by tests. **Nothing at runtime reads it** -- the sim and the
+## FloorPlan still speak in the numeric ids below, and the compiler resolves keys into those ids
+## at build time. This exists because the .tres became the authoring surface and a cross-
+## reference reading `target_id = 3` tells an author nothing about which door that is.
+@export var key: StringName = &""
+@export var breakable_id: int = -1
+@export var position: Vector3 = Vector3.ZERO
+@export var radius: float = 0.7
 ## ORDINARY PROPS BREAK IN ONE HIT (ruled 2026-09-04). Clearing scenery must not feel like
 ## fighting a low-health enemy, so the baseline is deliberately below any authored weapon damage.
 ## A prop whose ROLE needs more -- a route blocker meant to cost something -- authors its own
 ## value; this is a default, not a law that every destructible is fragile.
-var durability: float = 1.0
+@export var durability: float = 1.0
 ## interactable_id revealed on destruction, or -1 for a purely decorative prop.
-var conceals_trigger_id: int = -1
+@export var conceals_trigger_id: int = -1
 ## REMOVABLE TOPOLOGY (2026-09-03). An EMPTY rect means the prop is a target and nothing more --
 ## the original behaviour, unchanged. A real rect means it also OCCUPIES that ground until it is
 ## destroyed, and then stops.
@@ -37,4 +51,4 @@ var conceals_trigger_id: int = -1
 ## Deliberately the SAME representation an obstacle uses -- an exclusion from the walkable union
 ## -- so "solid until broken" is the obstacle law with an end date rather than a second notion of
 ## impassable.
-var blocking_rect: Rect2 = Rect2()
+@export var blocking_rect: Rect2 = Rect2()

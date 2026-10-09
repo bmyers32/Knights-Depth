@@ -293,7 +293,7 @@ func test_one_melee_swing_produces_exactly_one_transition() -> void:
 # false headline. Hence this test drives everything the way the game does.
 
 func test_every_shipped_weapon_operates_the_shipped_vault_control() -> void:
-	var layout: GDScript = load("res://game/gen/layouts/archive_roundabout.gd")
+	var L: AuthoredLayout = load("res://game/content/layouts/archive_roundabout.tres")
 	for weapon_id: StringName in [&"sword_burn_A", &"wand_A"]:
 		var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
 		arena.depth = 2
@@ -304,9 +304,9 @@ func test_every_shipped_weapon_operates_the_shipped_vault_control() -> void:
 
 		var switch_position := Vector3.ZERO
 		for hit_switch: HitSwitchPlan in DepthGenerator.generate(arena.run_seed, 2).hit_switches:
-			if hit_switch.switch_id == layout.S_VAULT:
+			if hit_switch.switch_id == L.id_for(&"S_VAULT"):
 				switch_position = hit_switch.position
-		world.debug_destroy_breakable(layout.B_VAULT_COVER)
+		world.debug_destroy_breakable(L.id_for(&"B_VAULT_COVER"))
 
 		# Equipped through the real switch_weapon Command, never by writing sim state.
 		for attempt in 4:
@@ -338,4 +338,4 @@ func test_every_shipped_weapon_operates_the_shipped_vault_control() -> void:
 		# connected to the behaviour. Zero attacks would say nothing about the switch.
 		assert_gt(attacks, 0, "sanity: %s must actually attack before this can mean anything" % weapon_id)
 		assert_true(activated, "%s must operate the Vault control -- world controls are not weapon-gated" % weapon_id)
-		assert_true(bool(world._connection_open[layout.C_VAULT]), "and the door it names must open")
+		assert_true(bool(world._connection_open[L.id_for(&"C_VAULT")]), "and the door it names must open")

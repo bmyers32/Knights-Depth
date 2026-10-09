@@ -15,7 +15,7 @@ extends GutTest
 ## a render-through-geometry flag, or any other way of making a wrong position look right.
 
 const DT := 1.0 / 30.0
-const L = preload("res://game/gen/layouts/archive_roundabout.gd")
+const L = preload("res://game/content/layouts/archive_roundabout.tres")
 
 var arena: Node3D
 
@@ -57,7 +57,7 @@ func before_each() -> void:
 
 ## THE EXACT REPRODUCTION: stand on the raised terrace, fire, and look at where the tracer is.
 func test_a_shot_fired_on_the_raised_terrace_flies_above_it() -> void:
-	var terrace: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(L.P_OVERLOOK).rect
+	var terrace: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(_id(&"P_OVERLOOK")).rect
 	var stand := Vector3(terrace.get_center().x, 0.0, terrace.get_center().y)
 	arena.sim.entities[arena.envoy.actor_id] = stand
 	var surface: float = arena._floor_builder.elevation_at(stand)
@@ -74,7 +74,7 @@ func test_a_shot_fired_on_the_raised_terrace_flies_above_it() -> void:
 ## AND ON FLAT GROUND IT IS STILL ABOVE THE FLOOR, so the fix is a consistent muzzle height
 ## rather than a special case that only rescues raised platforms.
 func test_a_shot_fired_on_flat_ground_also_flies_above_it() -> void:
-	var landing: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(L.P_LANDING).rect
+	var landing: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(_id(&"P_LANDING")).rect
 	var stand := Vector3(landing.get_center().x, 0.0, landing.get_center().y)
 	arena.sim.entities[arena.envoy.actor_id] = stand
 	assert_eq(arena._floor_builder.elevation_at(stand), 0.0, "sanity: the landing is flat")
@@ -88,7 +88,7 @@ func test_a_shot_fired_on_flat_ground_also_flies_above_it() -> void:
 ## THE SIM IS UNTOUCHED BY ANY OF THIS. Its projectile stays on the flat plane, because giving
 ## shots a real height would be a combat-law change wearing a presentation fix's clothes.
 func test_the_authoritative_projectile_stays_on_the_flat_plane() -> void:
-	var terrace: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(L.P_OVERLOOK).rect
+	var terrace: Rect2 = DepthGenerator.generate(arena.run_seed, 2).patch_by_id(_id(&"P_OVERLOOK")).rect
 	arena.sim.entities[arena.envoy.actor_id] = Vector3(terrace.get_center().x, 0.0, terrace.get_center().y)
 	assert_true(_equip_a_gun(arena))
 	for projectile_id in arena.sim._projectiles:
@@ -128,3 +128,14 @@ func test_a_shot_into_a_fold_wall_still_terminates_at_the_world() -> void:
 		if terminated:
 			break
 	assert_true(terminated, "a shot into a solid mass must stop at it, lifted tracer or not")
+
+
+## THE CONTENT ANSWERS FOR ITS OWN NAMES (P36 Slice A). These used to be constants on a builder
+## script, which only worked while the coordinates lived in code. The layout resource is the
+## authoring surface now, so the names come from it.
+func _id(key: StringName) -> int:
+	return L.id_for(key)
+
+
+func _region(key: StringName) -> Rect2:
+	return L.region_for(key)

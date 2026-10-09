@@ -10,7 +10,7 @@ extends SceneTree
 ## `surface` name and the floor builder tints by it, so "dark ground with a large red-brown room
 ## to the east" is a fact about the plan, not an impression.
 
-var L = load("res://game/gen/layouts/archive_roundabout.gd")
+var L: AuthoredLayout = load("res://game/content/layouts/archive_roundabout.tres")
 const STEP := 3.0
 const NEAR := 22.0
 
@@ -24,9 +24,9 @@ func _init() -> void:
 	var plan: FloorPlan = load("res://game/gen/depth_generator.gd").generate(0, 2)
 	var bounds: WalkableBounds = plan.make_bounds()
 	var names: Dictionary = {}
-	for constant_name in L.get_script_constant_map():
-		if String(constant_name).begins_with("P_"):
-			names[int(L.get_script_constant_map()[constant_name])] = String(constant_name).substr(2)
+	# NAMES COME FROM THE CONTENT'S OWN KEYS now that the builder scripts are gone.
+	for patch: WalkablePatch in L.patches:
+		names[patch.patch_id] = String(patch.key).trim_prefix("P_")
 
 	print("SCREENSHOT SIGNATURE MAP")
 	print("")
@@ -61,11 +61,11 @@ func _init() -> void:
 		print("")
 
 	print("   THE FORK, for comparison -- what the Court's decision point actually looks like:")
-	var court: Rect2 = plan.patch_by_id(L.P_COURT).rect
-	print("      COURT %s surface %s" % [court, plan.patch_by_id(L.P_COURT).surface])
+	var court: Rect2 = plan.patch_by_id(L.id_for(&"P_COURT")).rect
+	print("      COURT %s surface %s" % [court, plan.patch_by_id(L.id_for(&"P_COURT")).surface])
 	for connection: TraversalConnection in plan.connections:
-		if connection.patch_ids.x == L.P_COURT or connection.patch_ids.y == L.P_COURT:
-			var other_id: int = connection.patch_ids.y if connection.patch_ids.x == L.P_COURT else connection.patch_ids.x
+		if connection.patch_ids.x == L.id_for(&"P_COURT") or connection.patch_ids.y == L.id_for(&"P_COURT"):
+			var other_id: int = connection.patch_ids.y if connection.patch_ids.x == L.id_for(&"P_COURT") else connection.patch_ids.x
 			print("      way on -> %-12s aperture %s   open at load: %s" % [
 				names.get(other_id, "?"), connection.aperture, str(connection.starts_open)])
 	quit(0)

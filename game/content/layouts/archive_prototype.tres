@@ -1,0 +1,275 @@
+[gd_resource type="Resource" script_class="AuthoredLayout" format=3]
+
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="1_860t0"]
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="2_7011a"]
+[ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="3_thmg8"]
+[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="4_tuik7"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="5_j6m1e"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="6_28wr6"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="7_315sb"]
+[ext_resource type="Script" path="res://game/gen/spike_pad_plan.gd" id="8_edle4"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="9_ex0vb"]
+
+[sub_resource type="Resource" id="Resource_1qpoa"]
+script = ExtResource("1_860t0")
+key = &"B_CRATE"
+breakable_id = 0
+position = Vector3(-12, 0, -24)
+radius = 0.9
+conceals_trigger_id = 2
+
+[sub_resource type="Resource" id="Resource_32i8a"]
+script = ExtResource("2_7011a")
+key = &"C_COMMIT"
+connection_id = 0
+near_key = &"P_START"
+far_key = &"P_HALL_SOUTH"
+patch_ids = Vector2i(0, 1)
+aperture = Rect2(-2.5, -13.5, 5, 9)
+
+[sub_resource type="Resource" id="Resource_ix8sm"]
+script = ExtResource("2_7011a")
+key = &"C_TO_APPROACH"
+connection_id = 1
+near_key = &"P_HALL_NORTH"
+far_key = &"P_APPROACH"
+patch_ids = Vector2i(4, 5)
+aperture = Rect2(-2.5, -37.5, 5, 5)
+starts_open = false
+
+[sub_resource type="Resource" id="Resource_1x2w2"]
+script = ExtResource("2_7011a")
+key = &"C_TO_ARENA"
+connection_id = 2
+near_key = &"P_APPROACH"
+far_key = &"P_ARENA"
+patch_ids = Vector2i(5, 6)
+aperture = Rect2(-2.5, -49.5, 5, 9)
+starts_open = false
+
+[sub_resource type="Resource" id="Resource_a7743"]
+script = ExtResource("2_7011a")
+key = &"C_TO_RAMP"
+connection_id = 3
+near_key = &"P_ARENA"
+far_key = &"P_RAMP"
+patch_ids = Vector2i(6, 7)
+aperture = Rect2(-2.5, -71.5, 5, 5)
+starts_open = false
+
+[sub_resource type="Resource" id="Resource_65fkj"]
+script = ExtResource("2_7011a")
+key = &"C_TO_END"
+connection_id = 4
+near_key = &"P_HIGH"
+far_key = &"P_END"
+patch_ids = Vector2i(8, 9)
+aperture = Rect2(-2.5, -93.5, 5, 7)
+starts_open = false
+
+[sub_resource type="Resource" id="Resource_dtbv2"]
+script = ExtResource("3_thmg8")
+key = &"E_ARENA"
+encounter_id = 0
+regions = Array[Rect2]([Rect2(-15, -68, 30, 32)])
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(-8, 0, -60)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(9, 0, -58)
+}, {
+"enemy_key": &"watcher",
+"position": Vector3(0, 0, -63)
+}])
+
+[sub_resource type="Resource" id="Resource_rn5m0"]
+script = ExtResource("3_thmg8")
+key = &"E_PLATE_RESPONSE"
+encounter_id = 2
+regions = Array[Rect2]([Rect2(-16, -30, 8, 16), Rect2(-16, -16, 32, 4)])
+role = &"optional"
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(-12, 0, -17)
+}])
+confines_player = false
+
+[sub_resource type="Resource" id="Resource_qk372"]
+script = ExtResource("3_thmg8")
+key = &"E_EAST_AMBIENT"
+encounter_id = 1
+regions = Array[Rect2]([Rect2(8, -34, 8, 22)])
+role = &"ambient"
+roster = Array[Dictionary]([{
+"enemy_key": &"ooze",
+"position": Vector3(12, 0, -22)
+}])
+confines_player = false
+spawn_at_floor_load = true
+
+[sub_resource type="Resource" id="Resource_cyesp"]
+script = ExtResource("6_28wr6")
+key = &"P_START"
+patch_id = 0
+rect = Rect2(-7, -6, 14, 6)
+
+[sub_resource type="Resource" id="Resource_ii6tf"]
+script = ExtResource("6_28wr6")
+key = &"P_HALL_SOUTH"
+patch_id = 1
+rect = Rect2(-16, -16, 32, 4)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_pv503"]
+script = ExtResource("6_28wr6")
+key = &"P_HALL_WEST"
+patch_id = 2
+rect = Rect2(-16, -30, 8, 16)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_hgsn4"]
+script = ExtResource("6_28wr6")
+key = &"P_HALL_EAST"
+patch_id = 3
+rect = Rect2(8, -30, 8, 16)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_dq8sk"]
+script = ExtResource("6_28wr6")
+key = &"P_HALL_NORTH"
+patch_id = 4
+rect = Rect2(-16, -34, 32, 6)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_7gypj"]
+script = ExtResource("6_28wr6")
+key = &"P_APPROACH"
+patch_id = 5
+rect = Rect2(-6, -42, 12, 6)
+
+[sub_resource type="Resource" id="Resource_1t8kd"]
+script = ExtResource("6_28wr6")
+key = &"P_ARENA"
+patch_id = 6
+rect = Rect2(-15, -68, 30, 20)
+surface = &"arena"
+
+[sub_resource type="Resource" id="Resource_svrns"]
+script = ExtResource("6_28wr6")
+key = &"P_RAMP"
+patch_id = 7
+rect = Rect2(-4, -76, 8, 6)
+elevation = 1.0
+surface = &"ramp"
+
+[sub_resource type="Resource" id="Resource_00k7g"]
+script = ExtResource("6_28wr6")
+key = &"P_HIGH"
+patch_id = 8
+rect = Rect2(-12, -88, 24, 14)
+elevation = 2.0
+surface = &"high"
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_1x4tk"]
+script = ExtResource("6_28wr6")
+key = &"P_END"
+patch_id = 9
+rect = Rect2(-6, -98, 12, 6)
+elevation = 2.0
+surface = &"high"
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_1p05k"]
+script = ExtResource("9_ex0vb")
+key = &"T_COMMIT"
+trigger_id = 0
+region = Rect2(-16, -16, 32, 4)
+effects = Array[Dictionary]([{
+"kind": &"block_connection",
+"target_key": &"C_COMMIT"
+}])
+
+[sub_resource type="Resource" id="Resource_hapgs"]
+script = ExtResource("9_ex0vb")
+key = &"T_CRATE"
+trigger_id = 1
+kind = &"breakable_destroyed"
+source_key = &"B_CRATE"
+source_id = 0
+effects = Array[Dictionary]([{
+"kind": &"enable_trigger",
+"target_key": &"T_HIDDEN_PLATE"
+}])
+
+[sub_resource type="Resource" id="Resource_pql60"]
+script = ExtResource("9_ex0vb")
+key = &"T_HIDDEN_PLATE"
+trigger_id = 2
+region = Rect2(-13, -25, 2, 2)
+starts_enabled = false
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_TO_APPROACH"
+}, {
+"kind": &"activate_encounter",
+"target_key": &"E_PLATE_RESPONSE"
+}])
+
+[sub_resource type="Resource" id="Resource_jp67v"]
+script = ExtResource("9_ex0vb")
+key = &"T_PARTY_PLATE"
+trigger_id = 3
+kind = &"group_occupancy"
+region = Rect2(-2, -41, 4, 4)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"block_connection",
+"target_key": &"C_TO_APPROACH"
+}, {
+"kind": &"open_connection",
+"target_key": &"C_TO_ARENA"
+}, {
+"kind": &"activate_encounter",
+"target_key": &"E_ARENA"
+}])
+
+[sub_resource type="Resource" id="Resource_qnpx6"]
+script = ExtResource("9_ex0vb")
+key = &"T_CLEARED"
+trigger_id = 4
+kind = &"encounter_cleared"
+source_key = &"E_ARENA"
+source_id = 0
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_TO_RAMP"
+}, {
+"kind": &"open_connection",
+"target_key": &"C_TO_END"
+}])
+
+[sub_resource type="Resource" id="Resource_u0ne5"]
+script = ExtResource("9_ex0vb")
+key = &"T_EXIT_PLATE"
+trigger_id = 5
+kind = &"group_occupancy"
+region = Rect2(-2, -97, 4, 4)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"complete_floor",
+"target_id": -1
+}])
+
+[resource]
+script = ExtResource("7_315sb")
+layout_id = &"archive_prototype"
+patches = Array[ExtResource("6_28wr6")]([SubResource("Resource_cyesp"), SubResource("Resource_ii6tf"), SubResource("Resource_pv503"), SubResource("Resource_hgsn4"), SubResource("Resource_dq8sk"), SubResource("Resource_7gypj"), SubResource("Resource_1t8kd"), SubResource("Resource_svrns"), SubResource("Resource_00k7g"), SubResource("Resource_1x4tk")])
+connections = Array[ExtResource("2_7011a")]([SubResource("Resource_32i8a"), SubResource("Resource_ix8sm"), SubResource("Resource_1x2w2"), SubResource("Resource_a7743"), SubResource("Resource_65fkj")])
+triggers = Array[ExtResource("9_ex0vb")]([SubResource("Resource_1p05k"), SubResource("Resource_hapgs"), SubResource("Resource_pql60"), SubResource("Resource_jp67v"), SubResource("Resource_qnpx6"), SubResource("Resource_u0ne5")])
+encounters = Array[ExtResource("3_thmg8")]([SubResource("Resource_dtbv2"), SubResource("Resource_rn5m0"), SubResource("Resource_qk372")])
+breakables = Array[ExtResource("1_860t0")]([SubResource("Resource_1qpoa")])
+entry_point = Vector3(0, 0, -3)
+end_marker = Vector3(0, 0, -95)

@@ -11,7 +11,7 @@ extends GutTest
 ## works in its new approach direction, and that the content laws hold.
 
 const DT := 1.0 / 30.0
-const L = preload("res://game/gen/layouts/archive_roundabout.gd")
+const L = preload("res://game/content/layouts/archive_roundabout.tres")
 
 var arena: Node3D
 var sim: SimWorld
@@ -133,8 +133,8 @@ func test_the_floor_spreads_across_both_axes() -> void:
 ## genuinely reaches: the chapters occupy materially different lateral regions rather than
 ## clustering on one spine.
 func test_the_critical_path_reaches_across_the_floor_laterally() -> void:
-	var route: Array = [L.P_LANDING, L.P_WEST_HALL, L.P_COURT, L.P_SPIKE_HALL, L.P_JUNCTION,
-		L.P_EAST_HALL_A, L.P_EAST_HALL_B, L.P_WORKS, L.P_ARENA_LINK, L.P_ARENA, L.P_REWARD_HALL]
+	var route: Array = [_id(&"P_LANDING"), _id(&"P_WEST_HALL"), _id(&"P_COURT"), _id(&"P_SPIKE_HALL"), _id(&"P_JUNCTION"),
+		_id(&"P_EAST_HALL_A"), _id(&"P_EAST_HALL_B"), _id(&"P_WORKS"), _id(&"P_ARENA_LINK"), _id(&"P_ARENA"), _id(&"P_REWARD_HALL")]
 	var extent: Rect2 = plan.patches[0].rect
 	for patch: WalkablePatch in plan.patches:
 		extent = extent.merge(patch.rect)
@@ -198,7 +198,7 @@ func test_walls_belong_only_to_destinations() -> void:
 	for patch: WalkablePatch in plan.patches:
 		if patch.boundary_style == &"wall":
 			walled.append(patch.patch_id)
-	var destinations: Array = [L.P_WORKS, L.P_REWARD_HALL]
+	var destinations: Array = [_id(&"P_WORKS"), _id(&"P_REWARD_HALL")]
 	for patch_id: int in walled:
 		assert_true(destinations.has(patch_id),
 			"patch %d closed its edges without being a destination room" % patch_id)
@@ -213,15 +213,15 @@ func test_the_floor_completes_end_to_end() -> void:
 	# THE FLOOR COMPLETES WITHOUT THE WEST. That is the whole claim of this pass: the route the
 	# player already knows is now content they may take, and nothing on the critical path waits
 	# for it. No switch is hit, no puzzle is solved, no western room is entered.
-	assert_true(_open(L.C_TO_JUNCTION), "the way east is open from the fork -- nothing gates the choice")
+	assert_true(_open(_id(&"C_TO_JUNCTION")), "the way east is open from the fork -- nothing gates the choice")
 	_walk_the_east()
-	_stand_on(L.PARTY_PLATE)
-	assert_eq(_state(L.E_WAVE_1), "active", "the party commits and the first wave wakes")
+	_stand_on(_region(&"T_PARTY"))
+	assert_eq(_state(_id(&"E_WAVE_1")), "active", "the party commits and the first wave wakes")
 	_clear_the_arena()
-	assert_true(_open(L.C_ARENA_REWARD), "the final wave opens the way on")
+	assert_true(_open(_id(&"C_ARENA_REWARD")), "the final wave opens the way on")
 	assert_true(_walk_to(Vector3(230.0, 0.0, -138.0)), "east into the reward hall")
 	assert_true(_walk_to(Vector3(242.0, 0.0, -134.0)), "across it, to the exit it carries")
-	_stand_on(L.EXIT_PLATE)
+	_stand_on(_region(&"T_EXIT"))
 	assert_true(sim.debug_describe_floor()["floor_complete"], "the floor completes")
 
 
@@ -229,7 +229,7 @@ func test_the_floor_completes_end_to_end() -> void:
 ## notices on its own tick, and the trigger watching it does the rest. Nothing here reaches into
 ## wave state, because there is no wave state to reach into.
 func _clear_the_arena() -> void:
-	for encounter_id in [L.E_WAVE_1, L.E_WAVE_2, L.E_WAVE_3]:
+	for encounter_id in [_id(&"E_WAVE_1"), _id(&"E_WAVE_2"), _id(&"E_WAVE_3")]:
 		assert_eq(_state(encounter_id), "active",
 			"wave %d must be the one running now" % encounter_id)
 		_kill_roster(encounter_id)
@@ -242,9 +242,9 @@ func _kill_roster(encounter_id: int) -> void:
 
 
 func test_descending_seals_the_way_back() -> void:
-	assert_true(_open(L.C_COMMIT), "the way down starts open")
+	assert_true(_open(_id(&"C_COMMIT")), "the way down starts open")
 	assert_true(_walk_to(Vector3(-46.0, 0.0, -36.0)), "commit past the trigger")
-	assert_false(_open(L.C_COMMIT), "and it closes behind you")
+	assert_false(_open(_id(&"C_COMMIT")), "and it closes behind you")
 
 
 func test_depth_two_generation_is_deterministic() -> void:
@@ -261,14 +261,14 @@ func test_depth_two_generation_is_deterministic() -> void:
 func test_the_hall_rubble_stands_between_its_doorway_and_its_watcher() -> void:
 	var doorway: float = 0.0
 	for connection: TraversalConnection in plan.connections:
-		if connection.connection_id == L.C_TO_HALL:
+		if connection.connection_id == _id(&"C_TO_HALL"):
 			doorway = connection.aperture.get_center().x
 	var rubble: float = 0.0
 	for breakable: BreakablePlan in plan.breakables:
-		if breakable.breakable_id == L.B_HALL_RUBBLE:
+		if breakable.breakable_id == _id(&"B_HALL_RUBBLE"):
 			rubble = breakable.position.x
 	var watcher: float = 0.0
-	for spawn in plan.encounter_by_id(L.E_HALL).roster:
+	for spawn in plan.encounter_by_id(_id(&"E_HALL")).roster:
 		if spawn["enemy_key"] == &"watcher":
 			watcher = spawn["position"].x
 	assert_lt(rubble, doorway, "the rubble is west of the way in")
@@ -278,35 +278,35 @@ func test_the_hall_rubble_stands_between_its_doorway_and_its_watcher() -> void:
 ## THE STAGING BANDS FOLLOW THE APPROACH TOO. A band on the wrong side of a space fires only
 ## once its fight is already behind the player.
 func test_each_fight_wakes_when_its_space_is_entered() -> void:
-	for encounter_id in [L.E_COURT, L.E_HALL, L.E_POCKET, L.E_WORKS, L.E_SPIKE_HALL, L.E_WAVE_1, L.E_WAVE_2, L.E_WAVE_3]:
+	for encounter_id in [_id(&"E_COURT"), _id(&"E_HALL"), _id(&"E_POCKET"), _id(&"E_WORKS"), _id(&"E_SPIKE_HALL"), _id(&"E_WAVE_1"), _id(&"E_WAVE_2"), _id(&"E_WAVE_3")]:
 		assert_eq(_state(encounter_id), "dormant", "encounter %d waits" % encounter_id)
-	assert_ne(_state(L.E_LANDING), "dormant", "but the ambient landing pair are simply there")
+	assert_ne(_state(_id(&"E_LANDING")), "dormant", "but the ambient landing pair are simply there")
 
 	assert_true(_walk_to(Vector3(-46.0, 0.0, -36.0)))
 	assert_true(_walk_to(Vector3(-20.0, 0.0, -37.0)))
 	assert_true(_walk_to(Vector3(-6.0, 0.0, -42.0)))
 	assert_true(_walk_to(Vector3(-2.0, 0.0, -50.0)))
-	assert_eq(_state(L.E_COURT), "active", "the court wakes on entry")
+	assert_eq(_state(_id(&"E_COURT")), "active", "the court wakes on entry")
 	assert_eq(sim.debug_describe_floor()["active_confinement"], -1, "without sealing anyone in")
 
 
 # --- 5: THE TWO FLOOR VERBS ---------------------------------------------------------------------
 
 func test_the_toggle_swaps_both_doors_together() -> void:
-	assert_true(_open(L.C_DOOR_WEST), "state A: west open")
-	assert_false(_open(L.C_DOOR_EAST), "state A: east closed")
-	sim.debug_activate_hit_switch(L.S_ALTERNATE)
-	assert_false(_open(L.C_DOOR_WEST), "state B: west closed")
-	assert_true(_open(L.C_DOOR_EAST), "state B: east open")
-	sim.debug_activate_hit_switch(L.S_ALTERNATE)
-	assert_true(_open(L.C_DOOR_WEST), "and back to state A")
+	assert_true(_open(_id(&"C_DOOR_WEST")), "state A: west open")
+	assert_false(_open(_id(&"C_DOOR_EAST")), "state A: east closed")
+	sim.debug_activate_hit_switch(_id(&"S_ALTERNATE"))
+	assert_false(_open(_id(&"C_DOOR_WEST")), "state B: west closed")
+	assert_true(_open(_id(&"C_DOOR_EAST")), "state B: east open")
+	sim.debug_activate_hit_switch(_id(&"S_ALTERNATE"))
+	assert_true(_open(_id(&"C_DOOR_WEST")), "and back to state A")
 
 
 func test_exactly_one_way_is_open_at_a_time() -> void:
 	for flips in 5:
-		assert_ne(_open(L.C_DOOR_WEST), _open(L.C_DOOR_EAST),
+		assert_ne(_open(_id(&"C_DOOR_WEST")), _open(_id(&"C_DOOR_EAST")),
 			"exactly one way open, after %d flips" % flips)
-		sim.debug_activate_hit_switch(L.S_ALTERNATE)
+		sim.debug_activate_hit_switch(_id(&"S_ALTERNATE"))
 
 
 ## CAUSE AND EFFECT MUST BE READABLE TOGETHER. We have no vocabulary for remote causality.
@@ -325,18 +325,18 @@ func test_each_switch_stands_with_what_it_controls() -> void:
 
 
 func test_the_vault_needs_its_own_concealed_switch() -> void:
-	assert_false(_open(L.C_VAULT), "shut to begin with")
-	sim.debug_destroy_breakable(L.B_VAULT_COVER)
-	assert_false(_open(L.C_VAULT), "revealing is not pressing")
-	sim.debug_activate_hit_switch(L.S_VAULT)
-	assert_true(_open(L.C_VAULT), "and hitting it opens the door")
+	assert_false(_open(_id(&"C_VAULT")), "shut to begin with")
+	sim.debug_destroy_breakable(_id(&"B_VAULT_COVER"))
+	assert_false(_open(_id(&"C_VAULT")), "revealing is not pressing")
+	sim.debug_activate_hit_switch(_id(&"S_VAULT"))
+	assert_true(_open(_id(&"C_VAULT")), "and hitting it opens the door")
 
 
 func test_the_vault_branch_is_east_and_holds_no_manufactured_fight() -> void:
-	assert_gt(_patch(L.P_VAULT).get_center().x, _patch(L.P_COURT).get_center().x,
+	assert_gt(_patch(_id(&"P_VAULT")).get_center().x, _patch(_id(&"P_COURT")).get_center().x,
 		"the optional branch leaves the court EASTWARD, off the forward axis")
 	for encounter: EncounterSite in plan.encounters:
-		assert_ne(encounter.regions[0], _patch(L.P_VAULT), "and nothing is placed there to justify it")
+		assert_ne(encounter.regions[0], _patch(_id(&"P_VAULT")), "and nothing is placed there to justify it")
 
 
 # --- 6: CONTENT LAWS ----------------------------------------------------------------------------
@@ -362,7 +362,7 @@ func test_the_spike_lane_can_be_crossed_once_it_retracts() -> void:
 	# because a player committed to that lane can never be asked to stop halfway.
 	var offsets: Array = []
 	for pad: SpikePadPlan in plan.spike_pads:
-		if _patch(L.P_SPIKE_HALL).intersects(pad.rect):
+		if _patch(_id(&"P_SPIKE_HALL")).intersects(pad.rect):
 			offsets.append(pad.phase_offset_ticks)
 	assert_gte(offsets.size(), 2, "sanity: the crossing lane must actually have pads in it")
 	for offset: int in offsets:
@@ -378,7 +378,7 @@ func test_the_spike_lane_can_be_crossed_once_it_retracts() -> void:
 func test_the_arena_cross_alternates_between_two_phases() -> void:
 	var offsets: Array = []
 	for pad: SpikePadPlan in plan.spike_pads:
-		if _patch(L.P_ARENA).intersects(pad.rect):
+		if _patch(_id(&"P_ARENA")).intersects(pad.rect):
 			offsets.append(pad.phase_offset_ticks)
 	assert_eq(offsets.size(), 4, "the cross has four arms")
 	var distinct: Dictionary = {}
@@ -393,11 +393,11 @@ func test_the_arena_cross_alternates_between_two_phases() -> void:
 ## against the plate rather than eyeballed: a cross that is 9 out on one side and 13 on the other
 ## reads as four objects near a plate, not as one shape.
 func test_the_arena_cross_is_symmetrical_about_the_plate() -> void:
-	var centre: Vector2 = L.PARTY_PLATE.get_center()
+	var centre: Vector2 = _region(&"T_PARTY").get_center()
 	var horizontal: Array = []
 	var vertical: Array = []
 	for pad: SpikePadPlan in plan.spike_pads:
-		if not _patch(L.P_ARENA).intersects(pad.rect):
+		if not _patch(_id(&"P_ARENA")).intersects(pad.rect):
 			continue
 		var offset: Vector2 = pad.rect.get_center() - centre
 		if absf(offset.x) > absf(offset.y):
@@ -438,7 +438,7 @@ func test_every_authored_spawn_fits_and_sits_in_its_own_home() -> void:
 func test_the_hall_rubble_shapes_without_sealing() -> void:
 	var rubble: Rect2 = Rect2()
 	for breakable: BreakablePlan in plan.breakables:
-		if breakable.breakable_id == L.B_HALL_RUBBLE:
+		if breakable.breakable_id == _id(&"B_HALL_RUBBLE"):
 			rubble = breakable.blocking_rect
 	var middle: float = rubble.get_center().x
 	assert_true(sim._bounds.fits(Vector3(middle, 0.0, rubble.position.y - 2.0), 1.45),
@@ -606,7 +606,7 @@ func test_the_spike_commitment_edge_is_uncluttered() -> void:
 ## now been deleted across three passes and none replaced; this pins the spaces whose reveal is
 ## meant to come from DISTANCE rather than from something standing in front of them.
 func test_the_late_chapters_carry_no_cover_only_block() -> void:
-	for patch_id in [L.P_ARENA, L.P_REWARD_HALL, L.P_ARENA_LINK, L.P_WORKS]:
+	for patch_id in [_id(&"P_ARENA"), _id(&"P_REWARD_HALL"), _id(&"P_ARENA_LINK"), _id(&"P_WORKS")]:
 		var space: Rect2 = _patch(patch_id)
 		for obstacle: ObstaclePlan in plan.obstacles:
 			assert_false(obstacle.rect.intersects(space),
@@ -616,7 +616,7 @@ func test_the_late_chapters_carry_no_cover_only_block() -> void:
 
 ## THE COURT KEEPS ITS OPEN GROUND. A landmark to orient by, not a clutter chamber.
 func test_the_court_stays_mostly_open() -> void:
-	var court: Rect2 = _patch(L.P_COURT)
+	var court: Rect2 = _patch(_id(&"P_COURT"))
 	var occupied: float = 0.0
 	for obstacle: ObstaclePlan in plan.obstacles:
 		occupied += obstacle.rect.intersection(court).get_area()
@@ -637,7 +637,7 @@ func test_the_court_stays_mostly_open() -> void:
 func _commit_to_the_arena() -> void:
 	_walk_the_floor()
 	_walk_the_east()
-	_stand_on(L.PARTY_PLATE)
+	_stand_on(_region(&"T_PARTY"))
 
 
 ## RIGHT: the critical chapter, three authored beats before the climax. Walked in full because it
@@ -651,40 +651,40 @@ func _walk_the_east() -> void:
 	assert_true(_walk_to(Vector3(90.0, 0.0, -122.0)), "along the second")
 	assert_true(_walk_to(Vector3(114.0, 0.0, -124.0)), "and out into the works")
 	assert_true(_walk_to(Vector3(136.0, 0.0, -128.0)), "across it to its control")
-	assert_false(_open(L.C_WORKS_LINK), "whose door is shut until it is hit")
-	sim.debug_activate_hit_switch(L.S_WORKS)
-	assert_true(_open(L.C_WORKS_LINK), "and opens when it is")
+	assert_false(_open(_id(&"C_WORKS_LINK")), "whose door is shut until it is hit")
+	sim.debug_activate_hit_switch(_id(&"S_WORKS"))
+	assert_true(_open(_id(&"C_WORKS_LINK")), "and opens when it is")
 	assert_true(_walk_to(Vector3(156.0, 0.0, -136.0)), "into the link out of it")
 	assert_true(_walk_to(Vector3(178.0, 0.0, -140.0)), "and into the arena")
-	assert_eq(_state(L.E_WAVE_1), "dormant", "entering starts nothing -- the plate does that")
+	assert_eq(_state(_id(&"E_WAVE_1")), "dormant", "entering starts nothing -- the plate does that")
 	assert_true(_walk_to(Vector3(188.0, 0.0, -134.0)), "round the south arm")
 	assert_true(_walk_to(Vector3(195.0, 0.0, -130.0)), "to the middle of the room")
 
 
 func test_the_second_wave_waits_while_the_first_is_alive() -> void:
 	_commit_to_the_arena()
-	assert_eq(_state(L.E_WAVE_1), "active", "the first wave runs on entry")
-	assert_eq(_state(L.E_WAVE_2), "dormant", "and the second waits")
+	assert_eq(_state(_id(&"E_WAVE_1")), "active", "the first wave runs on entry")
+	assert_eq(_state(_id(&"E_WAVE_2")), "dormant", "and the second waits")
 	# Kill all but one, and tick well past any plausible timer: the gate on wave 2 is the last
 	# member's LIFE, never elapsed time.
-	var roster: Array = sim._encounter_roster[L.E_WAVE_1]
+	var roster: Array = sim._encounter_roster[_id(&"E_WAVE_1")]
 	for i in range(1, roster.size()):
 		sim._health[roster[i]] = 0.0
 	for _i in 120:
 		sim.tick([], DT)
-	assert_eq(_state(L.E_WAVE_1), "active", "one survivor keeps its wave running")
-	assert_eq(_state(L.E_WAVE_2), "dormant", "so the next wave has not begun")
+	assert_eq(_state(_id(&"E_WAVE_1")), "active", "one survivor keeps its wave running")
+	assert_eq(_state(_id(&"E_WAVE_2")), "dormant", "so the next wave has not begun")
 
 
 func test_the_last_death_of_a_wave_activates_the_next_exactly_once() -> void:
 	_commit_to_the_arena()
-	_kill_roster(L.E_WAVE_1)
-	assert_eq(_state(L.E_WAVE_1), "cleared", "the wave completes")
-	assert_eq(_state(L.E_WAVE_2), "active", "and the next begins")
-	var size_after_activation: int = sim._encounter_roster[L.E_WAVE_2].size()
+	_kill_roster(_id(&"E_WAVE_1"))
+	assert_eq(_state(_id(&"E_WAVE_1")), "cleared", "the wave completes")
+	assert_eq(_state(_id(&"E_WAVE_2")), "active", "and the next begins")
+	var size_after_activation: int = sim._encounter_roster[_id(&"E_WAVE_2")].size()
 	for _i in 60:
 		sim.tick([], DT)
-	assert_eq(sim._encounter_roster[L.E_WAVE_2].size(), size_after_activation,
+	assert_eq(sim._encounter_roster[_id(&"E_WAVE_2")].size(), size_after_activation,
 		"a spent trigger must not fire again and spawn the wave twice")
 
 
@@ -696,8 +696,8 @@ func test_the_last_death_of_a_wave_activates_the_next_exactly_once() -> void:
 ## So the wave system is not exempted; the ROSTERS are placed to satisfy it.
 func test_a_newly_activated_wave_is_engaged_like_any_other_encounter() -> void:
 	_commit_to_the_arena()
-	_kill_roster(L.E_WAVE_1)
-	for member_id: int in sim._encounter_roster[L.E_WAVE_2]:
+	_kill_roster(_id(&"E_WAVE_1"))
+	for member_id: int in sim._encounter_roster[_id(&"E_WAVE_2")]:
 		assert_eq(String(sim._ai_state.get(member_id, "")), "active",
 			"actor %d must be engaged the moment its wave activates" % member_id)
 
@@ -711,9 +711,9 @@ func test_a_newly_activated_wave_is_engaged_like_any_other_encounter() -> void:
 ## the middle is a small room with wasted edges, and the freedom that was won here should fail
 ## loudly if a future edit quietly gives it back.
 func test_the_waves_use_the_whole_arena() -> void:
-	var arena_rect: Rect2 = _patch(L.P_ARENA)
+	var arena_rect: Rect2 = _patch(_id(&"P_ARENA"))
 	for site: EncounterSite in plan.encounters:
-		if not [L.E_WAVE_1, L.E_WAVE_2, L.E_WAVE_3].has(site.encounter_id):
+		if not [_id(&"E_WAVE_1"), _id(&"E_WAVE_2"), _id(&"E_WAVE_3")].has(site.encounter_id):
 			continue
 		var spread: Rect2 = Rect2(Vector2(site.roster[0]["position"].x, site.roster[0]["position"].z), Vector2.ZERO)
 		for member: Dictionary in site.roster:
@@ -725,14 +725,14 @@ func test_the_waves_use_the_whole_arena() -> void:
 
 func test_the_way_on_stays_shut_until_the_final_wave_is_cleared() -> void:
 	_commit_to_the_arena()
-	assert_false(_open(L.C_ARENA_REWARD), "shut while wave 1 runs")
-	_kill_roster(L.E_WAVE_1)
-	assert_false(_open(L.C_ARENA_REWARD), "shut while wave 2 runs")
-	_kill_roster(L.E_WAVE_2)
-	assert_false(_open(L.C_ARENA_REWARD), "shut while wave 3 runs")
-	_kill_roster(L.E_WAVE_3)
-	assert_eq(_state(L.E_WAVE_3), "cleared", "the encounter completes")
-	assert_true(_open(L.C_ARENA_REWARD), "and only then does the way on open")
+	assert_false(_open(_id(&"C_ARENA_REWARD")), "shut while wave 1 runs")
+	_kill_roster(_id(&"E_WAVE_1"))
+	assert_false(_open(_id(&"C_ARENA_REWARD")), "shut while wave 2 runs")
+	_kill_roster(_id(&"E_WAVE_2"))
+	assert_false(_open(_id(&"C_ARENA_REWARD")), "shut while wave 3 runs")
+	_kill_roster(_id(&"E_WAVE_3"))
+	assert_eq(_state(_id(&"E_WAVE_3")), "cleared", "the encounter completes")
+	assert_true(_open(_id(&"C_ARENA_REWARD")), "and only then does the way on open")
 
 
 ## BOTH DOORS STAY SHUT FOR THE DURATION. The rear was closed by the commitment and the forward
@@ -740,12 +740,12 @@ func test_the_way_on_stays_shut_until_the_final_wave_is_cleared() -> void:
 ## makes it a climax rather than a corridor with enemies in it.
 func test_the_arena_seals_at_both_ends() -> void:
 	_commit_to_the_arena()
-	assert_false(_open(L.C_LINK_ARENA), "the way back closed when the party committed")
-	assert_false(_open(L.C_ARENA_REWARD), "and the way on is not open yet")
-	assert_eq(sim.debug_describe_floor()["active_confinement"], L.E_WAVE_1,
+	assert_false(_open(_id(&"C_LINK_ARENA")), "the way back closed when the party committed")
+	assert_false(_open(_id(&"C_ARENA_REWARD")), "and the way on is not open yet")
+	assert_eq(sim.debug_describe_floor()["active_confinement"], _id(&"E_WAVE_1"),
 		"the running wave holds the player in its region")
-	_kill_roster(L.E_WAVE_1)
-	assert_eq(sim.debug_describe_floor()["active_confinement"], L.E_WAVE_2,
+	_kill_roster(_id(&"E_WAVE_1"))
+	assert_eq(sim.debug_describe_floor()["active_confinement"], _id(&"E_WAVE_2"),
 		"and confinement passes to the next wave without a gap to walk out through")
 
 
@@ -761,7 +761,7 @@ func test_the_wave_progression_is_deterministic() -> void:
 func _run_the_waves() -> Array:
 	_commit_to_the_arena()
 	var progression: Array = []
-	for encounter_id in [L.E_WAVE_1, L.E_WAVE_2, L.E_WAVE_3]:
+	for encounter_id in [_id(&"E_WAVE_1"), _id(&"E_WAVE_2"), _id(&"E_WAVE_3")]:
 		progression.append([encounter_id, sim._encounter_roster[encounter_id].size()])
 		_kill_roster(encounter_id)
 		progression.append([encounter_id, _state(encounter_id), sim.tick_count])
@@ -780,10 +780,10 @@ func test_the_whole_west_is_reachable_from_the_fork_before_committing() -> void:
 	# one of them elsewhere breaks here with the reason.
 	# BOTH ARMS BELONG TO THE SAME HALLWAY, which is what makes it a T rather than two doors a
 	# room apart -- and the spike room is deliberately NOT one of them.
-	assert_true(_connection_touches(L.C_JUNCTION_WEST, L.P_JUNCTION), "the optional arm leaves the T")
-	assert_true(_connection_touches(L.C_JUNCTION_EAST, L.P_JUNCTION), "and so does the critical arm")
-	assert_true(_open(L.C_JUNCTION_WEST), "the west arm is open at the fork")
-	assert_true(_open(L.C_JUNCTION_EAST), "and so is the east")
+	assert_true(_connection_touches(_id(&"C_JUNCTION_WEST"), _id(&"P_JUNCTION")), "the optional arm leaves the T")
+	assert_true(_connection_touches(_id(&"C_JUNCTION_EAST"), _id(&"P_JUNCTION")), "and so does the critical arm")
+	assert_true(_open(_id(&"C_JUNCTION_WEST")), "the west arm is open at the fork")
+	assert_true(_open(_id(&"C_JUNCTION_EAST")), "and so is the east")
 	_walk_the_west()
 	assert_true(_walk_to(Vector3(-46.0, 0.0, -88.0)), "the pocket can be walked into")
 	assert_true(_walk_to(Vector3(-46.0, 0.0, -116.0)), "and the chapter continues into the bay")
@@ -795,8 +795,8 @@ func test_the_whole_west_is_reachable_from_the_fork_before_committing() -> void:
 func test_entering_the_arena_does_not_commit_you() -> void:
 	_walk_the_floor()
 	_walk_the_east()
-	assert_eq(_state(L.E_WAVE_1), "dormant", "nothing has started")
-	assert_true(_open(L.C_LINK_ARENA), "and the way back is still open")
+	assert_eq(_state(_id(&"E_WAVE_1")), "dormant", "nothing has started")
+	assert_true(_open(_id(&"C_LINK_ARENA")), "and the way back is still open")
 	assert_true(_walk_to(Vector3(178.0, 0.0, -140.0)), "so you can walk back out")
 	assert_true(_walk_to(Vector3(158.0, 0.0, -136.0)), "to the link")
 
@@ -804,16 +804,16 @@ func test_entering_the_arena_does_not_commit_you() -> void:
 ## THE LOOP CLOSES FROM THE FAR SIDE, which is the difference between a loop and an out-and-back:
 ## what the player gets for going all the way is that they need not come all the way back.
 func test_reaching_the_cache_opens_the_way_home() -> void:
-	assert_false(_open(L.C_RETURN), "the return door starts shut")
+	assert_false(_open(_id(&"C_RETURN")), "the return door starts shut")
 	_walk_the_floor()
 	_walk_the_west()
 	assert_true(_walk_to(Vector3(-46.0, 0.0, -88.0)), "into the pocket")
 	assert_true(_walk_to(Vector3(-46.0, 0.0, -116.0)), "into the bay")
-	sim.debug_activate_hit_switch(L.S_ALTERNATE)
+	sim.debug_activate_hit_switch(_id(&"S_ALTERNATE"))
 	assert_true(_walk_to(Vector3(-38.0, 0.0, -134.0)), "through the east door")
-	assert_false(_open(L.C_RETURN), "still shut with the cache unreached")
+	assert_false(_open(_id(&"C_RETURN")), "still shut with the cache unreached")
 	assert_true(_walk_to(Vector3(-22.0, 0.0, -126.0)), "into the cache")
-	assert_true(_open(L.C_RETURN), "reaching it opens the way home")
+	assert_true(_open(_id(&"C_RETURN")), "reaching it opens the way home")
 	assert_true(_walk_to(Vector3(-19.0, 0.0, -116.0)), "up the return run")
 	assert_true(_walk_to(Vector3(-19.0, 0.0, -96.0)), "and back into the hall")
 
@@ -823,11 +823,11 @@ func test_reaching_the_cache_opens_the_way_home() -> void:
 func test_the_commitment_starts_the_fight_and_closes_the_way_back() -> void:
 	_walk_the_floor()
 	_walk_the_east()
-	assert_true(_open(L.C_LINK_ARENA), "precondition: the way back is open on arrival")
-	assert_eq(_state(L.E_WAVE_1), "dormant", "precondition: the fight has not started")
-	_stand_on(L.PARTY_PLATE)
-	assert_eq(_state(L.E_WAVE_1), "active", "the fight begins")
-	assert_false(_open(L.C_LINK_ARENA), "and the way back closes, in the same instant")
+	assert_true(_open(_id(&"C_LINK_ARENA")), "precondition: the way back is open on arrival")
+	assert_eq(_state(_id(&"E_WAVE_1")), "dormant", "precondition: the fight has not started")
+	_stand_on(_region(&"T_PARTY"))
+	assert_eq(_state(_id(&"E_WAVE_1")), "active", "the fight begins")
+	assert_false(_open(_id(&"C_LINK_ARENA")), "and the way back closes, in the same instant")
 
 
 ## THE HALL'S CONTROL IS THE WAY ON, and the enemies are pressure on the task rather than a clear
@@ -837,7 +837,7 @@ func test_the_commitment_starts_the_fight_and_closes_the_way_back() -> void:
 func test_the_hall_is_optional_content_that_seals_nobody_in() -> void:
 	_walk_the_floor()
 	_walk_the_west()
-	assert_eq(_state(L.E_HALL), "active", "its fight runs when entered")
+	assert_eq(_state(_id(&"E_HALL")), "active", "its fight runs when entered")
 	assert_eq(sim.debug_describe_floor()["active_confinement"], -1,
 		"but it seals nobody in -- a room you chose to enter may be a room you leave")
 
@@ -853,7 +853,7 @@ func test_the_damage_ledger_records_a_real_hit_through_the_real_path() -> void:
 	sim.debug_override_health(player, 200.0)
 	var before: float = arena.damage_ledger.health_damage
 	# A genuine authored attack from a genuine enemy, resolved by the ordinary pipeline.
-	var enemy_id: int = sim._encounter_roster[L.E_LANDING][0]
+	var enemy_id: int = sim._encounter_roster[_id(&"E_LANDING")][0]
 	sim.register_weapon(&"ledger_probe", 12.0, &"force", 2.0, 90.0, 0.0, 9999)
 	var events: Array[Event] = sim._resolve_hit_on_target(
 		enemy_id, player, sim._weapons[&"ledger_probe"], Vector3(0, 0, -1), "ledger_probe")
@@ -869,7 +869,7 @@ func test_the_damage_ledger_records_a_real_hit_through_the_real_path() -> void:
 func test_the_damage_ledger_records_a_real_status_tick_with_its_owner() -> void:
 	arena.damage_ledger.reset()
 	sim.debug_override_health(player, 200.0)
-	var enemy_id: int = sim._encounter_roster[L.E_LANDING][0]
+	var enemy_id: int = sim._encounter_roster[_id(&"E_LANDING")][0]
 	# Burn owned by the ENEMY, applied to the player: the case a ledger must attribute, because a
 	# DoT is the one damage source with no on-screen cause at the moment it kills you.
 	sim._apply_status(player, &"burn", "hit", enemy_id, "test")
@@ -893,7 +893,7 @@ func test_the_damage_ledger_records_a_real_status_tick_with_its_owner() -> void:
 func test_the_damage_ledger_is_visible_on_the_debug_hud() -> void:
 	arena.damage_ledger.reset()
 	sim.debug_override_health(player, 200.0)
-	var enemy_id: int = sim._encounter_roster[L.E_LANDING][0]
+	var enemy_id: int = sim._encounter_roster[_id(&"E_LANDING")][0]
 	sim.register_weapon(&"hud_probe", 17.0, &"force", 2.0, 90.0, 0.0, 9999)
 	arena._report_events(sim._resolve_hit_on_target(
 		enemy_id, player, sim._weapons[&"hud_probe"], Vector3(0, 0, -1), "hud_probe"))
@@ -931,8 +931,8 @@ func test_the_damage_ledger_is_visible_on_the_debug_hud() -> void:
 ## that shuts is walled. Occlusion may happen along a connector; it is never its job, and a
 ## destination owns its own reveal.
 func test_the_critical_route_is_rimmed_rather_than_walled() -> void:
-	var rimmed: Array = [L.C_TO_JUNCTION, L.C_JUNCTION_WEST, L.C_JUNCTION_EAST,
-		L.C_EAST_HALL_BEND, L.C_HALL_WORKS, L.C_LINK_ARENA, L.C_TO_LANE, L.C_TO_HALL]
+	var rimmed: Array = [_id(&"C_TO_JUNCTION"), _id(&"C_JUNCTION_WEST"), _id(&"C_JUNCTION_EAST"),
+		_id(&"C_EAST_HALL_BEND"), _id(&"C_HALL_WORKS"), _id(&"C_LINK_ARENA"), _id(&"C_TO_LANE"), _id(&"C_TO_HALL")]
 	for connection: TraversalConnection in plan.connections:
 		if not rimmed.has(connection.connection_id):
 			continue
@@ -1026,3 +1026,14 @@ func test_no_two_rooms_share_ground() -> void:
 			assert_eq(a.rect.intersection(b.rect).get_area(), 0.0,
 				"patches %d and %d share ground; a doorway is architecture, an overlap is an accident"
 					% [a.patch_id, b.patch_id])
+
+
+## THE CONTENT ANSWERS FOR ITS OWN NAMES (P36 Slice A). These used to be constants on a builder
+## script, which only worked while the coordinates lived in code. The layout resource is the
+## authoring surface now, so the names come from it.
+func _id(key: StringName) -> int:
+	return L.id_for(key)
+
+
+func _region(key: StringName) -> Rect2:
+	return L.region_for(key)

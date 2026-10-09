@@ -15,6 +15,9 @@ extends RefCounted
 
 const _SLICE_STRATUM: StringName = &"archive"
 
+const _LAYOUT_PROTOTYPE: String = "res://game/content/layouts/archive_prototype.tres"
+const _LAYOUT_ROUNDABOUT: String = "res://game/content/layouts/archive_roundabout.tres"
+
 ## 64-bit odd constants (PCG's multiplier and increment). Chosen over String.hash() on purpose:
 ## hash() is stable within an engine version but NOT guaranteed across them, and GAME-RULES §5's
 ## golden-seed gate has to survive a Godot patch bump. GDScript ints are int64 and multiplication
@@ -34,10 +37,13 @@ static func generate(seed: int, depth: int) -> FloorPlan:
 	# TWO AUTHORED FLOORS, selected by DEPTH. Not a layout framework -- a two-entry decision, per
 	# §1.4: copy twice before abstracting. When procedural assembly returns it replaces this body,
 	# not the signature.
-	if depth >= 2:
-		ArchiveRoundaboutLayout.build(plan)
-	else:
-		ArchivePrototypeLayout.build(plan)
+	#
+	# THE FLOORS ARE CONTENT NOW (P36 Slice A). They were builder functions; they are .tres. The
+	# selection is still two entries and still an `if`, because selecting between two things is
+	# not a framework -- only the authored VALUES moved, which is what a representation migration
+	# means. The compiler copies rather than aliases: a loaded resource is shared by path, and a
+	# plan that pointed at it would let one run's state reach the next.
+	LayoutCompiler.compile(load(_LAYOUT_ROUNDABOUT if depth >= 2 else _LAYOUT_PROTOTYPE), plan)
 	# STRUCTURAL VALIDATION RUNS ON EVERY PLAN, whoever produced it. Placed here rather than in
 	# each layout so a future procedural producer inherits the guards without being asked to
 	# remember them. Detection only -- a plan is never silently repaired.

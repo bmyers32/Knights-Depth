@@ -11,25 +11,38 @@ reopening the gate; only a regression proving the spatial plan invalid reopens i
 Public M1 build: https://bmyers32.itch.io/knight-depths
 
 ## Where things stand
-Floor 2 is a **308 x 150 production-scale floor** — deliberately far wider than deep — built from
-four independent layers: `WalkablePatch[]` · `TraversalConnection[]` + `FloorTrigger[]` ·
-`EncounterSite[]` · `BreakablePlan[]`.
+Floor 2 is a **308 x 150 production-scale floor**, far wider than deep, in four independent
+layers. Court --north hall--> T --west--> spike hall (pads + 2 Watchers) --> optional west loop;
+--east--> long hall, one bend --> Works --> **Arena** --> Reward Hall + exit. The Arena holds a
+centred party plate, a symmetrical four-arm spike cross, and **three true waves** chained by
+ordinary `encounter_cleared` triggers — no wave manager was needed or built. Full shape and the
+reasoning behind every coordinate: FLOOR-AUTHORING-NOTES.md.
 
-    COURT --north hall--> T --west--> spike hall (pads + 2 Watchers) --> OPTIONAL WEST loop
-                            +--east--> long hall, one bend --> WORKS (fight to a control
-                                       behind it) --> ARENA --> REWARD HALL + exit
+## P36 SLICE A — DONE (2026-10-09). Floors are CONTENT.
+`AuthoredLayout` (.tres) -> `LayoutCompiler` -> the same `FloorPlan`. The coordinate-bearing
+builders are **deleted** (reasoning preserved in FLOOR-AUTHORING-NOTES.md), so there is ONE
+authoritative representation. Records carry semantic `key`s — `target_key = &"C_VAULT"` rather
+than `target_id = 3` — and the compiler resolves them **within the referenced layer**, rejecting
+duplicates, dangling and wrong-layer references. `generate(seed, depth)` unchanged.
+**Deferred by rule of two:** FloorSequence/FloorFamily/role, one consumer each. **Arcade/Gate
+direction is ROADMAP P6/P37 and is NOT BUILT.**
 
-**THE ARENA**: party plate at dead centre, a symmetrical four-arm spike cross around it, and
-**three true waves** chained by ordinary `encounter_cleared` triggers — no wave manager was
-needed or built. The plate closes the way back and starts wave 1 in one atomic record. All
-arms and all ten spawns are on screen when their wave wakes (measured).
+## Next action — in this order
+1. **Repair the canonical snapshot.** `to_dict()` omits `obstacles`, `spike_pads`,
+   `hit_switches`, `breakable.blocking_rect` and `connection.flank_style` — three whole layers
+   the golden gate does not protect. Expand coverage and re-record DELIBERATELY, because the
+   serialization widened, never because a floor changed.
+2. **Repair the vocabulary/IP guard.** It is a PreToolUse hook: run bare it scans nothing and
+   exits 0, and most edits here arrive via Bash so it rarely fires at all. It also substring-
+   matches, so `navi` trips on `NavigationServer` and `navigation`. Give /gate a real repository
+   scan, kill the false positives, and prove genuinely banned content is rejected.
+3. **The smallest playable M2 multi-floor expedition** — that consumer decides the minimal run
+   state and whether `depth` must finally split.
 
-## Next action — the MACRO COMPOSITION seam (Floor 2 no longer blocks it)
-The question is no longer "can we author a convincing second floor" — it is **how authored
-layouts, floor families/variants, missions, boss sequences and depth composition fit together
-without prematurely building a generic generator.**
-
-**Procedural generation stays fenced until that seam is defined** — name the seam first.
+## The macro composition seam
+How authored layouts, families, missions, boss sequences and depth composition fit together
+**without prematurely building a generic generator**. Procedural generation stays fenced until
+that seam is named. Audit: P36-MACRO-COMPOSITION-AUDIT.md.
 
 ## Closed baselines from the Floor 2 arc — do not reopen without new evidence
 Weapon-agnostic controls · props one-hit · enemies immune to spike pads · shield absorbs
@@ -38,44 +51,31 @@ immediately, ordinary disengage/reacquire resumes after · true encounter-clear 
 **self-Burn return-to-owner fix + persistent status provenance** · `_reject_props_off_floor` ·
 connector flank-style **complement** regression · ledger visible on HUD · projectile elevation.
 
-## Concepts introduced this arc
-Room vs connector (role, not contents) · low-rim vs walled boundary as an AUTHORED connector
-property · destination owns its reveal · overlap is not a doorway · status provenance ·
-segment-view complement. Full entries: BRAIN.md 12–18.
-
 ## Open items / live fences
 - **NUMERIC FENCE (M1, unchanged).** `close_frustration_ticks = 90` · Survey package ·
   `engagement_delay_ticks = 10` · wand `flinch_capability = none` · all M1 HP/flinch values ·
   `vulnerable_start_tick` explicitly FROZEN.
 - **SEED HONESTY.** `generate(seed, depth)` resolves an AUTHORED layout: seeds do NOT vary
-  geometry, the plan says `authored_layout`, the HUD prints it, a test pins it. When procedural
-  assembly returns, that notice comes off with it.
-- **NO `interact` VERB EXISTS** (switch/InteractablePlan/TRIGGER_INTERACTED/E binding retired).
-  **AMENDED SCOPE:** this says *no active consumer uses it*, NOT that deliberate interaction is
-  rejected. Gear stations, elevators and rest-floor controls may legitimately need it. Restore
-  only the narrow surface a concrete consumer requires — never the schema wholesale.
-- **AMBIENT TERRITORIES MUST BE CONVEX** (union == its bounding box). Straight-line AI has no
-  obstacle routing; wrapping a void makes pursuit scrape (80/80 contact ticks lost for 0.9u).
-  Guarded by test; the guard was proved to fail. Navigation = P33, when a floor needs it.
+  geometry; the plan says `authored_layout`, the HUD prints it, a test pins it.
+- **NO `interact` VERB EXISTS** — *no active consumer uses it*, NOT that interaction is rejected.
+  Gear stations, elevators and rest-floor controls may need it: restore only the narrow surface a
+  concrete consumer requires, never the schema wholesale.
+- **AMBIENT TERRITORIES MUST BE CONVEX** (union == bounding box). Straight-line AI has no
+  obstacle routing; wrapping a void makes pursuit scrape. Guarded by a test proved to fail.
 - **ALL_ACTIVE_ENVOYS_OCCUPY_REGION** is ONE condition with TWO consumers (party plate, floor
   exit). Never grow a second copy of the occupancy math.
-- **BODY-AWARE LEGALITY (2026-08-29).** `fits(point, radius)` tests the body against the
-  walkable UNION. NEVER reimplement it as a per-rect shrink — a body in a doorway fits neither
-  rect alone, and two tests in `test_body_bounds.gd` exist to catch exactly that.
+- **BODY-AWARE LEGALITY.** `fits(point, radius)` tests the body against the walkable UNION.
+  Never reimplement as a per-rect shrink — a body in a doorway fits neither rect alone.
 - **Occupancy != legality.** Triggers use the anchor + `WalkableBounds.contains` (INCLUSIVE);
   bounds use `fits`. Never merge them.
 - **Aperture overlap MUST stay > 0.** Abutting rects share zero area — every threshold becomes
   a discontinuity and the gate/snap problem returns.
-- **`ArchivePrototypeLayout` is data-as-code**; becomes a resource at the SECOND floor.
-- **THROWABLE DEFERRED** with its puzzle. Law banked: *if progression requires a capability,
-  the floor must guarantee access to it.*
-- **Breakables are NOT combatants** and must never become them (`test_breakable_props.gd`).
-  Projectiles TERMINATE on props; penetration would have to be authored deliberately.
-- **PROJECTILE-VS-WORLD: P34 design RETURNED, awaiting review.** Shots still pass through
-  walls today; on this floor the crate is reachable from across the void. No code written.
-- **Still out:** procedural assembly · branching topology · minimap · elevator · drop economy ·
-  treasure/shop taxonomy · vertical combat · polish · **P20 actor-vs-actor body-blocking**.
-  **ROADMAP prune DUE at M2 close.**
+- **THROWABLE DEFERRED.** Law banked: *if progression requires a capability, the floor must
+  guarantee access to it.*
+- **Breakables are NOT combatants** (`test_breakable_props.gd`). Projectiles TERMINATE on props.
+- **P34 PROJECTILE-VS-WORLD: design returned, awaiting review.** Shots still pass through walls.
+- **Still out:** procedural assembly · minimap · elevator · drop economy · treasure/shop
+  taxonomy · vertical combat · **P20 body-blocking**. **ROADMAP prune DUE at M2 close.**
 - Carried from M1: three §3 rules want a human edit · **P14** title · P16 BUMP (P20) · 5.10.
 
 ## Traps this repo has actually sprung (read before touching these areas)

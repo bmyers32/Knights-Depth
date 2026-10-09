@@ -1,5 +1,13 @@
 class_name EncounterSite
-extends RefCounted
+extends Resource
+## SERIALISABLE AS CONTENT (P36 Slice A). The base changed from RefCounted to Resource and the
+## authored fields gained @export, so an authored floor can live in a .tres instead of in a
+## builder function. Nothing else about this class moved: the same values, the same consumers,
+## the same meaning. Resource IS a RefCounted, so every existing holder is unaffected.
+##
+## THE COMPILER NEVER HANDS A LOADED RECORD STRAIGHT TO A FloorPlan -- it copies into a fresh
+## instance (LayoutCompiler). A .tres is cached and shared by path, and a plan that aliased it
+## would let one run's state leak into the next.
 ## ENCOUNTER layer. An ENCOUNTER REGION IS NOT A PHYSICAL ROOM -- that conflation is precisely
 ## what the multi-room slice falsified. A site is a region plus a roster plus a role, and it
 ## may sit anywhere in a continuous space.
@@ -21,13 +29,19 @@ extends RefCounted
 ##            false: enemies engage naturally as the player passes through, with no activation
 ##            ceremony and no arena lock.
 
-var encounter_id: int = -1
-var regions: Array[Rect2] = []
-var role: StringName = FloorLayers.ROLE_MANDATORY
+## AUTHORING IDENTITY (P36 Slice A). A stable, human-readable name for this record, used by
+## content cross-references and by tests. **Nothing at runtime reads it** -- the sim and the
+## FloorPlan still speak in the numeric ids below, and the compiler resolves keys into those ids
+## at build time. This exists because the .tres became the authoring surface and a cross-
+## reference reading `target_id = 3` tells an author nothing about which door that is.
+@export var key: StringName = &""
+@export var encounter_id: int = -1
+@export var regions: Array[Rect2] = []
+@export var role: StringName = FloorLayers.ROLE_MANDATORY
 ## [{"enemy_key": StringName, "position": Vector3}] -- room-local in the old model, site-local
 ## now. Every actor here is owned by this site for its whole life.
-var roster: Array[Dictionary] = []
-var confines_player: bool = true
+@export var roster: Array[Dictionary] = []
+@export var confines_player: bool = true
 ## AMBIENT rosters exist from floor load; triggered rosters materialise on activation, which is
 ## what makes a party button feel like it summoned something.
-var spawn_at_floor_load: bool = false
+@export var spawn_at_floor_load: bool = false

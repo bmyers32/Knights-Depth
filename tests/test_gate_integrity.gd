@@ -136,9 +136,9 @@ func test_floor_two_gated_branch_cannot_be_entered_without_its_control() -> void
 	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
 	arena.depth = 2
 	add_child_autofree(arena)
-	var L: GDScript = load("res://game/gen/layouts/archive_roundabout.gd")
+	var L: AuthoredLayout = load("res://game/content/layouts/archive_roundabout.tres")
 	var plan: FloorPlan = DepthGenerator.generate(arena.run_seed, 2)
-	var vault: Rect2 = plan.patch_by_id(L.P_VAULT).rect
+	var vault: Rect2 = plan.patch_by_id(L.id_for(&"P_VAULT")).rect
 	var envoy_id: int = arena.envoy.actor_id
 	arena.sim.debug_override_health(envoy_id, 100000.0)
 
@@ -152,7 +152,7 @@ func test_floor_two_gated_branch_cannot_be_entered_without_its_control() -> void
 		if direction.length() < 0.3:
 			break
 		arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "move", {"direction": direction.normalized()})] as Array[Command], 1.0 / 30.0)
-	assert_false(bool(arena.sim._connection_open[L.C_VAULT]), "and the door was shut the whole time")
+	assert_false(bool(arena.sim._connection_open[L.id_for(&"C_VAULT")]), "and the door was shut the whole time")
 
 
 # --- 5: THE BARRIER MUST LIE ACROSS TRAVEL -----------------------------------------------------

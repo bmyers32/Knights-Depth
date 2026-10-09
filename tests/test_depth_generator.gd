@@ -1,4 +1,6 @@
 extends GutTest
+
+const PROTOTYPE := preload("res://game/content/layouts/archive_prototype.tres")
 ## The authored prototype floor, checked as DATA: determinism, connectivity, and the grammar
 ## requirements the slice was specified against.
 ##
@@ -131,7 +133,7 @@ func test_a_blocked_route_is_opened_by_something_found_elsewhere() -> void:
 	var opener: FloorTrigger = null
 	for trigger in plan.triggers:
 		for effect in trigger.effects:
-			if effect["kind"] == FloorLayers.EFFECT_OPEN_CONNECTION and effect["target_id"] == ArchivePrototypeLayout.C_TO_APPROACH:
+			if effect["kind"] == FloorLayers.EFFECT_OPEN_CONNECTION and effect["target_id"] == PROTOTYPE.id_for(&"C_TO_APPROACH"):
 				opener = trigger
 	assert_not_null(opener, "something must open the forward route")
 	assert_false(opener.starts_enabled, "the opener must be concealed -- otherwise there is nothing to discover")
@@ -292,7 +294,7 @@ func test_every_spawn_stands_inside_the_site_that_owns_it() -> void:
 func test_the_mandatory_roster_does_not_ambush_its_own_doorway() -> void:
 	var plan: FloorPlan = _plan()
 	var arena: EncounterSite = plan.encounters_of_role(FloorLayers.ROLE_MANDATORY)[0]
-	var entrance := Vector3(0.0, 0.0, plan.patch_by_id(ArchivePrototypeLayout.P_ARENA).rect.end.y)
+	var entrance := Vector3(0.0, 0.0, plan.patch_by_id(PROTOTYPE.id_for(&"P_ARENA")).rect.end.y)
 	for spawn in arena.roster:
 		assert_gt(spawn["position"].distance_to(entrance), 8.0,
 			"a spawn on top of the entrance is not difficulty, it is an unfair opening")

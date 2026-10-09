@@ -12,7 +12,7 @@ extends SceneTree
 ## wave activates. If a threat is off-screen at the moment it wakes, the fight is unfair in the one
 ## way a wave arena must never be.
 
-const L = preload("res://game/gen/layouts/archive_roundabout.gd")
+const L := preload("res://game/content/layouts/archive_roundabout.tres")
 
 
 func _init() -> void:
@@ -22,7 +22,7 @@ func _init() -> void:
 		i += 1
 
 	var plan: FloorPlan = load("res://game/gen/depth_generator.gd").generate(0, 2)
-	var arena: Rect2 = plan.patch_by_id(L.P_ARENA).rect
+	var arena: Rect2 = plan.patch_by_id(L.id_for(&"P_ARENA")).rect
 	var extent: Rect2 = plan.patches[0].rect
 	for patch: WalkablePatch in plan.patches:
 		extent = extent.merge(patch.rect)
@@ -33,7 +33,7 @@ func _init() -> void:
 	camera.current = true
 	camera.set_floor_extent(extent)
 
-	var plate := Vector3(L.PARTY_PLATE.get_center().x, 0.0, L.PARTY_PLATE.get_center().y)
+	var plate := Vector3(L.region_for(&"T_PARTY").get_center().x, 0.0, L.region_for(&"T_PARTY").get_center().y)
 	# Placed exactly as the reveal instrument places it -- through the shipped camera's own
 	# resolver, so this measures the camera the game uses rather than one that resembles it.
 	camera.position = camera._resolve_position(plate)

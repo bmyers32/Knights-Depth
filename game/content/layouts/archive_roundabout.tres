@@ -1,0 +1,1039 @@
+[gd_resource type="Resource" script_class="AuthoredLayout" format=3]
+
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="1_bigea"]
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="2_jovti"]
+[ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="3_swerf"]
+[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="4_4oe4p"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="5_b1iri"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="6_7cl3h"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="7_slqt8"]
+[ext_resource type="Script" path="res://game/gen/spike_pad_plan.gd" id="8_chukl"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="9_q4ucv"]
+
+[sub_resource type="Resource" id="Resource_usgy7"]
+script = ExtResource("1_bigea")
+key = &"B_VAULT_COVER"
+breakable_id = 0
+position = Vector3(40, 0, -62)
+radius = 1.1
+
+[sub_resource type="Resource" id="Resource_gvey7"]
+script = ExtResource("1_bigea")
+key = &"B_BAY_PROP"
+breakable_id = 2
+position = Vector3(-46, 0, -116)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_5hpjk"]
+script = ExtResource("1_bigea")
+key = &"B_COURT_A"
+breakable_id = 3
+position = Vector3(2, 0, -58)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_r660n"]
+script = ExtResource("1_bigea")
+key = &"B_COURT_B"
+breakable_id = 4
+position = Vector3(5, 0, -62)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_fjg5x"]
+script = ExtResource("1_bigea")
+key = &"B_COURT_C"
+breakable_id = 5
+position = Vector3(6, 0, -70)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_bl1vv"]
+script = ExtResource("1_bigea")
+key = &"B_COURT_D"
+breakable_id = 6
+position = Vector3(10, 0, -67)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_n5htw"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_GREEN_A"
+breakable_id = 7
+position = Vector3(-26, 0, -37)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_x3hxy"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_GREEN_B"
+breakable_id = 8
+position = Vector3(-22, 0, -39)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_lm54b"]
+script = ExtResource("1_bigea")
+key = &"B_LANE_A"
+breakable_id = 9
+position = Vector3(9, 0, -115)
+radius = 1.2
+blocking_rect = Rect2(8, -116, 2, 2)
+
+[sub_resource type="Resource" id="Resource_3waas"]
+script = ExtResource("1_bigea")
+key = &"B_LANE_B"
+breakable_id = 10
+position = Vector3(9, 0, -105)
+radius = 1.2
+blocking_rect = Rect2(8, -106, 2, 2)
+
+[sub_resource type="Resource" id="Resource_vthi4"]
+script = ExtResource("1_bigea")
+key = &"B_POCKET_A"
+breakable_id = 11
+position = Vector3(-48, 0, -88)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_vg85u"]
+script = ExtResource("1_bigea")
+key = &"B_POCKET_B"
+breakable_id = 12
+position = Vector3(-45, 0, -90)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_rhtfo"]
+script = ExtResource("1_bigea")
+key = &"B_POCKET_C"
+breakable_id = 13
+position = Vector3(-50, 0, -91)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_ce7g4"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_RUBBLE"
+breakable_id = 1
+position = Vector3(-8, 0, -89)
+radius = 2.0
+blocking_rect = Rect2(-11, -91, 6, 4)
+
+[sub_resource type="Resource" id="Resource_ef4no"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_P_A"
+breakable_id = 14
+position = Vector3(-20, 0, -82)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_hwd6o"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_P_B"
+breakable_id = 15
+position = Vector3(-16, 0, -82)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_tcsux"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_P_C"
+breakable_id = 16
+position = Vector3(-24, 0, -95)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_7slc3"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_P_D"
+breakable_id = 17
+position = Vector3(-20, 0, -95)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_4tg0b"]
+script = ExtResource("1_bigea")
+key = &"B_CACHE_A"
+breakable_id = 18
+position = Vector3(-24, 0, -128)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_hy50a"]
+script = ExtResource("1_bigea")
+key = &"B_CACHE_B"
+breakable_id = 19
+position = Vector3(-20, 0, -126)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_najpt"]
+script = ExtResource("1_bigea")
+key = &"B_CACHE_C"
+breakable_id = 20
+position = Vector3(-26, 0, -124)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_f0bqg"]
+script = ExtResource("1_bigea")
+key = &"B_CACHE_D"
+breakable_id = 21
+position = Vector3(-18, 0, -130)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_ph5ap"]
+script = ExtResource("1_bigea")
+key = &"B_RUN_PROP"
+breakable_id = 26
+position = Vector3(-19, 0, -110)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_tk41r"]
+script = ExtResource("1_bigea")
+key = &"B_ARENA_A"
+breakable_id = 22
+position = Vector3(175, 0, -123)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_gldg7"]
+script = ExtResource("1_bigea")
+key = &"B_ARENA_B"
+breakable_id = 23
+position = Vector3(175, 0, -147)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_h55iq"]
+script = ExtResource("1_bigea")
+key = &"B_ARENA_C"
+breakable_id = 24
+position = Vector3(215, 0, -123)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_fdptk"]
+script = ExtResource("1_bigea")
+key = &"B_ARENA_D"
+breakable_id = 25
+position = Vector3(215, 0, -147)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_fvfff"]
+script = ExtResource("1_bigea")
+key = &"B_WORKS_A"
+breakable_id = 27
+position = Vector3(130, 0, -118)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_xnyn5"]
+script = ExtResource("1_bigea")
+key = &"B_WORKS_B"
+breakable_id = 28
+position = Vector3(132, 0, -126)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_kw3gn"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_DRESSING_A"
+breakable_id = 29
+position = Vector3(60, 0, -114)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_v6l4s"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_DRESSING_B"
+breakable_id = 30
+position = Vector3(78, 0, -126)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_2cuns"]
+script = ExtResource("1_bigea")
+key = &"B_HALL_DRESSING_C"
+breakable_id = 31
+position = Vector3(100, 0, -126)
+radius = 1.0
+
+[sub_resource type="Resource" id="Resource_5f51u"]
+script = ExtResource("2_jovti")
+key = &"C_DESCEND"
+connection_id = 0
+near_key = &"P_OVERLOOK"
+far_key = &"P_DESCENT"
+patch_ids = Vector2i(0, 1)
+aperture = Rect2(-49.5, -13.5, 5, 3)
+
+[sub_resource type="Resource" id="Resource_q6lfb"]
+script = ExtResource("2_jovti")
+key = &"C_COMMIT"
+connection_id = 1
+near_key = &"P_DESCENT"
+far_key = &"P_LANDING"
+patch_ids = Vector2i(1, 2)
+aperture = Rect2(-49.5, -27.5, 5, 6)
+
+[sub_resource type="Resource" id="Resource_v6cr2"]
+script = ExtResource("2_jovti")
+key = &"C_TO_WEST_HALL"
+connection_id = 21
+near_key = &"P_LANDING"
+far_key = &"P_WEST_HALL"
+patch_ids = Vector2i(2, 3)
+aperture = Rect2(-33, -40, 10, 6)
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_8y3bi"]
+script = ExtResource("2_jovti")
+key = &"C_TO_COURT"
+connection_id = 2
+near_key = &"P_WEST_HALL"
+far_key = &"P_COURT"
+patch_ids = Vector2i(3, 4)
+aperture = Rect2(-9, -46, 8, 8)
+
+[sub_resource type="Resource" id="Resource_7kfk6"]
+script = ExtResource("2_jovti")
+key = &"C_VAULT"
+connection_id = 3
+near_key = &"P_COURT"
+far_key = &"P_VAULT"
+patch_ids = Vector2i(4, 5)
+aperture = Rect2(41, -60, 13, 6)
+starts_open = false
+
+[sub_resource type="Resource" id="Resource_gvien"]
+script = ExtResource("2_jovti")
+key = &"C_TO_LANE"
+connection_id = 4
+near_key = &"P_COURT"
+far_key = &"P_NORTH_HALL"
+patch_ids = Vector2i(4, 15)
+aperture = Rect2(18, -80, 8, 8)
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_810ax"]
+script = ExtResource("2_jovti")
+key = &"C_TO_HALL"
+connection_id = 5
+near_key = &"P_SPIKE_HALL"
+far_key = &"P_HALL"
+patch_ids = Vector2i(6, 7)
+aperture = Rect2(-10, -108, 10, 12)
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_rq30k"]
+script = ExtResource("2_jovti")
+key = &"C_POCKET"
+connection_id = 6
+near_key = &"P_HALL"
+far_key = &"P_POCKET"
+patch_ids = Vector2i(7, 11)
+aperture = Rect2(-38, -92, 10, 8)
+
+[sub_resource type="Resource" id="Resource_ldv0t"]
+script = ExtResource("2_jovti")
+key = &"C_BAY"
+connection_id = 7
+near_key = &"P_POCKET"
+far_key = &"P_PUZZLE_BAY"
+patch_ids = Vector2i(11, 8)
+aperture = Rect2(-50, -110, 8, 14)
+
+[sub_resource type="Resource" id="Resource_l4rmy"]
+script = ExtResource("2_jovti")
+key = &"C_DOOR_WEST"
+connection_id = 8
+near_key = &"P_PUZZLE_BAY"
+far_key = &"P_PUZZLE_WEST"
+patch_ids = Vector2i(8, 9)
+aperture = Rect2(-55, -130, 5, 7)
+
+[sub_resource type="Resource" id="Resource_y6nri"]
+script = ExtResource("2_jovti")
+key = &"C_DOOR_EAST"
+connection_id = 9
+near_key = &"P_PUZZLE_BAY"
+far_key = &"P_PUZZLE_EAST"
+patch_ids = Vector2i(8, 10)
+aperture = Rect2(-41, -130, 5, 7)
+starts_open = false
+
+[sub_resource type="Resource" id="Resource_w7egl"]
+script = ExtResource("2_jovti")
+key = &"C_TO_CACHE"
+connection_id = 10
+near_key = &"P_PUZZLE_EAST"
+far_key = &"P_CACHE"
+patch_ids = Vector2i(10, 12)
+aperture = Rect2(-36, -132, 10, 6)
+
+[sub_resource type="Resource" id="Resource_pi8vr"]
+script = ExtResource("2_jovti")
+key = &"C_CACHE_RUN"
+connection_id = 11
+near_key = &"P_CACHE"
+far_key = &"P_RETURN_RUN"
+patch_ids = Vector2i(12, 13)
+aperture = Rect2(-22, -119, 6, 7)
+
+[sub_resource type="Resource" id="Resource_auhu0"]
+script = ExtResource("2_jovti")
+key = &"C_RETURN"
+connection_id = 12
+near_key = &"P_RETURN_RUN"
+far_key = &"P_HALL"
+patch_ids = Vector2i(13, 7)
+aperture = Rect2(-22, -104, 6, 8)
+starts_open = false
+
+[sub_resource type="Resource" id="Resource_ytwei"]
+script = ExtResource("2_jovti")
+key = &"C_TO_JUNCTION"
+connection_id = 13
+near_key = &"P_NORTH_HALL"
+far_key = &"P_JUNCTION"
+patch_ids = Vector2i(15, 14)
+aperture = Rect2(18, -108, 8, 10)
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_11jxk"]
+script = ExtResource("2_jovti")
+key = &"C_JUNCTION_WEST"
+connection_id = 14
+near_key = &"P_JUNCTION"
+far_key = &"P_SPIKE_HALL"
+patch_ids = Vector2i(14, 6)
+aperture = Rect2(10, -114, 10, 8)
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_ju30a"]
+script = ExtResource("2_jovti")
+key = &"C_JUNCTION_EAST"
+connection_id = 15
+near_key = &"P_JUNCTION"
+far_key = &"P_EAST_HALL_A"
+patch_ids = Vector2i(14, 16)
+aperture = Rect2(25, -114, 12, 8)
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_80j3m"]
+script = ExtResource("2_jovti")
+key = &"C_EAST_HALL_BEND"
+connection_id = 16
+near_key = &"P_EAST_HALL_A"
+far_key = &"P_EAST_HALL_B"
+patch_ids = Vector2i(16, 17)
+aperture = Rect2(62, -122, 14, 10)
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_i76ed"]
+script = ExtResource("2_jovti")
+key = &"C_HALL_WORKS"
+connection_id = 17
+near_key = &"P_EAST_HALL_B"
+far_key = &"P_WORKS"
+patch_ids = Vector2i(17, 18)
+aperture = Rect2(109, -128, 12, 8)
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_hbsyp"]
+script = ExtResource("2_jovti")
+key = &"C_WORKS_LINK"
+connection_id = 18
+near_key = &"P_WORKS"
+far_key = &"P_ARENA_LINK"
+patch_ids = Vector2i(18, 19)
+aperture = Rect2(141, -134, 12, 8)
+starts_open = false
+
+[sub_resource type="Resource" id="Resource_is1lw"]
+script = ExtResource("2_jovti")
+key = &"C_LINK_ARENA"
+connection_id = 19
+near_key = &"P_ARENA_LINK"
+far_key = &"P_ARENA"
+patch_ids = Vector2i(19, 20)
+aperture = Rect2(163, -140, 12, 8)
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_bkqaq"]
+script = ExtResource("2_jovti")
+key = &"C_ARENA_REWARD"
+connection_id = 20
+near_key = &"P_ARENA"
+far_key = &"P_REWARD_HALL"
+patch_ids = Vector2i(20, 21)
+aperture = Rect2(215, -138, 12, 8)
+starts_open = false
+
+[sub_resource type="Resource" id="Resource_q40h2"]
+script = ExtResource("3_swerf")
+key = &"E_LANDING"
+encounter_id = 0
+regions = Array[Rect2]([Rect2(-58, -46, 28, 20)])
+role = &"ambient"
+roster = Array[Dictionary]([{
+"enemy_key": &"ooze",
+"position": Vector3(-38, 0, -38)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(-50, 0, -32)
+}])
+confines_player = false
+spawn_at_floor_load = true
+
+[sub_resource type="Resource" id="Resource_38dbp"]
+script = ExtResource("3_swerf")
+key = &"E_COURT"
+encounter_id = 1
+regions = Array[Rect2]([Rect2(-4, -74, 48, 30)])
+role = &"optional"
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(10, 0, -64)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(34, 0, -60)
+}])
+confines_player = false
+
+[sub_resource type="Resource" id="Resource_ylupk"]
+script = ExtResource("3_swerf")
+key = &"E_HALL"
+encounter_id = 2
+regions = Array[Rect2]([Rect2(-30, -100, 28, 22)])
+role = &"optional"
+roster = Array[Dictionary]([{
+"enemy_key": &"watcher",
+"position": Vector3(-24, 0, -88)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(-8, 0, -96)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(-14, 0, -81)
+}])
+confines_player = false
+
+[sub_resource type="Resource" id="Resource_3s401"]
+script = ExtResource("3_swerf")
+key = &"E_POCKET"
+encounter_id = 3
+regions = Array[Rect2]([Rect2(-56, -98, 20, 18)])
+role = &"optional"
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(-52, 0, -86)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(-42, 0, -94)
+}])
+confines_player = false
+
+[sub_resource type="Resource" id="Resource_yvu86"]
+script = ExtResource("3_swerf")
+key = &"E_SPIKE_HALL"
+encounter_id = 8
+regions = Array[Rect2]([Rect2(-12, -116, 26, 12)])
+role = &"optional"
+roster = Array[Dictionary]([{
+"enemy_key": &"watcher",
+"position": Vector3(-9, 0, -113)
+}, {
+"enemy_key": &"watcher",
+"position": Vector3(-9, 0, -107)
+}])
+confines_player = false
+
+[sub_resource type="Resource" id="Resource_mvrr6"]
+script = ExtResource("3_swerf")
+key = &"E_WORKS"
+encounter_id = 7
+regions = Array[Rect2]([Rect2(118, -134, 26, 20)])
+role = &"optional"
+roster = Array[Dictionary]([{
+"enemy_key": &"watcher",
+"position": Vector3(137, 0, -124)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(126, 0, -130)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(128, 0, -118)
+}])
+confines_player = false
+
+[sub_resource type="Resource" id="Resource_i83qm"]
+script = ExtResource("3_swerf")
+key = &"E_WAVE_1"
+encounter_id = 4
+regions = Array[Rect2]([Rect2(172, -152, 46, 34)])
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(184, 0, -144)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(201, 0, -147)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(203, 0, -142)
+}])
+
+[sub_resource type="Resource" id="Resource_luobx"]
+script = ExtResource("3_swerf")
+key = &"E_WAVE_2"
+encounter_id = 5
+regions = Array[Rect2]([Rect2(172, -152, 46, 34)])
+roster = Array[Dictionary]([{
+"enemy_key": &"watcher",
+"position": Vector3(208, 0, -144)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(183, 0, -143)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(188, 0, -130)
+}])
+
+[sub_resource type="Resource" id="Resource_d8llb"]
+script = ExtResource("3_swerf")
+key = &"E_WAVE_3"
+encounter_id = 6
+regions = Array[Rect2]([Rect2(172, -152, 46, 34)])
+roster = Array[Dictionary]([{
+"enemy_key": &"watcher",
+"position": Vector3(180, 0, -142)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(206, 0, -146)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(185, 0, -146)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(200, 0, -128)
+}])
+
+[sub_resource type="Resource" id="Resource_e12bl"]
+script = ExtResource("4_4oe4p")
+key = &"S_VAULT"
+switch_id = 0
+position = Vector3(42, 0, -62)
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_VAULT"
+}])
+starts_hidden = true
+
+[sub_resource type="Resource" id="Resource_0n6i7"]
+script = ExtResource("4_4oe4p")
+key = &"S_WORKS"
+switch_id = 2
+position = Vector3(139, 0, -130)
+radius = 0.8
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_WORKS_LINK"
+}])
+
+[sub_resource type="Resource" id="Resource_5m4b3"]
+script = ExtResource("4_4oe4p")
+key = &"S_ALTERNATE"
+switch_id = 1
+position = Vector3(-45, 0, -114)
+radius = 0.8
+mode = &"toggle"
+effects = Array[Dictionary]([{
+"kind": &"toggle_connection",
+"target_key": &"C_DOOR_WEST"
+}, {
+"kind": &"toggle_connection",
+"target_key": &"C_DOOR_EAST"
+}])
+
+[sub_resource type="Resource" id="Resource_v48i8"]
+script = ExtResource("5_b1iri")
+key = &"MASS_1"
+obstacle_id = 1
+rect = Rect2(2, -53, 6, 10)
+height = 4.0
+
+[sub_resource type="Resource" id="Resource_ii0hp"]
+script = ExtResource("5_b1iri")
+key = &"MASS_7"
+obstacle_id = 7
+rect = Rect2(-16, -97, 5, 5)
+height = 4.0
+
+[sub_resource type="Resource" id="Resource_vorff"]
+script = ExtResource("5_b1iri")
+key = &"MASS_8"
+obstacle_id = 8
+rect = Rect2(-27, -84.5, 5, 5)
+height = 4.0
+
+[sub_resource type="Resource" id="Resource_a8akf"]
+script = ExtResource("5_b1iri")
+key = &"MASS_10"
+obstacle_id = 10
+rect = Rect2(32, -58, 8, 8)
+height = 4.0
+
+[sub_resource type="Resource" id="Resource_oli0p"]
+script = ExtResource("6_7cl3h")
+key = &"P_OVERLOOK"
+patch_id = 0
+rect = Rect2(-56, -12, 16, 10)
+elevation = 3.0
+surface = &"high"
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_rfh30"]
+script = ExtResource("6_7cl3h")
+key = &"P_DESCENT"
+patch_id = 1
+rect = Rect2(-52, -24, 10, 12)
+elevation = 1.5
+surface = &"ramp"
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_35n8d"]
+script = ExtResource("6_7cl3h")
+key = &"P_LANDING"
+patch_id = 2
+rect = Rect2(-58, -46, 28, 20)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_ptfb2"]
+script = ExtResource("6_7cl3h")
+key = &"P_WEST_HALL"
+patch_id = 3
+rect = Rect2(-28, -42, 32, 10)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_y0l7j"]
+script = ExtResource("6_7cl3h")
+key = &"P_COURT"
+patch_id = 4
+rect = Rect2(-4, -74, 48, 30)
+surface = &"arena"
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_c5ngu"]
+script = ExtResource("6_7cl3h")
+key = &"P_VAULT"
+patch_id = 5
+rect = Rect2(50, -64, 14, 14)
+surface = &"arena"
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_yptwd"]
+script = ExtResource("6_7cl3h")
+key = &"P_SPIKE_HALL"
+patch_id = 6
+rect = Rect2(-12, -116, 26, 12)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_uwypl"]
+script = ExtResource("6_7cl3h")
+key = &"P_HALL"
+patch_id = 7
+rect = Rect2(-30, -100, 28, 22)
+surface = &"arena"
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_106y0"]
+script = ExtResource("6_7cl3h")
+key = &"P_POCKET"
+patch_id = 11
+rect = Rect2(-56, -98, 20, 18)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_0qsgk"]
+script = ExtResource("6_7cl3h")
+key = &"P_PUZZLE_BAY"
+patch_id = 8
+rect = Rect2(-58, -124, 26, 16)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_ha5e1"]
+script = ExtResource("6_7cl3h")
+key = &"P_PUZZLE_WEST"
+patch_id = 9
+rect = Rect2(-58, -140, 12, 12)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_u0rsx"]
+script = ExtResource("6_7cl3h")
+key = &"P_PUZZLE_EAST"
+patch_id = 10
+rect = Rect2(-44, -140, 12, 12)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_pvl6l"]
+script = ExtResource("6_7cl3h")
+key = &"P_CACHE"
+patch_id = 12
+rect = Rect2(-30, -134, 18, 16)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_qdb2h"]
+script = ExtResource("6_7cl3h")
+key = &"P_RETURN_RUN"
+patch_id = 13
+rect = Rect2(-24, -116, 10, 14)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_mlmw4"]
+script = ExtResource("6_7cl3h")
+key = &"P_JUNCTION"
+patch_id = 14
+rect = Rect2(16, -116, 12, 12)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_2igk2"]
+script = ExtResource("6_7cl3h")
+key = &"P_NORTH_HALL"
+patch_id = 15
+rect = Rect2(16, -102, 12, 26)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_2rt1g"]
+script = ExtResource("6_7cl3h")
+key = &"P_EAST_HALL_A"
+patch_id = 16
+rect = Rect2(34, -116, 32, 12)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_4h0tt"]
+script = ExtResource("6_7cl3h")
+key = &"P_EAST_HALL_B"
+patch_id = 17
+rect = Rect2(72, -128, 40, 12)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_llf6p"]
+script = ExtResource("6_7cl3h")
+key = &"P_WORKS"
+patch_id = 18
+rect = Rect2(118, -134, 26, 20)
+surface = &"arena"
+
+[sub_resource type="Resource" id="Resource_6skaw"]
+script = ExtResource("6_7cl3h")
+key = &"P_ARENA_LINK"
+patch_id = 19
+rect = Rect2(150, -140, 16, 12)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_pt4d2"]
+script = ExtResource("6_7cl3h")
+key = &"P_ARENA"
+patch_id = 20
+rect = Rect2(172, -152, 46, 34)
+surface = &"arena"
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="Resource_m26ub"]
+script = ExtResource("6_7cl3h")
+key = &"P_REWARD_HALL"
+patch_id = 21
+rect = Rect2(224, -144, 26, 20)
+
+[sub_resource type="Resource" id="Resource_f0nbk"]
+script = ExtResource("8_chukl")
+key = &"PAD_0"
+pad_id = 0
+rect = Rect2(-6, -116, 6, 12)
+safe_ticks = 150
+active_ticks = 35
+damage = 10.0
+
+[sub_resource type="Resource" id="Resource_g0v2b"]
+script = ExtResource("8_chukl")
+key = &"PAD_1"
+pad_id = 1
+rect = Rect2(0, -116, 6, 12)
+safe_ticks = 150
+active_ticks = 35
+damage = 10.0
+
+[sub_resource type="Resource" id="Resource_r7668"]
+script = ExtResource("8_chukl")
+key = &"PAD_2"
+pad_id = 2
+rect = Rect2(192, -147, 6, 5)
+safe_ticks = 150
+active_ticks = 35
+damage = 10.0
+
+[sub_resource type="Resource" id="Resource_6sfp7"]
+script = ExtResource("8_chukl")
+key = &"PAD_3"
+pad_id = 3
+rect = Rect2(192, -128, 6, 5)
+safe_ticks = 150
+active_ticks = 35
+damage = 10.0
+
+[sub_resource type="Resource" id="Resource_hpq4t"]
+script = ExtResource("8_chukl")
+key = &"PAD_4"
+pad_id = 4
+rect = Rect2(182, -138, 5, 6)
+safe_ticks = 150
+active_ticks = 35
+phase_offset_ticks = 92
+damage = 10.0
+
+[sub_resource type="Resource" id="Resource_cn3sd"]
+script = ExtResource("8_chukl")
+key = &"PAD_5"
+pad_id = 5
+rect = Rect2(203, -138, 5, 6)
+safe_ticks = 150
+active_ticks = 35
+phase_offset_ticks = 92
+damage = 10.0
+
+[sub_resource type="Resource" id="Resource_1jce4"]
+script = ExtResource("9_q4ucv")
+key = &"T_COMMIT"
+trigger_id = 0
+region = Rect2(-52, -36, 10, 8)
+effects = Array[Dictionary]([{
+"kind": &"block_connection",
+"target_key": &"C_COMMIT"
+}])
+
+[sub_resource type="Resource" id="Resource_gwqqd"]
+script = ExtResource("9_q4ucv")
+key = &"T_COURT"
+trigger_id = 1
+region = Rect2(-4, -54, 20, 10)
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_COURT"
+}])
+
+[sub_resource type="Resource" id="Resource_r76bj"]
+script = ExtResource("9_q4ucv")
+key = &"T_HALL"
+trigger_id = 2
+region = Rect2(-12, -96, 10, 16)
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_HALL"
+}])
+
+[sub_resource type="Resource" id="Resource_f50cn"]
+script = ExtResource("9_q4ucv")
+key = &"T_VAULT_REVEAL"
+trigger_id = 3
+kind = &"breakable_destroyed"
+source_key = &"B_VAULT_COVER"
+source_id = 0
+effects = Array[Dictionary]([{
+"kind": &"reveal_switch",
+"target_key": &"S_VAULT"
+}])
+
+[sub_resource type="Resource" id="Resource_br01n"]
+script = ExtResource("9_q4ucv")
+key = &"T_POCKET"
+trigger_id = 4
+region = Rect2(-52, -94, 14, 10)
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_POCKET"
+}])
+
+[sub_resource type="Resource" id="Resource_jy8vm"]
+script = ExtResource("9_q4ucv")
+key = &"T_CACHE"
+trigger_id = 5
+region = Rect2(-26, -130, 12, 8)
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_RETURN"
+}])
+
+[sub_resource type="Resource" id="Resource_43now"]
+script = ExtResource("9_q4ucv")
+key = &"T_PARTY"
+trigger_id = 6
+kind = &"group_occupancy"
+region = Rect2(193, -137, 4, 4)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"block_connection",
+"target_key": &"C_LINK_ARENA"
+}, {
+"kind": &"activate_encounter",
+"target_key": &"E_WAVE_1"
+}])
+
+[sub_resource type="Resource" id="Resource_rhifk"]
+script = ExtResource("9_q4ucv")
+key = &"T_WAVE_1_CLEAR"
+trigger_id = 7
+kind = &"encounter_cleared"
+source_key = &"E_WAVE_1"
+source_id = 4
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_WAVE_2"
+}])
+
+[sub_resource type="Resource" id="Resource_6wv0x"]
+script = ExtResource("9_q4ucv")
+key = &"T_WAVE_2_CLEAR"
+trigger_id = 8
+kind = &"encounter_cleared"
+source_key = &"E_WAVE_2"
+source_id = 5
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_WAVE_3"
+}])
+
+[sub_resource type="Resource" id="Resource_n0bl1"]
+script = ExtResource("9_q4ucv")
+key = &"T_WAVE_3_CLEAR"
+trigger_id = 9
+kind = &"encounter_cleared"
+source_key = &"E_WAVE_3"
+source_id = 6
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_ARENA_REWARD"
+}])
+
+[sub_resource type="Resource" id="Resource_v8scq"]
+script = ExtResource("9_q4ucv")
+key = &"T_SPIKE_HALL"
+trigger_id = 12
+region = Rect2(6, -114, 8, 8)
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_SPIKE_HALL"
+}])
+
+[sub_resource type="Resource" id="Resource_mhrwx"]
+script = ExtResource("9_q4ucv")
+key = &"T_WORKS"
+trigger_id = 11
+region = Rect2(120, -132, 12, 16)
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_WORKS"
+}])
+
+[sub_resource type="Resource" id="Resource_ik2et"]
+script = ExtResource("9_q4ucv")
+key = &"T_EXIT"
+trigger_id = 10
+kind = &"group_occupancy"
+region = Rect2(240, -136, 4, 4)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"complete_floor",
+"target_id": -1
+}])
+
+[resource]
+script = ExtResource("7_slqt8")
+layout_id = &"archive_roundabout"
+patches = Array[ExtResource("6_7cl3h")]([SubResource("Resource_oli0p"), SubResource("Resource_rfh30"), SubResource("Resource_35n8d"), SubResource("Resource_ptfb2"), SubResource("Resource_y0l7j"), SubResource("Resource_c5ngu"), SubResource("Resource_yptwd"), SubResource("Resource_uwypl"), SubResource("Resource_106y0"), SubResource("Resource_0qsgk"), SubResource("Resource_ha5e1"), SubResource("Resource_u0rsx"), SubResource("Resource_pvl6l"), SubResource("Resource_qdb2h"), SubResource("Resource_mlmw4"), SubResource("Resource_2igk2"), SubResource("Resource_2rt1g"), SubResource("Resource_4h0tt"), SubResource("Resource_llf6p"), SubResource("Resource_6skaw"), SubResource("Resource_pt4d2"), SubResource("Resource_m26ub")])
+connections = Array[ExtResource("2_jovti")]([SubResource("Resource_5f51u"), SubResource("Resource_q6lfb"), SubResource("Resource_v6cr2"), SubResource("Resource_8y3bi"), SubResource("Resource_7kfk6"), SubResource("Resource_gvien"), SubResource("Resource_810ax"), SubResource("Resource_rq30k"), SubResource("Resource_ldv0t"), SubResource("Resource_l4rmy"), SubResource("Resource_y6nri"), SubResource("Resource_w7egl"), SubResource("Resource_pi8vr"), SubResource("Resource_auhu0"), SubResource("Resource_ytwei"), SubResource("Resource_11jxk"), SubResource("Resource_ju30a"), SubResource("Resource_80j3m"), SubResource("Resource_i76ed"), SubResource("Resource_hbsyp"), SubResource("Resource_is1lw"), SubResource("Resource_bkqaq")])
+triggers = Array[ExtResource("9_q4ucv")]([SubResource("Resource_1jce4"), SubResource("Resource_gwqqd"), SubResource("Resource_r76bj"), SubResource("Resource_f50cn"), SubResource("Resource_br01n"), SubResource("Resource_jy8vm"), SubResource("Resource_43now"), SubResource("Resource_rhifk"), SubResource("Resource_6wv0x"), SubResource("Resource_n0bl1"), SubResource("Resource_v8scq"), SubResource("Resource_mhrwx"), SubResource("Resource_ik2et")])
+encounters = Array[ExtResource("3_swerf")]([SubResource("Resource_q40h2"), SubResource("Resource_38dbp"), SubResource("Resource_ylupk"), SubResource("Resource_3s401"), SubResource("Resource_yvu86"), SubResource("Resource_mvrr6"), SubResource("Resource_i83qm"), SubResource("Resource_luobx"), SubResource("Resource_d8llb")])
+breakables = Array[ExtResource("1_bigea")]([SubResource("Resource_usgy7"), SubResource("Resource_gvey7"), SubResource("Resource_5hpjk"), SubResource("Resource_r660n"), SubResource("Resource_fjg5x"), SubResource("Resource_bl1vv"), SubResource("Resource_n5htw"), SubResource("Resource_x3hxy"), SubResource("Resource_lm54b"), SubResource("Resource_3waas"), SubResource("Resource_vthi4"), SubResource("Resource_vg85u"), SubResource("Resource_rhtfo"), SubResource("Resource_ce7g4"), SubResource("Resource_ef4no"), SubResource("Resource_hwd6o"), SubResource("Resource_tcsux"), SubResource("Resource_7slc3"), SubResource("Resource_4tg0b"), SubResource("Resource_hy50a"), SubResource("Resource_najpt"), SubResource("Resource_f0bqg"), SubResource("Resource_ph5ap"), SubResource("Resource_tk41r"), SubResource("Resource_gldg7"), SubResource("Resource_h55iq"), SubResource("Resource_fdptk"), SubResource("Resource_fvfff"), SubResource("Resource_xnyn5"), SubResource("Resource_kw3gn"), SubResource("Resource_v6l4s"), SubResource("Resource_2cuns")])
+hit_switches = Array[ExtResource("4_4oe4p")]([SubResource("Resource_e12bl"), SubResource("Resource_0n6i7"), SubResource("Resource_5m4b3")])
+obstacles = Array[ExtResource("5_b1iri")]([SubResource("Resource_v48i8"), SubResource("Resource_ii0hp"), SubResource("Resource_vorff"), SubResource("Resource_a8akf")])
+spike_pads = Array[ExtResource("8_chukl")]([SubResource("Resource_f0nbk"), SubResource("Resource_g0v2b"), SubResource("Resource_r7668"), SubResource("Resource_6sfp7"), SubResource("Resource_hpq4t"), SubResource("Resource_cn3sd")])
+entry_point = Vector3(-48, 0, -7)
+end_marker = Vector3(242, 0, -134)

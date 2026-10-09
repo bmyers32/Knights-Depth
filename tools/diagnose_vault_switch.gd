@@ -29,7 +29,7 @@ func _init() -> void:
 		await create_timer(0.01).timeout
 		i += 1
 
-	var L: GDScript = load("res://game/gen/layouts/archive_roundabout.gd")
+	var L: AuthoredLayout = load("res://game/content/layouts/archive_roundabout.tres")
 	print("VAULT SWITCH — weapon-agnostic diagnosis")
 	print("")
 
@@ -57,12 +57,12 @@ func _probe(L: GDScript, weapon_id: StringName) -> void:
 
 	var switch_position: Vector3 = Vector3.ZERO
 	for hit_switch: HitSwitchPlan in load("res://game/gen/depth_generator.gd").generate(arena.run_seed, 2).hit_switches:
-		if hit_switch.switch_id == L.S_VAULT:
+		if hit_switch.switch_id == L.id_for(&"S_VAULT"):
 			switch_position = hit_switch.position
 
 	# Reveal it first: a hidden switch is in no hit scan at all, which is a DIFFERENT no.
-	sim.debug_destroy_breakable(L.B_VAULT_COVER)
-	var hidden: bool = bool(sim._hit_switches[L.S_VAULT]["hidden"])
+	sim.debug_destroy_breakable(L.id_for(&"B_VAULT_COVER"))
+	var hidden: bool = bool(sim._hit_switches[L.id_for(&"S_VAULT")]["hidden"])
 
 	var equipped: bool = weapon_id in arena.loadout_weapon_ids
 	print("WEAPON %s" % weapon_id)
@@ -99,7 +99,7 @@ func _probe(L: GDScript, weapon_id: StringName) -> void:
 	var reached_at: float = -1.0
 	for tenths in range(10, 61, 5):
 		var stand_off: float = float(tenths) / 10.0
-		sim._hit_switches[L.S_VAULT]["spent"] = false
+		sim._hit_switches[L.id_for(&"S_VAULT")]["spent"] = false
 		sim.entities[envoy_id] = switch_position + Vector3(-stand_off, 0.0, 0.0)
 		var activated: bool = false
 		for tick in 60:
@@ -118,7 +118,7 @@ func _probe(L: GDScript, weapon_id: StringName) -> void:
 	# LIVENESS: did this weapon actually SWING? Silence from an observer is evidence only when the
 	# observer is connected to the behaviour. A sword that never resolves an attack in the probe
 	# would report exactly the same "never operates it" as a sword the switch rejects.
-	sim._hit_switches[L.S_VAULT]["spent"] = false
+	sim._hit_switches[L.id_for(&"S_VAULT")]["spent"] = false
 	sim.register_breakable(99, switch_position + Vector3(-2.0, 0.0, 0.0), 0.7, 1.0)
 	sim.entities[envoy_id] = switch_position + Vector3(-3.5, 0.0, 0.0)
 	var swings: int = 0
@@ -140,6 +140,6 @@ func _probe(L: GDScript, weapon_id: StringName) -> void:
 		print("   OPERATES THE SWITCH, from as far as %.1f units away" % reached_at)
 	else:
 		print("   NEVER OPERATES IT, at any distance from 1.0 to 6.0 -- this is a real gate")
-	print("   vault door open: %s" % str(bool(sim._connection_open[L.C_VAULT])))
+	print("   vault door open: %s" % str(bool(sim._connection_open[L.id_for(&"C_VAULT")])))
 	print("")
 	arena.queue_free()

@@ -15,7 +15,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P3 | Consumable vials | PROPOSED | Any-build status application + common loot drop |
 | P4 | Mender-type enemy | PROPOSED | Enemy healer → kill-priority decisions; justifies Venom |
 | P5 | Gear stars, heat, crafting | PROPOSED | M4 progression skeleton, recorded shape |
-| P6 | Rotating gate map (arcade) | PROPOSED | M5 shared-world route meta-game |
+| P6 | Gates & Arcade descent | PROPOSED — **direction captured 2026-10-09, NOT BUILT** | Rotation REPLACED by party-selected next floors; see the P6 section |
 | P7 | Companion system | PROPOSED | One slot, protocol-determined occupant; sync-anchor fiction; M4+ |
 | P8 | Protocols (Mend/Temper) | PROPOSED | Per-run philosophy loadout; expression not access; M4+ |
 | P9 | Drift scalar | PROPOSED | Zone `drift: float` in sim drives spawns/presentation; M2-adjacent |
@@ -1781,12 +1781,74 @@ a lost network message can never leave an actor's attack state stuck mid-hold. N
 concern for M1 (single offline driver, no packet loss) — flagged here so M3 netcode
 work doesn't discover it late.
 
-### P6 — Rotating gate map (arcade)
-**Idea:** Multiple concurrent descent "gates" whose upcoming floors rotate on a
-timer and are previewable, making route planning a meta-game.
-**Reasoning:** The reference game's most distinctive structural feature; genuinely an
-MMO-layer system since its value comes from a shared persistent world.
-**Why deferred:** M5. The M2 next-floor preview is the single-run seed of this idea.
+### P6 — Gates & Arcade descent
+**STATUS: DESIGN DIRECTION CAPTURED 2026-10-09. NOTHING BUILT.** No GateDefinition,
+MissionDefinition, FloorFamily, VoteManager, EncounterDirector or generator exists or is
+authorized by this entry. It is recorded here so the design does not have to be re-derived,
+and so the M2 work can be checked against it — not as a plan to start.
+
+**ARCADE IS THE CENTRAL MODE.** Expedition descent is the primary evergreen experience and
+should be the most diverse and rewarding source of general progression. Missions keep story,
+onboarding, special objectives, reliable boss access and specific rewards — but must not make
+one deterministic Mission the best resources-per-minute loop, because that converts exploring
+the Lattice into a thing you skip.
+
+**A GATE IS A FULL-DESCENT CONFIGURATION**, entry toward the Core — not a single-theme dungeon.
+One Gate may span several environmental themes, structural archetypes, thematic transitions and
+fixed named boss regions at particular depth bands. The name gives identity; the actionable
+preparation information comes from the floors visible at each depth. Multiple parties may enter
+the same public configuration and take different routes through it. **Parties run authoritative
+expedition instances** — this needs no shared combat instance.
+
+**FLOOR IDENTITY — FOUR INDEPENDENT DESCRIPTORS**, combining only where authored content
+actually supports the combination:
+structural archetype (arena / transit / search complex / puzzle) · environmental or status
+emphasis (Burn, Venom, conditions) · enemy-family emphasis (Fang, Ooze, Watcher, later families)
+· named unique destination (landmark, boss region, set piece).
+These do NOT collapse into each other, and they do not disturb the existing three-axis law
+(§6.8): forces, entity states and damage types stay separate, and a family is never bound
+permanently to a status.
+
+**A PREVIEW IS A GAMEPLAY PROMISE.** "Fang-heavy" means Fang actually dominates the eligible
+encounter composition. "Fang/Watcher" means both are substantially present with neither
+overwhelming. "Venom danger" means mechanically relevant Venom, not Venom-coloured decoration.
+Preview text must ultimately be DERIVED FROM the resolved floor configuration — never authored
+beside it, where the two can disagree. **No thresholds and no preview metadata schema until a
+real variable-roster consumer exists**; today every floor is authored and its roster is fixed.
+
+**PARTY-SELECTED NEXT FLOORS — this supersedes the rotation idea.** The original entry had
+upcoming floors rotate on a timer, which makes a player wait for a floor they want. Replaced by
+immediate choice among eligible options at each depth decision: one option auto-progresses with
+no vote; several trigger a quick party vote; majority wins; ties resolve deterministically from
+the seed; choosing at random among the displayed options is allowed; a timeout picks a valid
+option so nobody waits forever; solo players simply choose. The authoritative expedition state
+resolves ONE next floor for the party — clients never pick their own. No vote timing or UI is
+designed here.
+
+**THE CHOICE IS CONSTRAINED, not free.** Options respect depth eligibility, thematic
+progression, boss-region placement, required sequence dependencies, rest/checkpoint
+requirements, and the validity of the descent as a whole. A named boss sequence keeps its
+authored floors in its authored order, and an optional branch may never bypass required
+progression. **Some depths legitimately offer exactly one option** — that is a valid answer, not
+a gap to fill.
+
+**MEANINGFUL, NOT NUMEROUS.** Options must differ in something the player feels — tactical
+challenge, structure, environmental pressure, exploration opportunity, risk, time, reward.
+Choice added only to show more choices is noise. Optional exploration stays valuable without
+becoming mandatory for efficient progression.
+
+**Why deferred:** M5 for the shared/public layer. The M2 next-floor preview remains the
+single-run seed of this idea, and M2's concrete multi-floor run is the first place any of it
+gets tested.
+
+### P37 — Expedition quests (design candidate)
+**STATUS: CANDIDATE, captured 2026-10-09. NOT BUILT.**
+**Idea:** Optional objectives chosen before a descent, giving parties different goals, risks and
+rewards while exploring the SAME Gate configuration — distinct from deterministic Missions,
+which are authored content with fixed structure.
+**Constraint already stated:** a quest must be achievable within the configuration the party
+actually entered, and must not become a new mandatory farming optimisation.
+**Deferred:** taxonomy, selection rules, reward formulas and multiplayer handling are all open.
 
 ### P7 — Companion system (one slot, many expressions)
 **Idea:** Every Envoy has one Companion slot — a synchronization anchor (WORLD-CANON).

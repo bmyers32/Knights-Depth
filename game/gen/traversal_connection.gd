@@ -1,5 +1,13 @@
 class_name TraversalConnection
-extends RefCounted
+extends Resource
+## SERIALISABLE AS CONTENT (P36 Slice A). The base changed from RefCounted to Resource and the
+## authored fields gained @export, so an authored floor can live in a .tres instead of in a
+## builder function. Nothing else about this class moved: the same values, the same consumers,
+## the same meaning. Resource IS a RefCounted, so every existing holder is unaffected.
+##
+## THE COMPILER NEVER HANDS A LOADED RECORD STRAIGHT TO A FloorPlan -- it copies into a fresh
+## instance (LayoutCompiler). A .tres is cached and shared by path, and a plan that aliased it
+## would let one run's state leak into the next.
 ## PROGRESSION layer: a controllable link between two patches.
 ##
 ## THE CONNECTION DOES NOT KNOW WHY IT OPENED. It owns availability and nothing else. A switch,
@@ -18,13 +26,23 @@ extends RefCounted
 ## boundary is instead an ordinary connection plus a one-shot TRIGGER_REGION whose effect
 ## blocks it -- same mechanism as every other controller, no new legality math.
 
-var connection_id: int = -1
-var patch_ids: Vector2i = Vector2i(-1, -1)
-var aperture: Rect2 = Rect2()
-var starts_open: bool = true
+## AUTHORING IDENTITY (P36 Slice A). A stable, human-readable name for this record, used by
+## content cross-references and by tests. **Nothing at runtime reads it** -- the sim and the
+## FloorPlan still speak in the numeric ids below, and the compiler resolves keys into those ids
+## at build time. This exists because the .tres became the authoring surface and a cross-
+## reference reading `target_id = 3` tells an author nothing about which door that is.
+@export var key: StringName = &""
+@export var connection_id: int = -1
+## WHICH TWO SPACES THIS JOINS, by authoring key. The compiler resolves these into patch_ids.
+## Left empty, patch_ids is taken as authored -- which is what the pre-migration builders did.
+@export var near_key: StringName = &""
+@export var far_key: StringName = &""
+@export var patch_ids: Vector2i = Vector2i(-1, -1)
+@export var aperture: Rect2 = Rect2()
+@export var starts_open: bool = true
 ## Presentation hint only: whether to build a barrier mesh that can visibly close here. A
 ## connection with no barrier still blocks perfectly well -- it would just be invisible.
-var has_barrier: bool = true
+@export var has_barrier: bool = true
 
 ## WHAT THE CORRIDOR'S FLANKS ARE MADE OF, and the reason a connector need not be a trench.
 ##
@@ -39,4 +57,4 @@ var has_barrier: bool = true
 ## either way, and the wall that stops a shot is still the wall you can see stopping it.
 ##
 ## DEFAULTS TO wall, so every connection authored before this reads exactly as it did.
-var flank_style: StringName = &"wall"
+@export var flank_style: StringName = &"wall"

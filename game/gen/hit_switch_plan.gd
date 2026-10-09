@@ -1,5 +1,13 @@
 class_name HitSwitchPlan
-extends RefCounted
+extends Resource
+## SERIALISABLE AS CONTENT (P36 Slice A). The base changed from RefCounted to Resource and the
+## authored fields gained @export, so an authored floor can live in a .tres instead of in a
+## builder function. Nothing else about this class moved: the same values, the same consumers,
+## the same meaning. Resource IS a RefCounted, so every existing holder is unaffected.
+##
+## THE COMPILER NEVER HANDS A LOADED RECORD STRAIGHT TO A FloorPlan -- it copies into a fresh
+## instance (LayoutCompiler). A .tres is cached and shared by path, and a plan that aliased it
+## would let one run's state leak into the next.
 ## WORLD INTERACTION layer: a PERSISTENT hit target that fires authored floor effects.
 ##
 ## WHY IT IS NOT A BREAKABLE. The seam audit found that "hit a world object -> fire floor
@@ -36,15 +44,21 @@ extends RefCounted
 const MODE_ONE_SHOT: StringName = &"one_shot"
 const MODE_TOGGLE: StringName = &"toggle"
 
-var switch_id: int = -1
-var position: Vector3 = Vector3.ZERO
-var radius: float = 0.7
+## AUTHORING IDENTITY (P36 Slice A). A stable, human-readable name for this record, used by
+## content cross-references and by tests. **Nothing at runtime reads it** -- the sim and the
+## FloorPlan still speak in the numeric ids below, and the compiler resolves keys into those ids
+## at build time. This exists because the .tres became the authoring surface and a cross-
+## reference reading `target_id = 3` tells an author nothing about which door that is.
+@export var key: StringName = &""
+@export var switch_id: int = -1
+@export var position: Vector3 = Vector3.ZERO
+@export var radius: float = 0.7
 ## ONE_SHOT fires once and then ignores every later hit. TOGGLE fires on every accepted
 ## activation, which is what makes "shoot to open, shoot again to close" authorable.
-var mode: StringName = MODE_ONE_SHOT
+@export var mode: StringName = MODE_ONE_SHOT
 ## Fired on each accepted activation, in authored order. Ordinary floor effects -- the switch
 ## causes them and never interprets them, exactly as a plate does.
-var effects: Array[Dictionary] = []
+@export var effects: Array[Dictionary] = []
 ## A HIDDEN switch is not drawn and cannot be hit. It becomes real when something reveals it --
 ## which is how concealment composes: break the cover, and the thing behind it was always there.
-var starts_hidden: bool = false
+@export var starts_hidden: bool = false

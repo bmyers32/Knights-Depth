@@ -37,7 +37,7 @@ func _init() -> void:
 		await create_timer(0.01).timeout
 		i += 1
 
-	var L: GDScript = load("res://game/gen/layouts/archive_roundabout.gd")
+	var L: AuthoredLayout = load("res://game/content/layouts/archive_roundabout.tres")
 	var plan: FloorPlan = load("res://game/gen/depth_generator.gd").generate(0, 2)
 	_solids = plan.solid_segments()
 	_blockers = []
@@ -69,9 +69,9 @@ func _init() -> void:
 	# version listed them by hand and broke the moment the floor was re-authored -- which is the
 	# same failure mode as a measurement holding its own coordinates.
 	var names: Dictionary = {}
-	for constant_name in L.get_script_constant_map():
-		if String(constant_name).begins_with("P_"):
-			names[int(L.get_script_constant_map()[constant_name])] = String(constant_name).substr(2)
+	# NAMES COME FROM THE CONTENT'S OWN KEYS now that the builder scripts are gone.
+	for patch: WalkablePatch in L.patches:
+		names[patch.patch_id] = String(patch.key).trim_prefix("P_")
 	print("FLOOR REVEAL — how much is in view from each major standing point")
 	print("   floor extent %s   %d occluders modelled" % [extent, _blockers.size() + _solids.size()])
 	print("")

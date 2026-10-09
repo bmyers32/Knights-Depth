@@ -20,7 +20,7 @@ func _init() -> void:
 		i += 1
 
 	var generator: GDScript = load("res://game/gen/depth_generator.gd")
-	var L: GDScript = load("res://game/gen/layouts/archive_roundabout.gd")
+	var L: AuthoredLayout = load("res://game/content/layouts/archive_roundabout.tres")
 	var sim_script: GDScript = load("res://game/sim/sim_world.gd")
 	var plan: FloorPlan = generator.generate(0, 2)
 

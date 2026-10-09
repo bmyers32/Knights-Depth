@@ -1,5 +1,13 @@
 class_name WalkablePatch
-extends RefCounted
+extends Resource
+## SERIALISABLE AS CONTENT (P36 Slice A). The base changed from RefCounted to Resource and the
+## authored fields gained @export, so an authored floor can live in a .tres instead of in a
+## builder function. Nothing else about this class moved: the same values, the same consumers,
+## the same meaning. Resource IS a RefCounted, so every existing holder is unaffected.
+##
+## THE COMPILER NEVER HANDS A LOADED RECORD STRAIGHT TO A FloorPlan -- it copies into a fresh
+## instance (LayoutCompiler). A .tres is cached and shared by path, and a plan that aliased it
+## would let one run's state leak into the next.
 ## SPATIAL layer: one rectangle of standable ground. Carries NO semantics -- not a room, not
 ## an encounter, not a zone. Progression, encounters and interactions are separate layers that
 ## merely happen to sit somewhere.
@@ -13,16 +21,22 @@ extends RefCounted
 ## `zone` metadata was considered and DROPPED: no mechanic queries it yet, and a taxonomy with
 ## no consumer is a schema pretending to be a design (§1.4).
 
-var patch_id: int = -1
-var rect: Rect2 = Rect2()
+## AUTHORING IDENTITY (P36 Slice A). A stable, human-readable name for this record, used by
+## content cross-references and by tests. **Nothing at runtime reads it** -- the sim and the
+## FloorPlan still speak in the numeric ids below, and the compiler resolves keys into those ids
+## at build time. This exists because the .tres became the authoring surface and a cross-
+## reference reading `target_id = 3` tells an author nothing about which door that is.
+@export var key: StringName = &""
+@export var patch_id: int = -1
+@export var rect: Rect2 = Rect2()
 
 ## PRESENTATION ONLY. Combat stays on one plane (ruled: depth comes from space, not from
 ## vertical combat systems), so the sim never reads this -- it exists so FloorBuilder can raise
 ## a platform and ramp up to it. If the floor still reads flat AFTER the spatial pass, that is
 ## the evidence that would justify authoritative height mechanics; until then, this is a look.
-var elevation: float = 0.0
+@export var elevation: float = 0.0
 ## Visual key only, same reasoning as elevation.
-var surface: StringName = &"stone"
+@export var surface: StringName = &"stone"
 
 ## PRESENTATION ONLY, and the point of it is what it is NOT: not every walkability edge is a
 ## wall (human finding, 2026-08-29 -- "some reference-floor platforms have open/ledge edges
@@ -31,7 +45,7 @@ var surface: StringName = &"stone"
 ## RENDERS that boundary as a solid wall or leaves it an open ledge you can see over.
 ##   &"wall"   solid vertical boundary (default)
 ##   &"ledge"  open edge -- no wall mesh, still mechanically bounded
-var boundary_style: StringName = &"wall"
+@export var boundary_style: StringName = &"wall"
 
 ## PER-SIDE OVERRIDES, added 2026-09-01 because patch granularity was FALSIFIED by authoring: the
 ## hall wants an open outer perimeter AND a solid void-facing interior, and both belong to the
@@ -50,10 +64,10 @@ var boundary_style: StringName = &"wall"
 ## SPLITTING PATCHES TO FAKE THIS WAS REJECTED. Walkable patches describe walkable SPACE; boundary
 ## style describes boundary SEMANTICS. Making one impersonate the other would leave geometry seams
 ## whose only purpose is to compensate for missing vocabulary.
-var boundary_north: StringName = &""
-var boundary_south: StringName = &""
-var boundary_east: StringName = &""
-var boundary_west: StringName = &""
+@export var boundary_north: StringName = &""
+@export var boundary_south: StringName = &""
+@export var boundary_east: StringName = &""
+@export var boundary_west: StringName = &""
 
 
 ## The style that actually governs one side.
