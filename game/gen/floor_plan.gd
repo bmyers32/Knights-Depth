@@ -394,6 +394,7 @@ func to_dict() -> Dictionary:
 			"patch_ids": [connection.patch_ids.x, connection.patch_ids.y],
 			"aperture": _rect(connection.aperture),
 			"starts_open": connection.starts_open, "has_barrier": connection.has_barrier,
+			"flank_style": String(connection.flank_style),
 		})
 	var trigger_dicts: Array = []
 	for trigger in triggers:
@@ -401,7 +402,7 @@ func to_dict() -> Dictionary:
 			"trigger_id": trigger.trigger_id, "kind": String(trigger.kind),
 			"region": _rect(trigger.region), "source_id": trigger.source_id,
 			"once": trigger.once, "starts_enabled": trigger.starts_enabled,
-			"renders_as_plate": trigger.renders_as_plate, "effects": trigger.effects.map(func(e): return {"kind": String(e["kind"]), "target_id": e["target_id"]}),
+			"renders_as_plate": trigger.renders_as_plate, "effects": _effects(trigger.effects),
 		})
 	var encounter_dicts: Array = []
 	for encounter in encounters:
@@ -422,14 +423,47 @@ func to_dict() -> Dictionary:
 			"breakable_id": breakable.breakable_id, "position": _point(breakable.position),
 			"radius": _snap(breakable.radius), "durability": _snap(breakable.durability),
 			"conceals_trigger_id": breakable.conceals_trigger_id,
+			"blocking_rect": _rect(breakable.blocking_rect),
+		})
+	var switch_dicts: Array = []
+	for hit_switch in hit_switches:
+		switch_dicts.append({
+			"switch_id": hit_switch.switch_id, "position": _point(hit_switch.position),
+			"radius": _snap(hit_switch.radius), "mode": String(hit_switch.mode),
+			"starts_hidden": hit_switch.starts_hidden, "effects": _effects(hit_switch.effects),
+		})
+	var obstacle_dicts: Array = []
+	for obstacle in obstacles:
+		# `height` is rendering-only, and is here anyway: the snapshot protects the whole compiled
+		# plan, not just the fields gameplay reads (ruled 2026-10-09).
+		obstacle_dicts.append({
+			"obstacle_id": obstacle.obstacle_id, "rect": _rect(obstacle.rect),
+			"height": _snap(obstacle.height),
+		})
+	var pad_dicts: Array = []
+	for pad in spike_pads:
+		pad_dicts.append({
+			"pad_id": pad.pad_id, "rect": _rect(pad.rect),
+			"safe_ticks": pad.safe_ticks, "active_ticks": pad.active_ticks,
+			"phase_offset_ticks": pad.phase_offset_ticks, "damage": _snap(pad.damage),
+			"damage_type": String(pad.damage_type),
+			"eligible_allegiances": pad.eligible_allegiances.map(func(a): return String(a)),
 		})
 	return {
 		"run_seed": run_seed, "floor_seed": floor_seed, "depth": depth,
 		"stratum_id": String(stratum_id), "authored_layout": authored_layout,
 		"patches": patch_dicts, "connections": connection_dicts, "triggers": trigger_dicts,
 		"encounters": encounter_dicts, "breakables": breakable_dicts,
+		"hit_switches": switch_dicts, "obstacles": obstacle_dicts, "spike_pads": pad_dicts,
 		"entry_point": _point(entry_point), "end_marker": _point(end_marker),
 	}
+
+
+func _effects(effects: Array[Dictionary]) -> Array:
+	var effect_dicts: Array = []
+	for effect in effects:
+		effect_dicts.append({"kind": String(effect["kind"]), "target_id": effect["target_id"]})
+	return effect_dicts
 
 
 func _rect(rect: Rect2) -> Dictionary:

@@ -15,6 +15,14 @@ const FIXTURE_PATH := "res://tests/fixtures/floor_plan_golden.json"
 ## Must match tools/record_floor_plan_golden.gd.
 const GOLDEN_SEED := 20260828
 const GOLDEN_DEPTH := 1
+## THE SECOND FLOOR'S FIXTURE -- FIRST RECORDED 2026-10-09, and that date is the limit of what it
+## proves. It is a baseline going FORWARD: it notices Floor 2 changing from here on. It is not
+## evidence that Floor 2 matched anything before that day -- the floor passed its spatial gate on
+## 2026-09-09 with no cross-session golden at all.
+const FIXTURE_DEPTH2_PATH := "res://tests/fixtures/floor_plan_golden_depth2.json"
+const GOLDEN_DEPTH2 := 2
+## Must match DepthGenerator's depth-2 layout.
+const LAYOUT_DEPTH2_PATH := "res://game/content/layouts/archive_roundabout.tres"
 
 
 ## Compares the SERIALIZED FORM against the committed bytes rather than parsing the fixture
@@ -28,6 +36,16 @@ func test_the_golden_seed_still_produces_the_committed_floor() -> void:
 	var regenerated: String = JSON.stringify(DepthGenerator.generate(GOLDEN_SEED, GOLDEN_DEPTH).to_dict(), "\t")
 	assert_eq(regenerated, committed,
 		"seed %d depth %d no longer produces the recorded floor. If generation changed ON PURPOSE, re-record the fixture and date the reason; otherwise this is the regression it exists to catch." % [GOLDEN_SEED, GOLDEN_DEPTH])
+
+
+func test_the_golden_seed_still_produces_the_committed_second_floor() -> void:
+	var committed: String = FileAccess.get_file_as_string(FIXTURE_DEPTH2_PATH)
+	assert_false(committed.is_empty(), "the depth-2 fixture must exist -- record it with tools/record_floor_plan_golden.gd")
+
+	var regenerated: String = JSON.stringify(DepthGenerator.generate(GOLDEN_SEED, GOLDEN_DEPTH2).to_dict(), "\t")
+	assert_eq(regenerated, committed,
+		"seed %d depth %d no longer produces the recorded floor. If generation changed ON PURPOSE, re-record the fixture and date the reason; otherwise this is the regression it exists to catch." % [GOLDEN_SEED, GOLDEN_DEPTH2])
+	assert_ne(committed, FileAccess.get_file_as_string(FIXTURE_PATH), "the two floors must not share a fixture")
 
 
 ## DISCRIMINATION CHECK: proves the comparison can fail, so the assertion above is not
@@ -173,3 +191,118 @@ func _walkable(fixture: Dictionary, point: Vector2) -> bool:
 		if _rect(connection["aperture"]).has_point(point):
 			return true
 	return false
+
+
+# --- FLOOR 2: THE FIXTURE AGAINST THE ACCEPTED CONTENT -----------------------------------------
+#
+# The byte test above only says the generator still agrees with the fixture. This says the
+# fixture agrees with the AUTHORED FLOOR -- read straight from the .tres, going through neither
+# LayoutCompiler nor to_dict(), so a serializer that dropped or mangled a layer cannot vouch for
+# itself. Scope is completeness and content preservation only: it asserts no rule about what a
+# floor ought to contain.
+
+func test_the_second_floor_fixture_preserves_the_authored_content() -> void:
+	var fixture: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(FIXTURE_DEPTH2_PATH))
+	var layout: AuthoredLayout = load(LAYOUT_DEPTH2_PATH)
+
+	for layer: String in ["patches", "connections", "triggers", "encounters", "breakables",
+			"hit_switches", "obstacles", "spike_pads"]:
+		assert_gt((layout.get(layer) as Array).size(), 0, "Floor 2 authors %s" % layer)
+		assert_eq((fixture[layer] as Array).size(), (layout.get(layer) as Array).size(),
+			"the fixture must carry every authored record in %s" % layer)
+
+	for obstacle: ObstaclePlan in layout.obstacles:
+		var recorded: Dictionary = _by_id(fixture["obstacles"], "obstacle_id", obstacle.obstacle_id)
+		assert_true(_same_rect(recorded["rect"], obstacle.rect), "obstacle %d footprint" % obstacle.obstacle_id)
+		assert_almost_eq(float(recorded["height"]), obstacle.height, 0.0001, "obstacle %d height" % obstacle.obstacle_id)
+
+	for pad: SpikePadPlan in layout.spike_pads:
+		var recorded: Dictionary = _by_id(fixture["spike_pads"], "pad_id", pad.pad_id)
+		assert_true(_same_rect(recorded["rect"], pad.rect), "pad %d footprint" % pad.pad_id)
+		assert_eq(int(recorded["safe_ticks"]), pad.safe_ticks, "pad %d safe window" % pad.pad_id)
+		assert_eq(int(recorded["active_ticks"]), pad.active_ticks, "pad %d active window" % pad.pad_id)
+		assert_eq(int(recorded["phase_offset_ticks"]), pad.phase_offset_ticks, "pad %d phase" % pad.pad_id)
+		assert_almost_eq(float(recorded["damage"]), pad.damage, 0.0001, "pad %d damage" % pad.pad_id)
+		assert_eq(String(recorded["damage_type"]), String(pad.damage_type), "pad %d damage type" % pad.pad_id)
+		assert_eq(_strings(recorded["eligible_allegiances"]), _strings(pad.eligible_allegiances), "pad %d eligibility" % pad.pad_id)
+
+	for hit_switch: HitSwitchPlan in layout.hit_switches:
+		var recorded: Dictionary = _by_id(fixture["hit_switches"], "switch_id", hit_switch.switch_id)
+		assert_true(_same_point(recorded["position"], hit_switch.position), "switch %d position" % hit_switch.switch_id)
+		assert_almost_eq(float(recorded["radius"]), hit_switch.radius, 0.0001, "switch %d radius" % hit_switch.switch_id)
+		assert_eq(String(recorded["mode"]), String(hit_switch.mode), "switch %d mode" % hit_switch.switch_id)
+		assert_eq(bool(recorded["starts_hidden"]), hit_switch.starts_hidden, "switch %d concealment" % hit_switch.switch_id)
+		assert_eq(_recorded_effects(recorded["effects"]), _authored_effects(layout, hit_switch.effects),
+			"switch %d effects" % hit_switch.switch_id)
+
+	for connection: TraversalConnection in layout.connections:
+		var recorded: Dictionary = _by_id(fixture["connections"], "connection_id", connection.connection_id)
+		assert_eq(String(recorded["flank_style"]), String(connection.flank_style), "connection %d flank" % connection.connection_id)
+		assert_true(_same_rect(recorded["aperture"], connection.aperture), "connection %d aperture" % connection.connection_id)
+		assert_eq(bool(recorded["starts_open"]), connection.starts_open, "connection %d initial state" % connection.connection_id)
+
+	for breakable: BreakablePlan in layout.breakables:
+		var recorded: Dictionary = _by_id(fixture["breakables"], "breakable_id", breakable.breakable_id)
+		assert_true(_same_point(recorded["position"], breakable.position), "breakable %d position" % breakable.breakable_id)
+		assert_true(_same_rect(recorded["blocking_rect"], breakable.blocking_rect), "breakable %d blocking rect" % breakable.breakable_id)
+
+	for trigger: FloorTrigger in layout.triggers:
+		var recorded: Dictionary = _by_id(fixture["triggers"], "trigger_id", trigger.trigger_id)
+		assert_eq(String(recorded["kind"]), String(trigger.kind), "trigger %d kind" % trigger.trigger_id)
+		assert_eq(bool(recorded["starts_enabled"]), trigger.starts_enabled, "trigger %d enabled" % trigger.trigger_id)
+		assert_eq(_recorded_effects(recorded["effects"]), _authored_effects(layout, trigger.effects),
+			"trigger %d effects" % trigger.trigger_id)
+
+	for site: EncounterSite in layout.encounters:
+		var recorded: Dictionary = _by_id(fixture["encounters"], "encounter_id", site.encounter_id)
+		assert_eq(String(recorded["role"]), String(site.role), "encounter %d role" % site.encounter_id)
+		assert_eq((recorded["regions"] as Array).size(), site.regions.size(), "encounter %d territory" % site.encounter_id)
+		var recorded_roster: Array = []
+		for spawn: Dictionary in recorded["roster"]:
+			recorded_roster.append(String(spawn["enemy_key"]))
+		var authored_roster: Array = []
+		for spawn: Dictionary in site.roster:
+			authored_roster.append(String(spawn["enemy_key"]))
+		assert_eq(recorded_roster, authored_roster, "encounter %d roster" % site.encounter_id)
+
+	assert_true(_same_point(fixture["entry_point"], layout.entry_point), "entry point")
+	assert_true(_same_point(fixture["end_marker"], layout.end_marker), "end marker")
+
+
+## to_dict() snaps to 4 decimals, so the fixture may sit up to half a step from the authored value.
+func _same_rect(recorded: Dictionary, authored: Rect2) -> bool:
+	return (absf(float(recorded["x"]) - authored.position.x) <= 0.0001
+		and absf(float(recorded["z"]) - authored.position.y) <= 0.0001
+		and absf(float(recorded["w"]) - authored.size.x) <= 0.0001
+		and absf(float(recorded["d"]) - authored.size.y) <= 0.0001)
+
+
+func _same_point(recorded: Dictionary, authored: Vector3) -> bool:
+	return (absf(float(recorded["x"]) - authored.x) <= 0.0001
+		and absf(float(recorded["y"]) - authored.y) <= 0.0001
+		and absf(float(recorded["z"]) - authored.z) <= 0.0001)
+
+
+func _strings(values: Array) -> Array:
+	var out: Array = []
+	for value: Variant in values:
+		out.append(String(value))
+	return out
+
+
+func _recorded_effects(effects: Array) -> Array:
+	var out: Array = []
+	for effect: Dictionary in effects:
+		out.append("%s -> %d" % [effect["kind"], int(effect["target_id"])])
+	return out
+
+
+## Content names its targets by key; the fixture holds the resolved numeric id. Keys are unique
+## across a layout, so the layout itself can say which id a key means.
+func _authored_effects(layout: AuthoredLayout, effects: Array) -> Array:
+	var out: Array = []
+	for effect: Dictionary in effects:
+		var key: StringName = effect.get("target_key", &"")
+		var target: int = layout.id_for(key) if key != &"" else int(effect.get("target_id", -1))
+		out.append("%s -> %d" % [effect["kind"], target])
+	return out

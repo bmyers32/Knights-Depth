@@ -2,6 +2,12 @@
 	"authored_layout": true,
 	"breakables": [
 		{
+			"blocking_rect": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
 			"breakable_id": 0,
 			"conceals_trigger_id": 2,
 			"durability": 1.0,
@@ -22,6 +28,7 @@
 				"z": -13.5
 			},
 			"connection_id": 0,
+			"flank_style": "wall",
 			"has_barrier": true,
 			"patch_ids": [
 				0,
@@ -37,6 +44,7 @@
 				"z": -37.5
 			},
 			"connection_id": 1,
+			"flank_style": "wall",
 			"has_barrier": true,
 			"patch_ids": [
 				4,
@@ -52,6 +60,7 @@
 				"z": -49.5
 			},
 			"connection_id": 2,
+			"flank_style": "wall",
 			"has_barrier": true,
 			"patch_ids": [
 				5,
@@ -67,6 +76,7 @@
 				"z": -71.5
 			},
 			"connection_id": 3,
+			"flank_style": "wall",
 			"has_barrier": true,
 			"patch_ids": [
 				6,
@@ -82,6 +92,7 @@
 				"z": -93.5
 			},
 			"connection_id": 4,
+			"flank_style": "wall",
 			"has_barrier": true,
 			"patch_ids": [
 				8,
@@ -198,6 +209,8 @@
 		"z": -3.0
 	},
 	"floor_seed": 9187797864493275191,
+	"hit_switches": [],
+	"obstacles": [],
 	"patches": [
 		{
 			"boundary_east": "",
@@ -361,6 +374,7 @@
 		}
 	],
 	"run_seed": 20260828,
+	"spike_pads": [],
 	"stratum_id": "archive",
 	"triggers": [
 		{
