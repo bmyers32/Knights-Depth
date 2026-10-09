@@ -2,9 +2,8 @@
 Milestone: **2 — Procedural depths. IN PROGRESS.**
 
 **FLOOR 2 SPATIAL / TOPOLOGY GATE: PASS (Breon, 2026-09-09).**
-> "Overall I like the floor... I am satisfied with the progress and what was generated with
-> respect to the floor plan... I think we are done iterating this floor right now."
-
+> "Overall I like the floor... satisfied with what was generated with respect to the floor
+> plan... we are done iterating this floor right now."
 **SCOPE: spatial composition only** — topology, rooms, connectors. NOT content density, reward
 economy, hazard roster, enemy tuning, art, or procedural rules. Cleanup is allowed WITHOUT
 reopening the gate; only a regression proving the spatial plan invalid reopens it.
@@ -32,10 +31,10 @@ direction is ROADMAP P6/P37 and is NOT BUILT.**
    `hit_switches`, `breakable.blocking_rect` and `connection.flank_style` — three whole layers
    the golden gate does not protect. Expand coverage and re-record DELIBERATELY, because the
    serialization widened, never because a floor changed.
-2. **Repair the vocabulary/IP guard.** It is a PreToolUse hook: run bare it scans nothing and
-   exits 0, and most edits here arrive via Bash so it rarely fires at all. It also substring-
-   matches, so `navi` trips on `NavigationServer` and `navigation`. Give /gate a real repository
-   scan, kill the false positives, and prove genuinely banned content is rejected.
+2. **Repair the vocabulary/IP guard.** A PreToolUse hook: run bare it scans nothing and exits 0,
+   and most edits arrive via Bash so it rarely fires. It substring-matches, so `navi` trips on
+   `NavigationServer`. Give /gate a real repo scan, kill false positives, prove banned content
+   is rejected.
 3. **The smallest playable M2 multi-floor expedition** — that consumer decides the minimal run
    state and whether `depth` must finally split.
 
@@ -60,22 +59,22 @@ connector flank-style **complement** regression · ledger visible on HUD · proj
 - **NO `interact` VERB EXISTS** — *no active consumer uses it*, NOT that interaction is rejected.
   Gear stations, elevators and rest-floor controls may need it: restore only the narrow surface a
   concrete consumer requires, never the schema wholesale.
-- **AMBIENT TERRITORIES MUST BE CONVEX** (union == bounding box). Straight-line AI has no
-  obstacle routing; wrapping a void makes pursuit scrape. Guarded by a test proved to fail.
+- **AMBIENT TERRITORIES MUST BE CONVEX** (union == bounding box): straight-line AI has no
+  obstacle routing. Guarded by a test proved to fail.
 - **ALL_ACTIVE_ENVOYS_OCCUPY_REGION** is ONE condition with TWO consumers (party plate, floor
   exit). Never grow a second copy of the occupancy math.
 - **BODY-AWARE LEGALITY.** `fits(point, radius)` tests the body against the walkable UNION.
   Never reimplement as a per-rect shrink — a body in a doorway fits neither rect alone.
-- **Occupancy != legality.** Triggers use the anchor + `WalkableBounds.contains` (INCLUSIVE);
-  bounds use `fits`. Never merge them.
-- **Aperture overlap MUST stay > 0.** Abutting rects share zero area — every threshold becomes
-  a discontinuity and the gate/snap problem returns.
+- **Occupancy != legality.** Triggers use the anchor + `contains` (INCLUSIVE); bounds use `fits`.
+- **Aperture overlap MUST stay > 0.** Abutting rects share zero area — every threshold becomes a
+  discontinuity and the gate/snap problem returns.
 - **THROWABLE DEFERRED.** Law banked: *if progression requires a capability, the floor must
   guarantee access to it.*
-- **Breakables are NOT combatants** (`test_breakable_props.gd`). Projectiles TERMINATE on props.
-- **P34 PROJECTILE-VS-WORLD: design returned, awaiting review.** Shots still pass through walls.
-- **Still out:** procedural assembly · minimap · elevator · drop economy · treasure/shop
-  taxonomy · vertical combat · **P20 body-blocking**. **ROADMAP prune DUE at M2 close.**
+- **Breakables are NOT combatants** (`test_breakable_props.gd`); projectiles TERMINATE on props.
+  **P34 projectile-vs-world: design returned, awaiting review** — shots still pass through walls.
+- **Still out (M2 gate):** Foundry stratum · rest floor · elevator + next-floor preview ·
+  stratum-driven pools/weights · depth-scaled defence · typed_damage_ramp · minimap · netcode
+  spike · friend playtest · playtest gate · itch build. **ROADMAP prune DUE at M2 close.**
 - Carried from M1: three §3 rules want a human edit · **P14** title · P16 BUMP (P20) · 5.10.
 
 ## Traps this repo has actually sprung (read before touching these areas)
@@ -92,11 +91,10 @@ connector flank-style **complement** regression · ledger visible on HUD · proj
 - **Integration tests must drive the SHIPPED weapon the shipped way.** A phase-less "attack"
   is not a swing for a combo weapon — the crate test did nothing until it sent pressed/released.
 - **A splice needs BOTH anchors verified.** An end anchor 2500 lines too far once deleted
-  `tick()` and the whole combat pipeline. Check the end anchor's line number before splicing.
+  `tick()` and the whole pipeline. Check the end anchor's line number before splicing.
 - **Presentation is test-exempt, so it is the blind spot.** `test_presentation_contracts.gd`
-  pins method surfaces and drives real verbs through the real arena; rosters are found via
-  `_enemy_of_family(arena, family)` on a searched seed, never a hardcoded one.
-- **Never re-record `ai_baseline_pre_p29.json`** (M1 gate) or the P17 Fang baseline to green a
+  drives real verbs through the real arena; rosters via `_enemy_of_family`, never a fixed seed.
+- **Never re-record `ai_baseline_pre_p29.json`** (M1) or the P17 Fang baseline to green a
   test. **A scanner never proven to fail is not a scanner** — STATE_SCOPES and the ambient
   convexity guard were both verified by injecting a real violation and watching them go red.
 - Run diagnostics **without** suppressing stderr. A `-s` tool script compiles **before**
@@ -116,5 +114,7 @@ Minkowski-sum collision · derived-vs-stored state · cosmetic prediction · gol
 baselines · guard clauses vs world facts · GUT smoke tests · pure function + per-call RNG ·
 reflection-based coverage scanners · union-of-rects legality vs per-axis clamp (wall slide) ·
 placement-refuses vs displacement-clamps · overlapping rects as connectivity · per-actor
-legality regions at one seam · camera lerp · **rect-subtraction body fit (union, not per-rect)**
-· **edge-triggered occupancy conditions** · **retiring vocabulary at zero consumers**.
+legality regions at one seam · camera lerp · rect-subtraction body fit · edge-triggered
+occupancy · retiring vocabulary at zero consumers · **Resource vs RefCounted for serialisable
+content** · **authored data vs compiled runtime identity** · **layer-scoped key resolution** ·
+**complement invariants between paired functions** · **PreToolUse hooks are not repo audits**.

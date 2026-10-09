@@ -1090,3 +1090,49 @@ playtest validation.
    application. **The general form:** before writing a rule about provenance, check that
    provenance is stored. An unrepresentable law is not an unenforced one.
 
+19. **An exit code from a tool that scanned nothing is not evidence.** `scripts/guard.py` is a
+   PreToolUse hook: it checks one file handed to it by the harness. Run bare it has nothing to
+   read and exits 0, and I reported "guard clean" twice on that basis — once at a milestone
+   closeout. It was never a repository audit. Worse, most edits in this workflow arrive through
+   Bash and python rather than Write/Edit, so the hook rarely fires at all, and content written
+   by the engine (ResourceSaver) is never seen by it. **Failure if ignored:** a mechanical red
+   line reports PASS while enforcing nothing, which is more dangerous than having no guard,
+   because it buys confidence. **How to use it:** before quoting a checker's exit code, confirm
+   what it actually read — file count, paths, term count. A verifier that cannot name its inputs
+   has not verified anything. **Where else:** linters invoked without a path, coverage tools
+   whose include-globs match nothing, CI steps that `|| true`.
+
+20. **A partial oracle makes a migration look safe.** `FloorPlan.to_dict()` is the golden-seed
+   fixture's serialisation, and it omits three whole layers (obstacles, spike_pads,
+   hit_switches) plus two fields. Verifying a representation migration against it passed
+   byte-identical while six masses, six pads, three switches and every route blocker's footprint
+   were entirely unchecked. **Failure if ignored:** the strongest-sounding claim in the project —
+   "byte-identical output" — is true of the subset the oracle happens to cover, and the gap is
+   invisible precisely because the check is green. **How to use it:** before trusting a
+   comparison, enumerate what it compares against what exists. Prefer an explicit field list over
+   reflection: a reflective dump silently stops covering a field the day one is added, which is
+   how this gap formed. **Where else:** any snapshot/approval test, save-format round-trips, wire
+   protocol fixtures.
+
+21. **Identity must be resolved within the layer that owns it.** Semantic keys were made unique
+   across a whole floor, so one lookup served every layer — and `target_key = &"P_COURT"` on an
+   `open_connection` would have resolved to a real PATCH id and compiled a door that opens
+   nothing. The reference knows what KIND of thing it points at; resolution must use that.
+   **Failure if ignored:** a valid-looking artifact with a plausible integer in it, failing at
+   runtime as a content bug, costing days before the toolchain is suspected. **How to use it:**
+   when adding name-based references, make the lookup take the expected kind as an argument
+   rather than searching globally — and test the wrong-kind case specifically, because the
+   right-kind and missing-key cases both pass without it. **Where else:** save migrations, asset
+   references, any id-by-name resolution across heterogeneous collections.
+
+22. **Functions documented as complements must be tested as complements.** `solid_segments()` and
+   `open_edge_segments()` are one derivation read two ways — a boundary is a wall or a rim, and
+   every boundary is exactly one. They were kept in step by hand, so when connector flanks gained
+   an authored style, one call site received the argument and the other did not. Every rimmed
+   flank was then filtered out of BOTH sets: no wall, no lip, hallways with no visible edges.
+   **Failure if ignored:** a partition silently stops partitioning, and the missing half is
+   invisible because nothing errors — the human saw it before the code did. **How to use it:**
+   any pair whose docstrings claim to split a set should carry a test asserting the split, not a
+   comment asserting it. **Where else:** include/exclude filters, enabled/disabled queries,
+   serialise/deserialise pairs.
+
