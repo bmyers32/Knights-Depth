@@ -44,6 +44,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P35 | Floor-completion / transition presentation | PROPOSED | Winning a floor gives weaker feedback than dying — a `print()` vs an overlay. Audit existing exit vocabulary first |
 | P36 | Macro composition seam (families, missions, arcade) | HELD | Released only on a human Floor 2 PASS; topology vocabulary already homed in floor_layers.gd |
+| P38 | Pre-expedition ready room | PROPOSED — **direction captured 2026-10-10, NOT BUILT** | Party staging space before a descent; distinct from the Commons and from in-expedition safe terminals. Entry must stay separable from floor loading |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -3972,6 +3973,26 @@ reinstall the disagreement. Widen the AUTHORED aperture, let both consumers inhe
 the clearance validator (a 6.0 aperture is EXPECTED to satisfy the widest-body law but must be
 proven, not assumed), re-baseline the golden fixture under the dated-reason rule, re-run the
 suite and the migration comparison.
+
+### P38 — Pre-expedition ready room
+**Status:** PROPOSED. Direction given by Breon at the 2026-10-10 closeout; recorded, NOT built.
+
+**What it is.** A space where a party assembles before descending: review the expedition's
+information, coordinate equipment, accept optional expedition quests, and ready up.
+
+**What it is not.** It is distinct from BOTH the persistent Commons (M4 hub) and the safe
+terminals met during an expedition. Three places, three jobs — do not collapse them.
+
+**Deepens (GAME-RULES §6.2):** expedition entry (P6 Gates & Arcade) and expedition quests (P37).
+It adds no progression loop of its own.
+
+**The one constraint it places on work that precedes it.** Expedition ENTRY must stay
+conceptually distinct from FLOOR LOADING, so that a ready room or a public Gate can later launch
+the same expedition without redesigning floor progression. The first multi-floor expedition
+slice honours this and builds nothing else from this entry.
+
+**Explicitly not built until taken up:** the physical room, party formation, a multiplayer
+lobby, expedition quests, party voting, a public Gate framework.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
