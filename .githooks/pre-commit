@@ -1,0 +1,5 @@
+#!/bin/sh
+# Vocabulary/IP guard on the STAGED content (GAME-RULES 1.7, 6.7). Install once per clone:
+#   python scripts/guard.py --install-hook
+# Any failure to run -- python missing, guard crash -- refuses the commit rather than passing.
+exec python scripts/guard.py --staged

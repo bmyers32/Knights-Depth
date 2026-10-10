@@ -118,8 +118,22 @@ Palette assignments PROVISIONAL pending Umbral + damage-type pass. Motion carrie
 state identity so color doesn't have to (also the accessibility path).
 
 ## Banned & Watch Terms (guard.py enforcement)
-**Banned strings** (block in game/, tests/, content/): `navi` · `net king` ·
+**Banned strings** (block in game/, tests/, content/, tools/): `navi` · `net king` ·
 `netking` · `dark web` · `undernet` · `virus` · `corruption` (the phenomenon is Drift).
 **Watch (warn, don't block):** `knight` in new game/ code identifiers (rename law —
 asset filenames and repo name exempt) · Pattern/Loom/Thread appearing together.
-guard.py update pending — see HANDOFF; strings above are the spec.
+
+The two lines above are the spec and are machine-read: `python scripts/guard.py --scan`
+fails if its banned list, its scope, or its watch term disagrees with them.
+- **Scope** is by top-level directory. tools/ was added 2026-10-09: tools produce and
+  manipulate game content, so they are not an unguarded exception.
+- **Matching is by whole word, not substring** (2026-10-09). Text is split at punctuation,
+  underscores, digits and camelCase humps; simple plurals count; a multi-word term also
+  matches written as one word. "navigation" is legal; a `navi`-prefixed snake_case or
+  CamelCase identifier is not. Known limit: an all-lowercase run-on of a single-word
+  term is not caught.
+- **Enforced at** the edit hook, `/gate` (`--scan`, working tree) and Git pre-commit
+  (`--staged`, the index). The Git hook is defence in depth; `/gate` stays required.
+- **Not enforced:** "Pattern/Loom/Thread appearing together" — "together" was never
+  defined, so the rule is unspecified and no tool checks it (ruled 2026-10-09).
+- Reference-game IP terms are not listed here; `scripts/guard.py` is their only home.

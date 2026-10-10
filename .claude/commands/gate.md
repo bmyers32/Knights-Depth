@@ -8,3 +8,8 @@ seed tests unchanged or deliberately re-baselined with a dated note, no SK IP, a
 manifested. Report PASS / PARTIAL / FAIL per item. PARTIAL/FAIL: list exactly what
 remains, fix, re-verify. No success claims that haven't been adversarially tested
 (actually run the tests and the headless sim script — do not assert from memory).
+
+The IP/vocabulary item is answered ONLY by `python scripts/guard.py --scan` — never by a
+bare `guard.py` run or by memory. Quote its counts (files inspected, per-scope counts,
+LEXICON sync, hook status) and its RESULT line in the report; a scan that printed no
+counts verified nothing. It does not check the Pattern/Loom/Thread watch rule (unspecified).
