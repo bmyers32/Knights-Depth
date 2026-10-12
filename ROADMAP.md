@@ -3994,6 +3994,46 @@ slice honours this and builds nothing else from this entry.
 **Explicitly not built until taken up:** the physical room, party formation, a multiplayer
 lobby, expedition quests, party voting, a public Gate framework.
 
+**Constraint honoured, nothing else built (2026-10-10).** The first two-floor expedition keeps
+`Arena.begin_expedition()` (entry) a separate function from `_load_floor()` (floor loading); a
+descent reuses only the latter. That slice is recorded under its own heading below — it is not
+part of this proposal, and the ready room itself remains NOT BUILT.
+
+## M2 TWO-FLOOR EXPEDITION. **HUMAN PASS 2026-10-12 (scoped).** Suite 847 -> 871.
+
+**Scope of the PASS (Breon, verbatim scope):** the two-floor expedition slice — NOT the M2
+milestone, the final elevator presentation, multiplayer, or future Arcade systems. It does not
+reopen Floor 1 or Floor 2 spatial design.
+
+**Personally observed by the human:** Floor 1 -> Floor 2 transition · Floor 2 -> Expedition
+Complete · R on the completion screen -> fresh restart at Floor 1 · no gameplay concerns or
+requested changes.
+
+**Carried by automated tests only, NOT human-observed** (`tests/test_expedition.gd`,
+`tests/test_expedition_flow.gd`): same-tick death beats descent and beats completion · a
+duplicated completion cannot skip a floor · nothing changes until the whole event batch is
+reported · health/shield/equipment values survive the descent · the departing floor leaves
+nothing behind · control is live while the arrival card shows · a completed expedition stops
+the world and cannot complete twice.
+
+**As built:**
+- **Run state exists and is minimal:** `game/sim/expedition.gd` — seed, an ordered itinerary of
+  depths (`[1, 2]`), a position, a complete flag, and one rule: `advance()` descends if a
+  further entry exists, otherwise completes the expedition. The Arena holds it beside `sim` and
+  keeps no progression counter of its own. This is the run object the P36 audit (R5) said M2
+  would need; it is NOT a FloorSequence, mission or family, all still deferred.
+- **`depth` deliberately NOT split (P36 audit R4, ruled 2026-10-10).** The two entries sit at
+  depths 1 and 2, so itinerary position and absolute depth never differ. Split them when a
+  concrete consumer needs both numbers — the first floor that can appear at more than one
+  position (P6), or Archive -> safe terminal -> Foundry.
+- **Run length is the itinerary's, not the stratum's** (ruled): a stratum is a thematic/depth
+  region, never the container that defines a complete run. `StratumConfig` gained no field.
+- **Descent presentation is temporary** (P35 remains open): instant in-place floor swap plus a
+  non-blocking arrival card. No elevator, preview, vote, confirm state or paused sim.
+- **M3 FLAG, unsolved by design:** a floor change is a driver call (`sim.load_floor`), not an
+  Event, so it does not appear in the Event stream. Clients will need a replicated floor-change
+  message; decide its shape in M3 against the real netcode, not here.
+
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
 Full text lives in git history — `git log -p ROADMAP.md` resurrects anything.)

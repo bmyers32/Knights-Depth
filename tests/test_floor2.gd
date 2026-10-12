@@ -21,11 +21,11 @@ var player: int
 
 func before_each() -> void:
 	arena = load("res://game/arena/arena.tscn").instantiate()
-	arena.depth = 2
+	arena.itinerary = [2] as Array[int]
 	add_child_autofree(arena)
 	sim = arena.sim
 	player = arena.envoy.actor_id
-	plan = DepthGenerator.generate(arena.run_seed, arena.depth)
+	plan = DepthGenerator.generate(arena.run_seed, arena.expedition.current_depth())
 	sim.debug_override_health(player, 1000000.0)
 
 

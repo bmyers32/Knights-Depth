@@ -5,10 +5,11 @@
 [ext_resource type="PackedScene" path="res://game/ui/failure_overlay.tscn" id="6_failure_overlay"]
 [ext_resource type="Script" path="res://game/arena/floor_builder.gd" id="7_floor_builder"]
 [ext_resource type="Script" path="res://game/arena/follow_camera.gd" id="8_follow_camera"]
+[ext_resource type="PackedScene" path="res://game/ui/arrival_card.tscn" id="9_arrival_card"]
+[ext_resource type="PackedScene" path="res://game/ui/expedition_complete_overlay.tscn" id="10_expedition_complete"]
 
 [node name="Arena" type="Node3D"]
 script = ExtResource("1_script")
-depth = 2
 
 [node name="FloorBuilder" type="Node3D" parent="."]
 script = ExtResource("7_floor_builder")
@@ -34,3 +35,7 @@ theme_override_font_sizes/font_size = 16
 text = "seed --"
 
 [node name="FailureOverlay" parent="." instance=ExtResource("6_failure_overlay")]
+
+[node name="ArrivalCard" parent="." instance=ExtResource("9_arrival_card")]
+
+[node name="ExpeditionCompleteOverlay" parent="." instance=ExtResource("10_expedition_complete")]

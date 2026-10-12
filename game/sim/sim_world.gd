@@ -317,8 +317,8 @@ var _patch_rects: Array[Rect2] = []
 ## authored consumer and would be speculative generality.
 var _active_confinement: int = -1
 ## Set once every active Envoy stands on the authored exit region. Deliberately a FACT and an
-## Event and nothing else: there is no next floor to descend to yet, and inventing one to give
-## this somewhere to go would be building a system to satisfy a flag.
+## Event and nothing else: the sim does not know what follows a floor. The Expedition decides
+## whether that is a descent or the end of the run, and the driver carries it out.
 var _floor_complete: bool = false
 
 const SCOPE_RUN: StringName = &"run"

@@ -22,7 +22,7 @@ var arena: Node3D
 
 func _boot() -> Node3D:
 	var instance: Node3D = load("res://game/arena/arena.tscn").instantiate()
-	instance.depth = 2
+	instance.itinerary = [2] as Array[int]
 	add_child_autofree(instance)
 	instance.sim.debug_override_health(instance.envoy.actor_id, 100000.0)
 	return instance

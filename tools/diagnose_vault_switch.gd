@@ -49,7 +49,7 @@ func _init() -> void:
 
 func _probe(L: GDScript, weapon_id: StringName) -> void:
 	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
-	arena.depth = 2
+	arena.itinerary = [2] as Array[int]
 	Engine.get_main_loop().root.add_child(arena)
 	var sim: Object = arena.sim
 	var envoy_id: int = arena.envoy.actor_id

@@ -134,7 +134,7 @@ func test_both_authored_floors_pass_the_guard() -> void:
 ## room, and a regression pinned to a retired room name would simply have stopped compiling.
 func test_floor_two_gated_branch_cannot_be_entered_without_its_control() -> void:
 	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
-	arena.depth = 2
+	arena.itinerary = [2] as Array[int]
 	add_child_autofree(arena)
 	var L: AuthoredLayout = load("res://game/content/layouts/archive_roundabout.tres")
 	var plan: FloorPlan = DepthGenerator.generate(arena.run_seed, 2)

@@ -13,6 +13,8 @@ extends Node3D
 @onready var _camera: FollowCamera = $FollowCamera
 @onready var _seed_label: Label = $SeedHud/SeedLabel
 @onready var _failure_overlay: FailureOverlay = $FailureOverlay
+@onready var _arrival_card: ArrivalCard = $ArrivalCard
+@onready var _completion_overlay: ExpeditionCompleteOverlay = $ExpeditionCompleteOverlay
 
 const PROJECTILE_TRACER: PackedScene = preload("res://game/actors/projectile_tracer.tscn")
 ## Player-shot tracer colour. GAME-RULES §3's channel law says damage TYPES own colour,
@@ -48,9 +50,11 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## DepthGenerator builds its own RandomNumberGenerator per call, so floor count cannot shift
 ## a single combat roll.
 @export var run_seed: int = 0
-## Which depth to generate. Slice 1 loads exactly one floor at startup; the elevator that
-## advances this is explicitly out of scope (GAME-RULES §5 M2 run structure).
-@export var depth: int = 1
+## The floors this expedition visits, in order, as depths. CONFIGURATION ONLY: it is handed to
+## the Expedition at begin_expedition() and never read again -- where the party is, and whether
+## a floor is the last, is the Expedition's to say, never this node's. A one-entry itinerary is
+## how a test (or a human) boots a single floor.
+@export var itinerary: Array[int] = [1, 2]
 
 ## Debug/diagnostic exports (manual-pass convention, this session): every export in
 ## this block is named debug_* and defaults to the AUTHENTIC game behavior — "all
@@ -104,6 +108,14 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 @export var debug_show_burrow_selection: bool = false
 
 var sim := SimWorld.new()
+## The run's progression, built by begin_expedition(). Held here exactly as `sim` is: this node
+## orchestrates loading and presentation, the Expedition decides what comes next.
+var expedition: Expedition
+## A floor_complete seen in the event batch currently being reported. A FLAG, not a count, and
+## resolved only once the whole batch is reported: loading a floor mid-batch would leave the
+## rest of that batch naming actors of a floor that no longer exists, and a flag cannot skip a
+## floor however many completions one batch carries.
+var _floor_complete_pending: bool = false
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 ## Monotonic across the whole RUN, never reset per floor: a reused actor_id would make two
 ## different enemies indistinguishable in one run's event log. Starts at 1 because the Envoy
@@ -152,8 +164,18 @@ var _envoy_alive: bool = true
 
 
 func _ready() -> void:
-	sim.seed_combat_rng(run_seed)
-	print("run seed: ", run_seed)
+	begin_expedition()
+
+
+## EXPEDITION ENTRY -- distinct from floor loading on purpose (ROADMAP P38). This starts a fresh
+## run: its itinerary, its seed, and the Envoy's starting state. _load_floor() only ever
+## installs "the expedition's current floor" and is what a descent reuses; nothing in here
+## runs again mid-run. Booting the scene is today's only caller, and a restart reaches it by
+## reloading the scene -- a title screen, ready room or Gate calls this same function later.
+func begin_expedition() -> void:
+	expedition = Expedition.new(run_seed, itinerary)
+	sim.seed_combat_rng(expedition.run_seed)
+	print("expedition begun: ", {"run_seed": expedition.run_seed, "itinerary": expedition.itinerary})
 
 	# The body radius rides along because placement legality is body-aware (ruled): it is the
 	# same stats.combat_radius registered as the combatant body on the next line.
@@ -222,7 +244,7 @@ func _cache_gun_visuals(weapon_ids: Array[StringName]) -> void:
 			}
 
 
-## Generates the floor for the current depth and installs it in BOTH layers: the sim gets
+## Generates the expedition's CURRENT floor and installs it in BOTH layers: the sim gets
 ## the walkable law and a cleared encounter, presentation gets geometry and actor scenes --
 ## both from the SAME FloorPlan, so the room the player sees and the room the sim clamps
 ## against can never be two different rooms.
@@ -234,10 +256,10 @@ func _cache_gun_visuals(weapon_ids: Array[StringName]) -> void:
 ##                       and adopts the new bounds, BEFORE any new actor is registered
 ##   3. build         -- new scenes instantiated with freshly allocated actor_ids
 ##   4. register      -- through the ordinary ContentRegistrar path, unchanged
-func _load_floor() -> void:
-	var plan: FloorPlan = DepthGenerator.generate(run_seed, depth)
+func _load_floor() -> FloorPlan:
+	var plan: FloorPlan = DepthGenerator.generate(expedition.run_seed, expedition.current_depth())
 	print("floor loaded: ", {
-		"run_seed": run_seed, "depth": depth, "authored_layout": plan.authored_layout,
+		"run_seed": plan.run_seed, "depth": plan.depth, "authored_layout": plan.authored_layout,
 		"patches": plan.patches.size(), "connections": plan.connections.size(),
 		"triggers": plan.triggers.size(), "encounters": plan.encounters.size(),
 		"breakables": plan.breakables.size(),
@@ -252,6 +274,9 @@ func _load_floor() -> void:
 	_windup_cues.clear()
 	for projectile_id: int in _projectile_tracers.keys():
 		_despawn_tracer(projectile_id)
+	# load_floor drops a held charge WITHOUT a melee_hold_canceled Event (it emits nothing), so
+	# the one Envoy indicator that is lit by Event has to be put out by hand at the boundary.
+	envoy.clear_charge_ready()
 	envoy.teleport_from_sim(plan.entry_point)
 	_camera.set_target(envoy)
 	_camera.set_floor_extent(_floor_extent_of(plan))
@@ -304,6 +329,7 @@ func _load_floor() -> void:
 					"hit_radius": action.projectile_hit_radius,
 				}
 	_update_seed_label(plan)
+	return plan
 
 
 ## Unpacks the four floor LAYERS into the sim. The driver does the unpacking so sim/ never
@@ -361,7 +387,10 @@ func _update_seed_label(plan: FloorPlan) -> void:
 	# SEED HONESTY: while the layout is authored, SAY SO. A seed printed beside a fixed floor
 	# would advertise procedural variety that does not exist yet.
 	var provenance: String = "authored layout" if plan.authored_layout else "generated"
-	_seed_provenance = "seed %d · depth %d · %s · %s" % [plan.run_seed, plan.depth, plan.stratum_id, provenance]
+	_seed_provenance = "seed %d · depth %d · %s · %s · floor %d/%d" % [
+		plan.run_seed, plan.depth, plan.stratum_id, provenance,
+		expedition.position + 1, expedition.itinerary.size(),
+	]
 	_seed_label.text = _seed_provenance
 
 
@@ -391,10 +420,24 @@ func _physics_process(delta: float) -> void:
 	# typed-Array ternary doesn't coerce a bare "[]" to Array[Command], hence the
 	# if/else instead of a one-line ternary here.)
 	var commands: Array[Command] = []
-	if _envoy_alive:
+	if _envoy_alive and not expedition.is_complete:
 		_process_debug_weapon_cycle()  # stops along with every other Envoy input on death
 		_process_debug_burrow_trigger()
 		commands = envoy.build_commands(sim.tick_count)
+	_step(commands, delta)
+
+
+## One driver step: tick the sim, mirror it, report its events, then resolve any floor
+## completion. Split from _physics_process only so the WHOLE step is drivable without the
+## Input singleton -- a test that calls sim.tick() directly skips reporting and transition,
+## which are exactly the parts a descent lives in.
+func _step(commands: Array[Command], delta: float) -> void:
+	# A COMPLETED EXPEDITION IS OVER, so the world stops with it. Death deliberately keeps
+	# ticking (above); completion deliberately does not, or a surviving enemy could kill the
+	# Envoy on the completion screen and the run would end twice with opposite results.
+	# This is the END state only -- a descent never pauses the sim.
+	if expedition.is_complete:
+		return
 	var events: Array[Event] = sim.tick(commands, delta)
 	# ON SCREEN WHILE THEY PLAY, not only in a death report they may never trigger. Presentation
 	# only: it reads the ledger and writes a label, and touches no gameplay state.
@@ -404,6 +447,7 @@ func _physics_process(delta: float) -> void:
 		var actor: Node3D = _enemies[actor_id]
 		actor.sync_from_sim(_grounded(sim.entities.get(actor_id, actor.position)))
 	_report_events(events)
+	_resolve_floor_complete()
 	_advance_windup_cues()
 	if debug_show_attack_state:
 		var description: Dictionary = sim.debug_describe_melee_state(envoy.actor_id)
@@ -425,6 +469,30 @@ func _physics_process(delta: float) -> void:
 			var selection: Dictionary = sim.debug_describe_action_selection(actor_id, envoy.actor_id)
 			if not selection.is_empty():
 				print("action selection: ", selection)
+
+
+## Acts on a floor completion AFTER its whole event batch has been reported. The Expedition
+## decides which of the two things happens; this node only carries it out.
+##
+## FAILURE WINS (ruled, solo slice): if the Envoy died in the same tick the floor completed,
+## the run failed. A dead expedition does not descend and does not complete.
+func _resolve_floor_complete() -> void:
+	if not _floor_complete_pending:
+		return
+	_floor_complete_pending = false
+	if not _envoy_alive:
+		return
+	var from_depth: int = expedition.current_depth()
+	if expedition.advance():
+		# DESCENT: same SimWorld, same Envoy. load_floor keeps what belongs to the run and
+		# drops what belonged to the floor (SimWorld.STATE_SCOPES) -- nothing is copied here.
+		print("descent: ", {"from_depth": from_depth, "to_depth": expedition.current_depth(), "tick": sim.tick_count})
+		var plan: FloorPlan = _load_floor()
+		_arrival_card.show_arrival(plan.depth, plan.stratum_id)
+	else:
+		print("EXPEDITION COMPLETE: ", {"final_depth": from_depth, "tick": sim.tick_count})
+		print(damage_ledger.summary())
+		_completion_overlay.show_complete()
 
 
 ## STAGE 1 controlled burrow. Edge-detected raw KEY_B, no-op unless debug_burrow_trigger is
@@ -667,6 +735,8 @@ func _report_events(events: Array[Event]) -> void:
 				_floor_builder.set_plate_visible(int(event.payload["trigger_id"]), true)
 			"floor_complete":
 				print("FLOOR COMPLETE: the expedition stood on the exit together")
+				# Noted, not acted on: see _floor_complete_pending.
+				_floor_complete_pending = true
 			"breakable_hit":
 				print("breakable hit: ", event.payload)
 			"breakable_destroyed":

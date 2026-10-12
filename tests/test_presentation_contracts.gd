@@ -90,7 +90,7 @@ func _instantiate_arena() -> Node3D:
 	# ARCHIVE PROTOTYPE specifically, so the floor they mean is stated rather than assumed --
 	# the scene's boot depth is a handoff pointer that moves whenever a human is being handed
 	# a different floor to play.
-	arena.depth = 1
+	arena.itinerary = [1] as Array[int]
 	add_child_autofree(arena)
 	assert_not_null(arena, "the real arena scene must instantiate")
 	return arena
@@ -114,7 +114,7 @@ func _instantiate_arena_containing(family: StringName) -> Node3D:
 	# ARCHIVE PROTOTYPE specifically, so the floor they mean is stated rather than assumed --
 	# the scene's boot depth is a handoff pointer that moves whenever a human is being handed
 	# a different floor to play.
-	arena.depth = 1
+	arena.itinerary = [1] as Array[int]
 	add_child_autofree(arena)
 	assert_not_null(arena, "the real arena scene must instantiate")
 	return arena
@@ -376,7 +376,7 @@ func test_floor_builder_exposes_the_methods_the_arena_driver_calls() -> void:
 ## asked for are one set -- not three that merely usually agree.
 func test_the_built_floor_matches_the_generated_plan() -> void:
 	var arena: Node3D = _instantiate_arena_containing(&"fang")
-	var plan: FloorPlan = DepthGenerator.generate(arena.run_seed, arena.depth)
+	var plan: FloorPlan = DepthGenerator.generate(arena.run_seed, arena.expedition.current_depth())
 
 	assert_eq(arena._enemies.size(), plan.all_spawns().size(),
 		"every spawn the plan authored must exist as a live actor -- a dropped one means the sim refused a placement the generator promised was legal")

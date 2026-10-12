@@ -1,0 +1,20 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://game/ui/arrival_card.gd" id="1_script"]
+
+[node name="ArrivalCard" type="CanvasLayer"]
+visible = false
+script = ExtResource("1_script")
+
+[node name="Label" type="Label" parent="."]
+offset_left = -220.0
+offset_top = 56.0
+offset_right = 220.0
+offset_bottom = 96.0
+anchor_left = 0.5
+anchor_right = 0.5
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "Depth --"

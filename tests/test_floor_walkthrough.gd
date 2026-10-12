@@ -21,7 +21,7 @@ func _boot() -> Node3D:
 	# ARCHIVE PROTOTYPE specifically, so the floor they mean is stated rather than assumed --
 	# the scene's boot depth is a handoff pointer that moves whenever a human is being handed
 	# a different floor to play.
-	arena.depth = 1
+	arena.itinerary = [1] as Array[int]
 	add_child_autofree(arena)
 	# The floor is a long walk with a real fight in it; survivability keeps a TRAVERSAL test
 	# measuring traversal. Never a balance claim.
@@ -30,7 +30,7 @@ func _boot() -> Node3D:
 
 
 func _plan(arena: Node3D) -> FloorPlan:
-	return DepthGenerator.generate(arena.run_seed, arena.depth)
+	return DepthGenerator.generate(arena.run_seed, arena.expedition.current_depth())
 
 
 func _envoy(arena: Node3D) -> int:

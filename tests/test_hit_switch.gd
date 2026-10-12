@@ -296,7 +296,7 @@ func test_every_shipped_weapon_operates_the_shipped_vault_control() -> void:
 	var L: AuthoredLayout = load("res://game/content/layouts/archive_roundabout.tres")
 	for weapon_id: StringName in [&"sword_burn_A", &"wand_A"]:
 		var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
-		arena.depth = 2
+		arena.itinerary = [2] as Array[int]
 		add_child_autofree(arena)
 		var world: SimWorld = arena.sim
 		var envoy_id: int = arena.envoy.actor_id

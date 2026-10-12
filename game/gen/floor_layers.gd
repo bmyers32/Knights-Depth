@@ -46,8 +46,8 @@ const EFFECT_TOGGLE_CONNECTION: StringName = &"toggle_connection"
 ## object that already exists stops being hidden. It is not a signalling channel, and there is
 ## deliberately no way to "reveal" something that is not a physical object in the world.
 const EFFECT_REVEAL_SWITCH: StringName = &"reveal_switch"
-## Marks the floor finished. Deliberately just a fact + an Event: there is no next floor to
-## descend to yet, and faking one to prove this would be inventing a system to satisfy a test.
+## Marks the floor finished. Deliberately just a fact + an Event: a floor never knows its place
+## in a run, so what completion LEADS to (descent or run end) is the Expedition's decision.
 const EFFECT_COMPLETE_FLOOR: StringName = &"complete_floor"
 
 # --- PROGRESSION: what can cause it ---------------------------------------------------
