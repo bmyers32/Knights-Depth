@@ -1,47 +1,47 @@
 # HANDOFF
 Milestone: **2 — Procedural depths. IN PROGRESS.**
 
-**FLOOR 2 SPATIAL / TOPOLOGY GATE: PASS (Breon, 2026-09-09)** — "we are done iterating this
-floor right now." **SCOPE: spatial composition only** (topology, rooms, connectors) — NOT content
-density, reward economy, hazards, enemy tuning, art, or procedural rules. Cleanup is allowed
-WITHOUT reopening the gate; only a regression proving the spatial plan invalid reopens it.
+**FLOOR 2 SPATIAL / TOPOLOGY GATE: PASS (Breon, 2026-09-09).** SCOPE: spatial composition only (topology, rooms,
+connectors) — NOT density, rewards, hazards, enemy tuning, art or procedural rules. Cleanup is allowed WITHOUT
+reopening the gate; only a regression proving the spatial plan invalid reopens it.
 Public M1 build: https://bmyers32.itch.io/knight-depths
 
 ## Where things stand
-Floor 2 is a **308 x 150 production-scale floor**, far wider than deep, in four independent layers. Court --north
-hall--> T --west--> spike hall (pads + 2 Watchers) --> optional west loop; --east--> long hall, one bend --> Works
---> **Arena** --> Reward Hall + exit. The Arena holds a centred party plate, a symmetrical four-arm spike cross,
-and **three true waves** chained by ordinary `encounter_cleared` triggers — no wave manager was needed or built.
-Full shape and the reasoning behind every coordinate: FLOOR-AUTHORING-NOTES.md.
+Floor 2 is a **308 x 150 production-scale floor** in four independent layers: Court -> T -> west spike hall /
+east long hall -> Works -> **Arena** (party plate, spike cross, **three true waves** chained by ordinary
+`encounter_cleared` triggers — no wave manager) -> Reward Hall + exit. Full shape: FLOOR-AUTHORING-NOTES.md.
 
 ## P36 SLICE A — DONE (2026-10-09). Floors are CONTENT.
-`AuthoredLayout` (.tres) -> `LayoutCompiler` -> the same `FloorPlan`; the builders are **deleted**. Records carry
-semantic `key`s resolved **within the referenced layer**; keys never reach a compiled plan. `generate(seed,
-depth)` unchanged. **Deferred by rule of two:** FloorSequence/FloorFamily/role. **Arcade/Gate (ROADMAP P6/P37) is
-NOT BUILT.** The macro composition seam is unnamed; procedural generation stays fenced until it is
-(P36-MACRO-COMPOSITION-AUDIT.md, FLOOR-AUTHORING-NOTES.md).
+`AuthoredLayout` (.tres) -> `LayoutCompiler` -> the same `FloorPlan`; builders **deleted**; semantic `key`s resolve
+**within the referenced layer** and never reach a compiled plan. **Deferred by rule of two:** FloorSequence /
+FloorFamily / role. **Arcade/Gate (P6/P37) NOT BUILT**; procedural generation stays fenced (P36 audit doc).
 
-## CANONICAL SNAPSHOT — REPAIRED (2026-10-09, `69e4905`)
-`FloorPlan.to_dict()` carries every runtime field; `test_floor_plan_snapshot_coverage.gd` changes
-ONE value at a time and reports any it cannot change. **Two goldens:** depth 1, and depth 2
-(`floor_plan_golden_depth2.json` — a baseline going forward, NOT proof of the old Floor 2).
+## REPAIRED INSTRUMENTS (2026-10-09)
+- **Snapshot (`69e4905`):** `FloorPlan.to_dict()` carries every runtime field; the coverage test changes ONE value
+  at a time. Two goldens: depth 1 and depth 2 (a baseline going forward, NOT proof of the old Floor 2).
+- **Guard (`57c9d6d`):** edit hook · `--scan` (for /gate) · `--staged` (`.githooks/pre-commit`). **/gate's IP item =
+  the `--scan` RESULT line and its counts.** Gaps: lowercase run-ons · hook is per-clone, `--no-verify` skips it ·
+  Pattern/Loom/Thread unenforced. Two acknowledged `knight` WARNs (envoy files).
 
-## VOCABULARY/IP GUARD — REPAIRED (2026-10-09, `57c9d6d`)
-One rule function, three entry points: edit hook · `--scan` (working tree, for /gate) · `--staged` (the index, via
-`.githooks/pre-commit`). Whole-word token matching; scope is top-level `game/ tests/ content/ tools/`. **/gate's
-IP item = the `--scan` RESULT line and its counts.** Deliberate gaps: lowercase run-ons (`navimode`) · hook is
-per-clone, `--no-verify` skips it · Pattern/Loom/Thread unspecified, unenforced. Two acknowledged `knight` WARNs
-(envoy files).
+## TWO-FLOOR EXPEDITION — DONE (`1540699`). **HUMAN PASS 2026-10-12, SCOPED.**
+Boot -> Floor 1 -> instant descent + non-blocking arrival card -> Floor 2 -> Expedition Complete -> R redeploys.
+`game/sim/expedition.gd` owns seed, itinerary (list of depths), position, complete; `advance()` is the one rule.
+`Arena.begin_expedition()` (entry) is separate from `_load_floor()` (ROADMAP P38 constraint). Suite 847 -> 871.
+- **PASS scope:** this slice only — NOT the M2 milestone, elevator presentation, multiplayer or Arcade; does NOT
+  reopen Floor 1/2 spatial design. Human-observed vs test-only split is in ROADMAP "M2 TWO-FLOOR EXPEDITION".
+- **Accepted limitation:** `itinerary = [1, 2]` is an `@export` default on Arena. Do NOT build a content framework
+  merely to remove it; `depth` is NOT split from itinerary position — only a real consumer may force either.
+- **M3 flag:** a floor change is a driver call (`sim.load_floor`), not an Event. Decide its shape in M3.
+  Tests boot one floor with `arena.itinerary = [n] as Array[int]`.
 
 ## Next action
-**The smallest playable M2 multi-floor expedition** (start with `/kickoff`):
-start/deploy -> Floor 1 -> a REAL floor transition -> Floor 2 -> run completion.
-- Persistent player state survives the transition; transient floor state resets.
-- **Expedition ENTRY stays distinct from FLOOR LOADING**, so a future ready room (ROADMAP P38)
-  or public Gate can launch the same expedition without redesigning floor progression.
-- Let this one consumer decide the minimum run state and whether `depth` must split. Do NOT
-  design run-state architecture ahead of it. Normal review and verification gates apply.
-- **NOT in this slice:** physical ready room · party formation · multiplayer lobby · quests · voting · public Gate.
+**DECIDE on the next-slice proposal** (`/kickoff`; presented 2026-10-12 — NOT approved; nothing pre-authorized:
+not the terminal, not Foundry, not a run-state refactor, and no assumed depth/position split).
+- **Target sequence (Breon):** `Archive Floor 1 -> Archive Floor 2 -> Safe Terminal -> Foundry`. An initial
+  development sequence, NOT the full M2 floor count. The terminal belongs at the Archive/Foundry transition.
+- **Proposed slice:** a minimal Safe Terminal as the third entry (`[1, 2, 3]`): a tiny authored floor, no
+  encounters, exit completes it. Foundry stays out. Open questions returned to Breon: what the terminal DOES in
+  v1 · what stratum/label it carries · whether a third layout turns `DepthGenerator`'s two-entry `if` into data.
 
 ## Closed baselines from the Floor 2 arc — do not reopen without new evidence
 Weapon-agnostic controls · props one-hit · enemies immune to spike pads · shield absorbs environmental spike
@@ -69,11 +69,11 @@ ledger visible on HUD · projectile elevation.
   the gate/snap problem returns.
 - **THROWABLE DEFERRED.** Law banked: *if progression requires a capability, the floor must guarantee access to
   it.*
-- **Breakables are NOT combatants** (`test_breakable_props.gd`); projectiles TERMINATE on props. **P34
-  projectile-vs-world: design returned, awaiting review** — shots still pass through walls.
+- **Breakables are NOT combatants** (`test_breakable_props.gd`); projectiles TERMINATE on props. P34
+  projectile-vs-world LANDED 2026-08-31 — shots stop on walls and closed gates.
 - **Still out (M2 gate):** Foundry stratum · rest floor · elevator + next-floor preview · stratum-driven
   pools/weights · depth-scaled defence · typed_damage_ramp · minimap · netcode spike · friend playtest · playtest
-  gate · itch build. **ROADMAP prune DUE at M2 close.**
+  gate · itch build. **ROADMAP prune DUE at M2 close** (its index also lacks a P37 row).
 - Carried from M1: three §3 rules want a human edit · **P14** title · P16 BUMP (P20) · 5.10.
 
 ## Traps this repo has actually sprung (read before touching these areas)
@@ -102,9 +102,8 @@ ledger visible on HUD · projectile elevation.
 - Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd`
 - New `class_name`? `--headless --import` first. Boot check: `--headless --quit-after 120`.
 - Guard: `python scripts/guard.py --scan` · tests `scripts/test_guard_{scan,amendment}.py` · new clone: `--install-hook`
-- Tools: `record_floor_plan_golden.gd` (records BOTH floors; re-baseline — deliberate only) ·
-  `diagnose_ooze_pursuit.gd` · `record_family_locomotion.gd` · `diagnose_projectile_geometry.gd` ·
-  `measure_survey_cadence.gd`
+- Tools: `record_floor_plan_golden.gd` (BOTH floors; deliberate re-baseline only) · `diagnose_ooze_pursuit.gd` ·
+  `record_family_locomotion.gd` · `diagnose_projectile_geometry.gd` · `measure_survey_cadence.gd`
 
 ## Concepts introduced (learning ledger)
 Sim tick vs frame · Command/Event plain-data boundary · service-locator autoload · seeded RNG streams · fixed
@@ -117,4 +116,5 @@ retiring vocabulary at zero consumers · **Resource vs RefCounted for serialisab
 compiled runtime identity** · **layer-scoped key resolution** · **complement invariants between paired
 functions** · **PreToolUse hooks are not repo audits** · **mutation-based coverage (prove values, not names)** ·
 **token vs substring matching** · **git index vs working tree** · **fail-closed vs fail-open** ·
-**`core.hooksPath`**.
+**`core.hooksPath`** · **run state vs floor state** · **resolve-after-batch (deferred
+transitions)**.
