@@ -27,6 +27,9 @@ var entities: Dictionary = {}  # actor_id -> Vector3 position
 var _move_speeds: Dictionary = {}  # actor_id -> float
 var _facings: Dictionary = {}  # actor_id -> Vector3 (horizontal, normalized, never zero)
 var _health: Dictionary = {}  # actor_id -> float (combatants only)
+## The health a combatant was registered with. Kept because "restore to full" needs a ceiling and
+## _health alone forgets it at the first hit. Never written after registration.
+var _max_health: Dictionary = {}  # actor_id -> float (combatants only)
 var _families: Dictionary = {}  # actor_id -> StringName (combatants only)
 var _iframe_ticks_on_hit: Dictionary = {}  # actor_id -> int (combatants only)
 var _iframe_ticks_remaining: Dictionary = {}  # actor_id -> int, counts down once per tick()
@@ -375,6 +378,7 @@ const STATE_SCOPES: Dictionary = {
 	"_move_speeds": SCOPE_RUN_ACTOR,
 	"_facings": SCOPE_RUN_ACTOR,
 	"_health": SCOPE_RUN_ACTOR,
+	"_max_health": SCOPE_RUN_ACTOR,
 	"_families": SCOPE_RUN_ACTOR,
 	"_iframe_ticks_on_hit": SCOPE_RUN_ACTOR,
 	"_combat_radius": SCOPE_RUN_ACTOR,
@@ -943,8 +947,53 @@ func _apply_floor_effect(effect: Dictionary) -> Array[Event]:
 				return []
 			_floor_complete = true
 			return [Event.new(tick_count, "floor_complete", {})]
+		"restore_envoy_health":
+			# PARTY-WIDE BY DEFINITION, so it names no target. An authored target is refused
+			# rather than ignored: silently healing everyone when content asked for one actor
+			# would be a fallback pretending to be a feature.
+			if target_id != EFFECT_NO_TARGET:
+				push_warning("SimWorld: restore_envoy_health takes no target, got %d" % target_id)
+				return []
+			return _restore_envoy_health()
 	push_warning("SimWorld: unknown floor effect kind '%s'" % kind)
 	return []
+
+
+## What `target_id` holds for an effect that acts on the floor or the party as a whole.
+const EFFECT_NO_TARGET: int = -1
+
+
+## Restores every LIVING run-persistent actor to the health it was registered with (ruled
+## 2026-10-12). Health only: the shield has exactly one recovery law (_apply_block) and statuses
+## already end at the floor boundary (STATE_SCOPES), so neither is touched here. The dead stay
+## dead -- this is recovery, not resurrection.
+##
+## ALWAYS EMITS, even when nobody was hurt, so "the effect fired" is observable on its own.
+## Raises, never lowers: an actor somehow above its ceiling keeps what it has.
+func _restore_envoy_health() -> Array[Event]:
+	var actor_ids: Array = _run_persistent_actors.keys()
+	actor_ids.sort()  # autonomous-phase law: deterministic order, never Dictionary order
+	var restored: Array[Dictionary] = []
+	for actor_id: int in actor_ids:
+		var before: float = _health.get(actor_id, 0.0)
+		if before <= 0.0:
+			continue
+		var ceiling: float = _max_health.get(actor_id, before)
+		_health[actor_id] = maxf(before, ceiling)
+		restored.append({
+			"actor_id": actor_id, "health_before": before,
+			"health": _health[actor_id], "max_health": ceiling,
+		})
+	return [Event.new(tick_count, "envoys_restored", {"restored": restored})]
+
+
+## Read-only view for presentation, which must show health and may never reach into _health.
+func health_of(actor_id: int) -> float:
+	return _health.get(actor_id, 0.0)
+
+
+func max_health_of(actor_id: int) -> float:
+	return _max_health.get(actor_id, 0.0)
 
 
 ## ACTIVATION IS AUTHORED. There is no "the player entered the region, therefore fight" rule
@@ -1358,6 +1407,7 @@ func add_entity(actor_id: int, position: Vector3, move_speed: float, facing: Vec
 ## backward-compat reason — the Envoy is the only caller that ever passes "player".
 func register_combatant(actor_id: int, max_health: float, family: StringName, iframe_ticks_on_hit: int = 0, combat_radius: float = 0.0, allegiance: StringName = &"enemy") -> void:
 	_health[actor_id] = max_health
+	_max_health[actor_id] = max_health
 	_families[actor_id] = family
 	_iframe_ticks_on_hit[actor_id] = iframe_ticks_on_hit
 	_combat_radius[actor_id] = combat_radius
@@ -1834,6 +1884,7 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	# resolves DoT/duration for anyone due. Both run after Commands, before tick_count
 	# advances, per the locked Burn contact-episode design.
 	events.append_array(_advance_contact_spread())
+	events.append_array(_clear_statuses_on_floor_complete())
 	events.append_array(_advance_status_ticks())
 	# tick_count advances LAST, so any read of it after tick() returns describes the sim
 	# AFTER advancement -- one tick later than the Events produced during this call.
@@ -4602,6 +4653,28 @@ func _advance_contact_spread() -> Array[Event]:
 func _compute_status_tick_outcome(status_id: String) -> Dictionary:
 	var config: Dictionary = _status_config.get(status_id, {})
 	return {"damage": config.get("damage_per_tick", 0.0)}
+
+
+## STATUSES END WHEN THE FLOOR IS COMPLETED (ruled 2026-10-12), the last floor included -- not
+## merely when the next one loads. load_floor's clear stays as the backstop, but it cannot be the
+## rule: no floor follows the final one, and a later elevator/confirm state (ROADMAP P35) would
+## let ticks pass between completing and descending.
+##
+## Runs AFTER this tick's hits and contact spread and BEFORE status resolution, so a status that
+## lands in the completing tick is cleared with the rest and none of them bites once more. It is
+## a standing rule for as long as the floor stays complete, not a one-shot at the trigger.
+func _clear_statuses_on_floor_complete() -> Array[Event]:
+	var events: Array[Event] = []
+	if not _floor_complete:
+		return events
+	var actor_ids: Array = _status_instances.keys()
+	actor_ids.sort()  # determinism -- dictionary iteration order must never leak into event order
+	for actor_id: int in actor_ids:
+		events.append(Event.new(tick_count, "status_cleared", {
+			"actor_id": actor_id, "status_id": _status_instances[actor_id].id, "reason": "floor_complete",
+		}))
+	_status_instances.clear()
+	return events
 
 
 ## DoT/duration resolution for every actor with an active status (GAME-RULES §3).

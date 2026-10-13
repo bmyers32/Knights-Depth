@@ -25,6 +25,9 @@ var run_seed: int = 0
 var floor_seed: int = 0
 var depth: int = 0
 var stratum_id: StringName = &""
+## The place's own name, when it has one; empty means "known by its stratum". Resolved floor
+## data, so a Terminal reads as a Terminal whatever stratum config it currently borrows.
+var place_label: String = ""
 ## True while the layout is authored rather than assembled. Read by the driver so the on-screen
 ## seed line can say so plainly instead of implying procedural variety.
 var authored_layout: bool = true
@@ -451,7 +454,8 @@ func to_dict() -> Dictionary:
 		})
 	return {
 		"run_seed": run_seed, "floor_seed": floor_seed, "depth": depth,
-		"stratum_id": String(stratum_id), "authored_layout": authored_layout,
+		"stratum_id": String(stratum_id), "place_label": place_label,
+		"authored_layout": authored_layout,
 		"patches": patch_dicts, "connections": connection_dicts, "triggers": trigger_dicts,
 		"encounters": encounter_dicts, "breakables": breakable_dicts,
 		"hit_switches": switch_dicts, "obstacles": obstacle_dicts, "spike_pads": pad_dicts,

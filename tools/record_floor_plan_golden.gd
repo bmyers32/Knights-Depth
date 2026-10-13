@@ -52,6 +52,13 @@ extends SceneTree
 ##               widened fields would guard an empty floor. It is a NEW BASELINE, cross-checked
 ##               against the accepted archive_roundabout.tres: it protects Floor 2 from here on
 ##               and proves nothing about what Floor 2 was before today.
+##   2026-10-12  RE-BASELINED because the SERIALIZATION widened again, not because a floor
+##               changed. FloorPlan gained `place_label` (a place's own name; first consumer the
+##               Terminal), so to_dict() gained one root key. The depth-1 and depth-2 fixtures
+##               each gain exactly `"place_label": ""` and nothing else -- verified by diffing
+##               the committed bytes against the re-recording before commit.
+##               FIRST RECORDING of the depth-3 fixture: the Terminal. A NEW BASELINE for new
+##               content, not a re-baseline of anything.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the
@@ -68,6 +75,7 @@ const GOLDEN_SEED: int = 20260828
 const FIXTURES: Dictionary = {
 	1: "res://tests/fixtures/floor_plan_golden.json",
 	2: "res://tests/fixtures/floor_plan_golden_depth2.json",
+	3: "res://tests/fixtures/floor_plan_golden_depth3.json",
 }
 
 

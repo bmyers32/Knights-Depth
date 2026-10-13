@@ -54,7 +54,7 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## the Expedition at begin_expedition() and never read again -- where the party is, and whether
 ## a floor is the last, is the Expedition's to say, never this node's. A one-entry itinerary is
 ## how a test (or a human) boots a single floor.
-@export var itinerary: Array[int] = [1, 2]
+@export var itinerary: Array[int] = [1, 2, 3]
 
 ## Debug/diagnostic exports (manual-pass convention, this session): every export in
 ## this block is named debug_* and defaults to the AUTHENTIC game behavior — "all
@@ -383,12 +383,22 @@ func _floor_extent_of(plan: FloorPlan) -> Rect2:
 var _seed_provenance: String = ""
 
 
+## A place with a name of its own is shown by it; every other floor is known by its stratum.
+func _place_name(plan: FloorPlan) -> String:
+	return plan.place_label if plan.place_label != "" else String(plan.stratum_id).capitalize()
+
+
+## Read from the sim every step and never stored: the sim's health is the only health.
+func _health_readout() -> String:
+	return "HP %.0f/%.0f" % [sim.health_of(envoy.actor_id), sim.max_health_of(envoy.actor_id)]
+
+
 func _update_seed_label(plan: FloorPlan) -> void:
 	# SEED HONESTY: while the layout is authored, SAY SO. A seed printed beside a fixed floor
 	# would advertise procedural variety that does not exist yet.
 	var provenance: String = "authored layout" if plan.authored_layout else "generated"
 	_seed_provenance = "seed %d · depth %d · %s · %s · floor %d/%d" % [
-		plan.run_seed, plan.depth, plan.stratum_id, provenance,
+		plan.run_seed, plan.depth, _place_name(plan), provenance,
 		expedition.position + 1, expedition.itinerary.size(),
 	]
 	_seed_label.text = _seed_provenance
@@ -441,7 +451,7 @@ func _step(commands: Array[Command], delta: float) -> void:
 	var events: Array[Event] = sim.tick(commands, delta)
 	# ON SCREEN WHILE THEY PLAY, not only in a death report they may never trigger. Presentation
 	# only: it reads the ledger and writes a label, and touches no gameplay state.
-	_seed_label.text = _seed_provenance + "   |   " + damage_ledger.compact()
+	_seed_label.text = _health_readout() + "   |   " + _seed_provenance + "   |   " + damage_ledger.compact()
 	envoy.sync_from_sim(_grounded(sim.entities[envoy.actor_id]))
 	for actor_id: int in _enemies.keys():
 		var actor: Node3D = _enemies[actor_id]
@@ -488,7 +498,7 @@ func _resolve_floor_complete() -> void:
 		# drops what belonged to the floor (SimWorld.STATE_SCOPES) -- nothing is copied here.
 		print("descent: ", {"from_depth": from_depth, "to_depth": expedition.current_depth(), "tick": sim.tick_count})
 		var plan: FloorPlan = _load_floor()
-		_arrival_card.show_arrival(plan.depth, plan.stratum_id)
+		_arrival_card.show_arrival(plan.depth, _place_name(plan))
 	else:
 		print("EXPEDITION COMPLETE: ", {"final_depth": from_depth, "tick": sim.tick_count})
 		print(damage_ledger.summary())
@@ -706,6 +716,8 @@ func _report_events(events: Array[Event]) -> void:
 				print("status resolved: ", event.payload)
 			"status_expired":
 				print("status expired: ", event.payload)
+			"status_cleared":
+				print("status cleared: ", event.payload)
 			"weapon_switched":
 				print("weapon switched: ", event.payload)
 			# P17 burrow. Presentation mirrors the sim's authoritative participation fact; it never
@@ -733,6 +745,8 @@ func _report_events(events: Array[Event]) -> void:
 			"floor_trigger_enabled":
 				print("REVEALED: ", event.payload)
 				_floor_builder.set_plate_visible(int(event.payload["trigger_id"]), true)
+			"envoys_restored":
+				print("ENVOYS RESTORED: ", event.payload)
 			"floor_complete":
 				print("FLOOR COMPLETE: the expedition stood on the exit together")
 				# Noted, not acted on: see _floor_complete_pending.

@@ -4034,6 +4034,57 @@ the world and cannot complete twice.
   Event, so it does not appear in the Event stream. Clients will need a replicated floor-change
   message; decide its shape in M3 against the real netcode, not here.
 
+## M2 TERMINAL — v1 BUILT 2026-10-12. **CORE MECHANIC: HUMAN PASS. ENVIRONMENT: PARTIAL, DEFERRED.**
+
+**Human verdict (Breon, 2026-10-12).** Recovery was clear and worked as intended: PASS for the
+mechanical slice. Which itinerary route(s) the verdict was played on is NOT RECORDED — do not
+read this as both `[1, 2, 3]` and `[1, 3, 2]` human-verified until Breon says which.
+
+**PRESENTATION / CONTENT DEBT — the Terminal environment is NOT accepted.** It played as bland:
+no environmental detail, depth, atmosphere or spatial character, no meaningful features. The
+greybox room is a mechanical stand-in, not production quality. A later art/content pass owes it
+a distinctive place that keeps the digital-Lattice identity (stabilized digital infrastructure —
+never medieval, steampunk or industrial cavern). Not part of this slice, and not a licence to
+add shops or further Terminal systems while doing it.
+
+**What v1 is.** The third itinerary entry (`[1, 2, 3]`): a small authored safe floor with one
+recovery plate and an exit. Stepping on the plate restores every LIVING Envoy to 100% health,
+once per visit. Displayed as "Depth 3 · Terminal".
+
+**Rulings it implements (Breon, 2026-10-12):**
+- Full health for living Envoys only; no resurrection; once per visit.
+- Shield is untouched — ordinary regeneration is its only recovery law.
+- Statuses end on successful floor completion, the FINAL floor included, and do not carry
+  between floors. The sim clears every status in the completing tick (after that tick's hits,
+  before status resolution) and emits `status_cleared {reason: floor_complete}`; it keeps
+  clearing for as long as the floor stays complete. `load_floor`'s clear remains as a backstop.
+- Consumables and other limited resources persist and are NOT refilled (none exist yet).
+- A Terminal occupies a numbered depth. Depth 3 is content placement, not a world rule: the
+  layout does not know its depth (`DepthGenerator._TERMINAL_DEPTH` does).
+- Its name is its own (`place_label`); `stratum_id = archive` is a borrowed config, nothing more.
+
+**As built:** one sim floor effect, `restore_envoy_health` (party-wide, `target_id = -1` by
+definition, a named target is refused) emitting `envoys_restored`; `_max_health` in the sim;
+`place_label` on AuthoredLayout/FloorPlan; a three-entry layout selection still in code (Foundry
+decides its data shape); a plain `HP current/max` HUD readout, because nothing showed health.
+
+**QA route `[1, 3, 2]`** shows recovery mattering before a real fight. A playtest arrangement
+only — never production order, and nothing was built to accommodate it.
+
+**Known rough edge:** the recovery plate stays lit after it is spent. Accepted by Breon
+(2026-10-12) as a non-blocking feedback issue, not a defect of this slice.
+
+**NOT BUILT, direction only — do not claim any of it as done:**
+- Continue vs Extract at a Terminal (needs somewhere to continue to: Foundry).
+- Minor Terminals provisionally ~every 5 depths, major ~every 10, major replacing minor where
+  they coincide. Both restore full health; they differ in facilities and opportunities.
+- Terminal shops (basic vendors at some minor Terminals, rarer offers at major ones).
+- Rare Terminals as a place to find what a Companion is restored or incubated from — this is
+  the EXISTING Companion system (P7), not a second one; restoration vs creation is undecided.
+- Note for P35: statuses already end at the completion event, not on arrival, so an elevator
+  or confirm state that lets ticks pass between completing and descending inherits a
+  status-free party without further work.
+
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
 Full text lives in git history — `git log -p ROADMAP.md` resurrects anything.)

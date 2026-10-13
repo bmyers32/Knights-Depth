@@ -1,0 +1,149 @@
+{
+	"authored_layout": true,
+	"breakables": [],
+	"connections": [
+		{
+			"aperture": {
+				"d": 7.0,
+				"w": 5.0,
+				"x": -2.5,
+				"z": -11.5
+			},
+			"connection_id": 0,
+			"flank_style": "wall",
+			"has_barrier": false,
+			"patch_ids": [
+				0,
+				1
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 7.0,
+				"w": 5.0,
+				"x": -2.5,
+				"z": -31.5
+			},
+			"connection_id": 1,
+			"flank_style": "wall",
+			"has_barrier": false,
+			"patch_ids": [
+				1,
+				2
+			],
+			"starts_open": true
+		}
+	],
+	"depth": 3,
+	"encounters": [],
+	"end_marker": {
+		"x": 0.0,
+		"y": 0.0,
+		"z": -35.0
+	},
+	"entry_point": {
+		"x": 0.0,
+		"y": 0.0,
+		"z": -3.0
+	},
+	"floor_seed": 7853661469158422450,
+	"hit_switches": [],
+	"obstacles": [],
+	"patches": [
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "wall",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 0,
+			"rect": {
+				"d": 8.0,
+				"w": 12.0,
+				"x": -6.0,
+				"z": -8.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "wall",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 1,
+			"rect": {
+				"d": 18.0,
+				"w": 20.0,
+				"x": -10.0,
+				"z": -28.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "wall",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 2,
+			"rect": {
+				"d": 8.0,
+				"w": 12.0,
+				"x": -6.0,
+				"z": -38.0
+			},
+			"surface": "stone"
+		}
+	],
+	"place_label": "Terminal",
+	"run_seed": 20260828,
+	"spike_pads": [],
+	"stratum_id": "archive",
+	"triggers": [
+		{
+			"effects": [
+				{
+					"kind": "restore_envoy_health",
+					"target_id": -1
+				}
+			],
+			"kind": "region_entered",
+			"once": true,
+			"region": {
+				"d": 4.0,
+				"w": 4.0,
+				"x": -2.0,
+				"z": -21.0
+			},
+			"renders_as_plate": true,
+			"source_id": -1,
+			"starts_enabled": true,
+			"trigger_id": 0
+		},
+		{
+			"effects": [
+				{
+					"kind": "complete_floor",
+					"target_id": -1
+				}
+			],
+			"kind": "group_occupancy",
+			"once": true,
+			"region": {
+				"d": 4.0,
+				"w": 4.0,
+				"x": -2.0,
+				"z": -37.0
+			},
+			"renders_as_plate": true,
+			"source_id": -1,
+			"starts_enabled": true,
+			"trigger_id": 1
+		}
+	]
+}

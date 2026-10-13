@@ -373,6 +373,7 @@
 			"surface": "high"
 		}
 	],
+	"place_label": "",
 	"run_seed": 20260828,
 	"spike_pads": [],
 	"stratum_id": "archive",

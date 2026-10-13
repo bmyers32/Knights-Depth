@@ -1,0 +1,77 @@
+[gd_resource type="Resource" script_class="AuthoredLayout" format=3]
+
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="1_conn"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="2_patch"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="3_layout"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="4_trig"]
+
+[sub_resource type="Resource" id="Resource_c_in"]
+script = ExtResource("1_conn")
+key = &"C_IN"
+connection_id = 0
+near_key = &"P_ARRIVAL"
+far_key = &"P_BAY"
+patch_ids = Vector2i(0, 1)
+aperture = Rect2(-2.5, -11.5, 5, 7)
+has_barrier = false
+
+[sub_resource type="Resource" id="Resource_c_out"]
+script = ExtResource("1_conn")
+key = &"C_OUT"
+connection_id = 1
+near_key = &"P_BAY"
+far_key = &"P_EGRESS"
+patch_ids = Vector2i(1, 2)
+aperture = Rect2(-2.5, -31.5, 5, 7)
+has_barrier = false
+
+[sub_resource type="Resource" id="Resource_p_arrival"]
+script = ExtResource("2_patch")
+key = &"P_ARRIVAL"
+patch_id = 0
+rect = Rect2(-6, -8, 12, 8)
+
+[sub_resource type="Resource" id="Resource_p_bay"]
+script = ExtResource("2_patch")
+key = &"P_BAY"
+patch_id = 1
+rect = Rect2(-10, -28, 20, 18)
+
+[sub_resource type="Resource" id="Resource_p_egress"]
+script = ExtResource("2_patch")
+key = &"P_EGRESS"
+patch_id = 2
+rect = Rect2(-6, -38, 12, 8)
+
+[sub_resource type="Resource" id="Resource_t_recovery"]
+script = ExtResource("4_trig")
+key = &"T_RECOVERY"
+trigger_id = 0
+region = Rect2(-2, -21, 4, 4)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"restore_envoy_health",
+"target_id": -1
+}])
+
+[sub_resource type="Resource" id="Resource_t_exit"]
+script = ExtResource("4_trig")
+key = &"T_EXIT"
+trigger_id = 1
+kind = &"group_occupancy"
+region = Rect2(-2, -37, 4, 4)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"complete_floor",
+"target_id": -1
+}])
+
+[resource]
+script = ExtResource("3_layout")
+layout_id = &"terminal"
+place_label = "Terminal"
+patches = Array[ExtResource("2_patch")]([SubResource("Resource_p_arrival"), SubResource("Resource_p_bay"), SubResource("Resource_p_egress")])
+connections = Array[ExtResource("1_conn")]([SubResource("Resource_c_in"), SubResource("Resource_c_out")])
+triggers = Array[ExtResource("4_trig")]([SubResource("Resource_t_recovery"), SubResource("Resource_t_exit")])
+entry_point = Vector3(0, 0, -3)
+end_marker = Vector3(0, 0, -35)

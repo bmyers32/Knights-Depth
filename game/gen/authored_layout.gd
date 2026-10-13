@@ -25,6 +25,10 @@ extends Resource
 ## A human-readable name for the floor this describes. Debug and authoring only -- no mechanic
 ## reads it, and the generator selects by depth, not by name.
 @export var layout_id: StringName = &""
+## What this place is CALLED, when it has a name of its own (the Terminal). Empty for an ordinary
+## floor, which is known by its stratum. Authored here and not derived from depth or stratum,
+## because where a place currently sits in the descent is not what it is.
+@export var place_label: String = ""
 
 @export var patches: Array[WalkablePatch] = []
 @export var connections: Array[TraversalConnection] = []

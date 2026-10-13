@@ -49,6 +49,13 @@ const EFFECT_REVEAL_SWITCH: StringName = &"reveal_switch"
 ## Marks the floor finished. Deliberately just a fact + an Event: a floor never knows its place
 ## in a run, so what completion LEADS to (descent or run end) is the Expedition's decision.
 const EFFECT_COMPLETE_FLOOR: StringName = &"complete_floor"
+## Restores every living Envoy to full health (ruled 2026-10-12). Party-wide, so it names no
+## target; health only -- shield and statuses keep their own laws. First consumer: the Terminal.
+const EFFECT_RESTORE_ENVOY_HEALTH: StringName = &"restore_envoy_health"
+## The `target_id` of an effect that acts on the floor or the party rather than on one record.
+## Authored explicitly; SimWorld.EFFECT_NO_TARGET is the same value on the other side of the
+## sim/gen boundary, and a test holds the two together.
+const NO_TARGET: int = -1
 
 # --- PROGRESSION: what can cause it ---------------------------------------------------
 ## Deliberately narrow. Note what is ABSENT: there is no "entered the encounter region" kind,

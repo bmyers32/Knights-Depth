@@ -1,7 +1,9 @@
 extends GutTest
-## THE TWO-FLOOR EXPEDITION, through the real arena and the real driver step.
+## THE EXPEDITION, through the real arena and the real driver step.
 ##
-##   begin -> Floor 1 -> descent -> Floor 2 -> expedition complete        (and failure, restart)
+##   begin -> Floor 1 -> descent -> Floor 2 -> descent -> Terminal -> expedition complete
+##   (and failure, restart). Tests about the LAST floor name their own itinerary, so they keep
+##   meaning what they say when the shipped run grows.
 ##
 ## test_floor_scope.gd already proves what SimWorld.load_floor keeps and drops. What nothing
 ## proved before this file is the DRIVER: that a completion actually leads somewhere, that the
@@ -18,6 +20,7 @@ extends GutTest
 const DT := 1.0 / 30.0
 const FLOOR_ONE = preload("res://game/content/layouts/archive_prototype.tres")
 const FLOOR_TWO = preload("res://game/content/layouts/archive_roundabout.tres")
+const TERMINAL = preload("res://game/content/layouts/terminal.tres")
 
 
 ## A retired floor's nodes are queue_free()d, which only lands at the end of a frame. Without
@@ -77,15 +80,15 @@ func _health(arena: Node3D) -> float:
 # --- BEGIN ---------------------------------------------------------------------------------
 
 ## THE SHIPPED SCENE, with nothing overridden: this is what boot and restart both produce.
-func test_the_boot_scene_begins_a_two_floor_expedition_on_floor_one() -> void:
+func test_the_boot_scene_begins_the_shipped_expedition_on_floor_one() -> void:
 	var arena: Node3D = _boot()
-	assert_eq(arena.expedition.itinerary, [1, 2] as Array[int], "the shipped expedition is Archive 1 then Archive 2")
+	assert_eq(arena.expedition.itinerary, [1, 2, 3] as Array[int], "the shipped expedition is Archive 1, Archive 2, then the Terminal")
 	assert_eq(arena.expedition.position, 0)
 	assert_eq(arena.expedition.current_depth(), 1)
 	assert_false(arena.expedition.is_complete)
 	assert_eq(arena.sim._patch_rects.size(), _plan(1).patches.size(), "and Floor 1 is what is loaded")
 	assert_true(arena._seed_label.text.contains("depth 1"), "the HUD names the depth, got '%s'" % arena._seed_label.text)
-	assert_true(arena._seed_label.text.contains("floor 1/2"), "and the position in the run, got '%s'" % arena._seed_label.text)
+	assert_true(arena._seed_label.text.contains("floor 1/3"), "and the position in the run, got '%s'" % arena._seed_label.text)
 	assert_false(arena._arrival_card.visible, "beginning is not arriving from a descent")
 	assert_false(arena._completion_overlay.visible)
 	assert_false(arena._failure_overlay.visible)
@@ -96,7 +99,7 @@ func test_the_boot_scene_begins_a_two_floor_expedition_on_floor_one() -> void:
 func test_the_expedition_owns_its_itinerary_after_beginning() -> void:
 	var arena: Node3D = _boot()
 	arena.itinerary.append(7)
-	assert_eq(arena.expedition.itinerary, [1, 2] as Array[int],
+	assert_eq(arena.expedition.itinerary, [1, 2, 3] as Array[int],
 		"editing the node's configuration mid-run must not rewrite the run")
 
 
@@ -118,7 +121,7 @@ func test_completing_a_floor_with_an_entry_left_descends() -> void:
 	assert_false(arena.sim.debug_describe_floor()["floor_complete"], "the new floor is not yet complete")
 	assert_eq(arena.sim.tick_count, ticks_before + 5, "the run clock carries straight on")
 	assert_true(arena._seed_label.text.contains("depth 2"), "got '%s'" % arena._seed_label.text)
-	assert_true(arena._seed_label.text.contains("floor 2/2"), "got '%s'" % arena._seed_label.text)
+	assert_true(arena._seed_label.text.contains("floor 2/3"), "got '%s'" % arena._seed_label.text)
 	assert_true(arena._arrival_card.visible, "the arrival is announced")
 	assert_false(arena._completion_overlay.visible, "a descent is not the end of the run")
 
@@ -270,7 +273,7 @@ func test_dying_on_the_completing_tick_is_failure_not_descent() -> void:
 
 
 func test_dying_on_the_final_floor_is_failure_not_completion() -> void:
-	var arena: Node3D = _boot()
+	var arena: Node3D = _boot([1, 2] as Array[int])
 	_complete_the_floor(arena)
 	_deliver(arena, ["died"])
 	assert_true(arena._failure_overlay.visible)
@@ -283,7 +286,7 @@ func test_dying_on_the_final_floor_is_failure_not_completion() -> void:
 # --- COMPLETION ----------------------------------------------------------------------------
 
 func test_completing_the_last_entry_completes_the_expedition() -> void:
-	var arena: Node3D = _boot()
+	var arena: Node3D = _boot([1, 2] as Array[int])
 	_complete_the_floor(arena)
 	_idle(arena, 3)
 	var enemies_before: Array = arena._enemies.keys()
@@ -336,7 +339,7 @@ func test_a_restarted_arena_begins_a_fresh_expedition() -> void:
 	var second: Node3D = _boot()
 	assert_eq(second.expedition.position, 0, "back to the first entry")
 	assert_eq(second.expedition.current_depth(), 1)
-	assert_eq(second.expedition.itinerary, [1, 2] as Array[int], "with the whole itinerary ahead")
+	assert_eq(second.expedition.itinerary, [1, 2, 3] as Array[int], "with the whole itinerary ahead")
 	assert_false(second.expedition.is_complete)
 	assert_eq(_health(second), second.envoy.stats.max_health, "at full health")
 	assert_eq(second.sim._equipped_weapon[_envoy(second)], second.loadout_weapon_ids[0], "with the starting weapon")
@@ -415,7 +418,7 @@ func _play_floor_two_to_its_exit(arena: Node3D) -> void:
 	assert_true(_walk_to(arena, Vector3(230, 0, -138), 1.4), "F2: into the reward hall")
 
 
-## ONE CONTINUOUS EXPEDITION, both completions earned by standing on the authored exits with
+## ONE CONTINUOUS EXPEDITION, every completion earned by standing on the authored exits with
 ## nothing injected. If this passes, a human can play the run from boot to the completion screen.
 func test_a_whole_expedition_plays_from_floor_one_to_completion() -> void:
 	var arena: Node3D = _boot()
@@ -465,13 +468,28 @@ func test_a_whole_expedition_plays_from_floor_one_to_completion() -> void:
 	_play_floor_two_to_its_exit(arena)
 	assert_false(arena.expedition.is_complete, "sanity: reaching the reward hall is not finishing")
 	# Not _walk_to: the world stops the moment the plate is occupied, short of its centre.
-	var final_exit: Vector3 = _centre(FLOOR_TWO.region_for(&"T_EXIT"))
+	var floor_two_exit: Vector3 = _centre(FLOOR_TWO.region_for(&"T_EXIT"))
+	for i in 1500:
+		if arena.expedition.position == 2:
+			break
+		_move(arena, (floor_two_exit - arena.sim.entities[envoy_id]).normalized())
+
+	assert_eq(arena.expedition.position, 2, "standing on Floor 2's exit descends to the Terminal")
+	assert_false(arena.expedition.is_complete)
+	assert_eq(arena._enemies.size(), 0, "where nothing is waiting for the party")
+	assert_true(arena._arrival_card._label.text.contains("Terminal"), "and the arrival names the place, got '%s'" % arena._arrival_card._label.text)
+
+	# Hurt on arrival, restored by the plate, and only then out through the exit.
+	arena.sim.debug_override_health(envoy_id, 7.0)
+	assert_true(_walk_to(arena, _centre(TERMINAL.region_for(&"T_RECOVERY")), 0.6), "T: onto the recovery plate")
+	assert_eq(_health(arena), arena.envoy.stats.max_health, "the Terminal restores the Envoy to full")
+	var final_exit: Vector3 = _centre(TERMINAL.region_for(&"T_EXIT"))
 	for i in 1500:
 		if arena.expedition.is_complete:
 			break
 		_move(arena, (final_exit - arena.sim.entities[envoy_id]).normalized())
 
-	assert_true(arena.expedition.is_complete, "standing on Floor 2's exit completes the expedition")
+	assert_true(arena.expedition.is_complete, "standing on the Terminal's exit completes the expedition")
 	assert_true(arena._completion_overlay.visible)
 	assert_false(arena._failure_overlay.visible)
 	var stopped_at: int = arena.sim.tick_count

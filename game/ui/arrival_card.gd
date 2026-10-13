@@ -15,8 +15,8 @@ extends CanvasLayer
 var _remaining_seconds: float = 0.0
 
 
-func show_arrival(depth: int, stratum_id: StringName) -> void:
-	_label.text = "Depth %d · %s" % [depth, String(stratum_id).capitalize()]
+func show_arrival(depth: int, place_name: String) -> void:
+	_label.text = "Depth %d · %s" % [depth, place_name]
 	_remaining_seconds = display_seconds
 	visible = true
 
