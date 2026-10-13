@@ -35,7 +35,7 @@ Shipped itinerary `[1, 2, 3]`: Floor 1 -> Floor 2 -> "Depth 3 · Terminal" (reco
 - `place_label` on AuthoredLayout/FloorPlan; goldens re-baselined for that one key (dated log in the recorder).
 - **DEBT, not accepted:** the Terminal room is bland greybox — owes atmosphere and spatial character in the
   digital-Lattice identity (never medieval/steampunk/industrial cavern). Spent plate stays lit: accepted nit.
-- **Routes human-tested: NOT RECORDED** until Breon confirms; never infer from config. `[1, 3, 2]` is QA-only.
+- **Both routes human-played, PASS** (Breon, confirmed 2026-10-13): `[1,2,3]` and QA-only `[1,3,2]`. Ships `[1,2,3]`.
 - **Accepted partials:** `_TERMINAL_DEPTH = 3` in `depth_generator.gd`; no dedicated 1000-tick script.
   **NOT BUILT** (ROADMAP "M2 TERMINAL"): Continue/Extract, tiers, shops, Companion finds, inventory.
 

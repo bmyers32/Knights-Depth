@@ -4037,8 +4037,9 @@ the world and cannot complete twice.
 ## M2 TERMINAL — v1 BUILT 2026-10-12. **CORE MECHANIC: HUMAN PASS. ENVIRONMENT: PARTIAL, DEFERRED.**
 
 **Human verdict (Breon, 2026-10-12).** Recovery was clear and worked as intended: PASS for the
-mechanical slice. Which itinerary route(s) the verdict was played on is NOT RECORDED — do not
-read this as both `[1, 2, 3]` and `[1, 3, 2]` human-verified until Breon says which.
+mechanical slice. Both routes were personally played and passed by Breon (confirmed 2026-10-13):
+- `[1, 2, 3]` — normal expedition: PASS.
+- `[1, 3, 2]` — recovery QA route: PASS. Still a QA arrangement only; `[1, 2, 3]` is what ships.
 
 **PRESENTATION / CONTENT DEBT — the Terminal environment is NOT accepted.** It played as bland:
 no environmental detail, depth, atmosphere or spatial character, no meaningful features. The
