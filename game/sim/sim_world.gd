@@ -4178,6 +4178,22 @@ func _hazard_profile(pad: Dictionary) -> Dictionary:
 	}
 
 
+## HOW LONG THIS PAD STAYS SAFE: 0 while it is active, otherwise the ticks left before it turns
+## on; -1 for a pad this floor does not have. The one number a warning needs, and deliberately
+## not the debug snapshot below: a warning drawn from it counts down TO the authoritative edge
+## instead of timing one itself, so it can never run ahead of or behind the damage. No
+## presentation draws that warning yet (lane telegraph visuals wait for the art pass); today the
+## Floor 4 sequence tests read it. Derived from the same expression as _spike_pad_is_active: no
+## stored state, nothing to scope.
+func spike_pad_ticks_until_active(pad_id: int) -> int:
+	if not _spike_pads.has(pad_id):
+		return -1
+	var pad: Dictionary = _spike_pads[pad_id]
+	var safe_ticks: int = int(pad["safe_ticks"])
+	var into_cycle: int = posmod(tick_count + int(pad["phase_offset"]), safe_ticks + int(pad["active_ticks"]))
+	return maxi(safe_ticks - into_cycle, 0)
+
+
 ## Read-only hazard snapshot (AGENTS.md Invariable #2: every mechanic must be observable).
 func debug_describe_spike_pad(pad_id: int) -> Dictionary:
 	if not _spike_pads.has(pad_id):

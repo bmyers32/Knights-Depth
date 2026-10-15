@@ -59,6 +59,24 @@ extends SceneTree
 ##               the committed bytes against the re-recording before commit.
 ##               FIRST RECORDING of the depth-3 fixture: the Terminal. A NEW BASELINE for new
 ##               content, not a re-baseline of anything.
+##   2026-10-13  FIRST RECORDING of the depth-4 fixture: the first Foundry floor, as a greybox
+##               that has NOT passed a human spatial gate. A NEW BASELINE for new content. The
+##               depth 1-3 fixtures were re-written by this run and came out byte-identical
+##               (verified with git before commit): nothing about serialization moved.
+##   2026-10-13  DEPTH 4 RE-RECORDED, same day, because the FLOOR changed on purpose. The first
+##               greybox was played and ruled out (hazard rows under every fight); it was
+##               re-authored to a hub with two key wings, a gate, a connector and a chamber.
+##               Neither recording was ever accepted or committed. Depths 1-3 again byte-identical.
+##   2026-10-14  DEPTH 4 RE-RECORDED for the approved Stage 1 spatial re-author: closer to the
+##               reference topology (raised landing, U and stairs, wider lower access, a wider
+##               and irregular west loop with a return route, a new east outline and key bay, a
+##               new exit run). Gate, connector, its pads and the chamber are unchanged. Still
+##               not spatially accepted. Depths 1-3 byte-identical.
+##   2026-10-15  DEPTH 4 RE-RECORDED for the one amendment the human Stage 1 spatial PASS asked
+##               for: the optional east loot room is restored where the first greybox had it
+##               (one patch, one open doorway, its three breakables). Nothing else moved; patch
+##               and connection ids after it shift by one. Depths 1-3 byte-identical. This
+##               is the floor the human accepted as Stage 1 (spatial PASS, 2026-10-15).
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the
@@ -76,6 +94,7 @@ const FIXTURES: Dictionary = {
 	1: "res://tests/fixtures/floor_plan_golden.json",
 	2: "res://tests/fixtures/floor_plan_golden_depth2.json",
 	3: "res://tests/fixtures/floor_plan_golden_depth3.json",
+	4: "res://tests/fixtures/floor_plan_golden_depth4.json",
 }
 
 

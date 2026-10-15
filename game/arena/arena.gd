@@ -54,7 +54,7 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## the Expedition at begin_expedition() and never read again -- where the party is, and whether
 ## a floor is the last, is the Expedition's to say, never this node's. A one-entry itinerary is
 ## how a test (or a human) boots a single floor.
-@export var itinerary: Array[int] = [1, 2, 3]
+@export var itinerary: Array[int] = [1, 2, 3, 4]
 
 ## Debug/diagnostic exports (manual-pass convention, this session): every export in
 ## this block is named debug_* and defaults to the AUTHENTIC game behavior — "all

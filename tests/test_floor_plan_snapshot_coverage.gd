@@ -78,7 +78,7 @@ func test_the_scanner_catches_an_omitted_layer() -> void:
 # --- THE EXCLUSION LIST, PROVED HONEST -------------------------------------------------------
 
 func test_the_excluded_fields_never_reach_a_compiled_plan() -> void:
-	for depth: int in [1, 2]:
+	for depth: int in [1, 2, 4]:
 		var plan: FloorPlan = DepthGenerator.generate(20260828, depth)
 		for layer: Array in [plan.patches, plan.connections, plan.triggers, plan.encounters,
 				plan.breakables, plan.hit_switches, plan.obstacles, plan.spike_pads]:

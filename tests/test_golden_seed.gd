@@ -27,6 +27,10 @@ const LAYOUT_DEPTH2_PATH := "res://game/content/layouts/archive_roundabout.tres"
 ## notices the Terminal changing from here on and says nothing about any earlier floor.
 const FIXTURE_DEPTH3_PATH := "res://tests/fixtures/floor_plan_golden_depth3.json"
 const GOLDEN_DEPTH3 := 3
+## THE FIRST FOUNDRY FLOOR'S FIXTURE -- FIRST RECORDED 2026-10-13, as an unaccepted greybox. A new
+## baseline for new content; it says nothing about any earlier floor.
+const FIXTURE_DEPTH4_PATH := "res://tests/fixtures/floor_plan_golden_depth4.json"
+const GOLDEN_DEPTH4 := 4
 
 
 ## Compares the SERIALIZED FORM against the committed bytes rather than parsing the fixture
@@ -61,6 +65,17 @@ func test_the_golden_seed_still_produces_the_committed_terminal() -> void:
 		"seed %d depth %d no longer produces the recorded floor. If generation changed ON PURPOSE, re-record the fixture and date the reason; otherwise this is the regression it exists to catch." % [GOLDEN_SEED, GOLDEN_DEPTH3])
 	for other: String in [FIXTURE_PATH, FIXTURE_DEPTH2_PATH]:
 		assert_ne(committed, FileAccess.get_file_as_string(other), "the Terminal must not share a fixture with %s" % other)
+
+
+func test_the_golden_seed_still_produces_the_committed_foundry_floor() -> void:
+	var committed: String = FileAccess.get_file_as_string(FIXTURE_DEPTH4_PATH)
+	assert_false(committed.is_empty(), "the depth-4 fixture must exist -- record it with tools/record_floor_plan_golden.gd")
+
+	var regenerated: String = JSON.stringify(DepthGenerator.generate(GOLDEN_SEED, GOLDEN_DEPTH4).to_dict(), "\t")
+	assert_eq(regenerated, committed,
+		"seed %d depth %d no longer produces the recorded floor. If generation changed ON PURPOSE, re-record the fixture and date the reason; otherwise this is the regression it exists to catch." % [GOLDEN_SEED, GOLDEN_DEPTH4])
+	for other: String in [FIXTURE_PATH, FIXTURE_DEPTH2_PATH, FIXTURE_DEPTH3_PATH]:
+		assert_ne(committed, FileAccess.get_file_as_string(other), "the Foundry must not share a fixture with %s" % other)
 
 
 ## DISCRIMINATION CHECK: proves the comparison can fail, so the assertion above is not

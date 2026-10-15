@@ -40,10 +40,10 @@ const _REGISTRY: Dictionary = {
 		"burn": preload("res://game/content/status/burn_stats.tres"),
 		"priority_table": preload("res://game/content/status/status_priority.tres"),
 	},
-	# M2: one stratum's generation parameters per entry. Foundry joins Archive when the
-	# second stratum lands (GAME-RULES §5 M2 run structure).
+	# M2: one stratum's generation parameters per entry (GAME-RULES §5 M2 run structure).
 	"stratum": {
 		"archive": preload("res://game/content/strata/archive.tres"),
+		"foundry": preload("res://game/content/strata/foundry.tres"),
 	},
 }
 

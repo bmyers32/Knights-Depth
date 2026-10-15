@@ -314,13 +314,14 @@ func test_the_terminal_is_named_by_itself_not_by_where_it_sits() -> void:
 		assert_eq(DepthGenerator.generate(0, depth).place_label, "", "an ordinary floor is known by its stratum")
 
 
-## The Terminal took ONE depth. Every other depth resolves exactly as it did before it existed.
+## The Terminal took ONE depth, and the Foundry later took depth 4 (test_floor4.gd). Every other
+## depth resolves exactly as it did before either existed.
 func test_only_the_terminals_depth_resolves_to_the_terminal() -> void:
 	var floor_one: int = DepthGenerator.generate(0, 1).patches.size()
 	var floor_two: int = DepthGenerator.generate(0, 2).patches.size()
 	assert_ne(floor_one, floor_two, "sanity: the two Archive floors are distinguishable")
 	assert_eq(_plan().patches.size(), TERMINAL.patches.size())
-	for depth: int in [4, 5, 9]:
+	for depth: int in [5, 9]:
 		assert_eq(DepthGenerator.generate(0, depth).patches.size(), floor_two, "depth %d is unchanged" % depth)
 		assert_eq(DepthGenerator.generate(0, depth).place_label, "")
 

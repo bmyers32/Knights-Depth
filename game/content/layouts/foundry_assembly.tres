@@ -1,0 +1,909 @@
+[gd_resource type="Resource" script_class="AuthoredLayout" format=3]
+
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="1_conn"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="2_patch"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="3_layout"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="4_trig"]
+[ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="5_enc"]
+[ext_resource type="Script" path="res://game/gen/spike_pad_plan.gd" id="6_pad"]
+[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="7_switch"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="8_obstacle"]
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="9_breakable"]
+
+[sub_resource type="Resource" id="Resource_p_arrival"]
+script = ExtResource("2_patch")
+key = &"P_ARRIVAL"
+patch_id = 0
+rect = Rect2(-56, -6, 12, 12)
+elevation = 1.5
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_u_rim"]
+script = ExtResource("2_patch")
+key = &"P_U_RIM"
+patch_id = 1
+rect = Rect2(-50, 5, 19, 5)
+elevation = 1.5
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_stair_1"]
+script = ExtResource("2_patch")
+key = &"P_STAIR_1"
+patch_id = 2
+rect = Rect2(-37, 1, 6, 4)
+elevation = 1.125
+surface = &"ramp"
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_stair_2"]
+script = ExtResource("2_patch")
+key = &"P_STAIR_2"
+patch_id = 3
+rect = Rect2(-37, -3, 6, 4)
+elevation = 0.75
+surface = &"ramp"
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_stair_3"]
+script = ExtResource("2_patch")
+key = &"P_STAIR_3"
+patch_id = 4
+rect = Rect2(-37, -6, 6, 3)
+elevation = 0.375
+surface = &"ramp"
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_access_room"]
+script = ExtResource("2_patch")
+key = &"P_ACCESS_ROOM"
+patch_id = 5
+rect = Rect2(-37, -18, 26, 12)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_access_recess"]
+script = ExtResource("2_patch")
+key = &"P_ACCESS_RECESS"
+patch_id = 6
+rect = Rect2(-30, -22, 8, 4)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_approach_low"]
+script = ExtResource("2_patch")
+key = &"P_APPROACH_LOW"
+patch_id = 7
+rect = Rect2(-22, -26, 9, 8)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_approach_high"]
+script = ExtResource("2_patch")
+key = &"P_APPROACH_HIGH"
+patch_id = 8
+rect = Rect2(-17, -30, 9, 6)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_hub"]
+script = ExtResource("2_patch")
+key = &"P_HUB"
+patch_id = 9
+rect = Rect2(-16, -56, 32, 26)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_neck"]
+script = ExtResource("2_patch")
+key = &"P_WEST_NECK"
+patch_id = 10
+rect = Rect2(-30, -42, 10, 8)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_low"]
+script = ExtResource("2_patch")
+key = &"P_WEST_LOW"
+patch_id = 11
+rect = Rect2(-50, -46, 24, 14)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_bay"]
+script = ExtResource("2_patch")
+key = &"P_WEST_BAY"
+patch_id = 12
+rect = Rect2(-44, -32, 10, 5)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_recess"]
+script = ExtResource("2_patch")
+key = &"P_WEST_RECESS"
+patch_id = 13
+rect = Rect2(-56, -42, 6, 7)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_leg"]
+script = ExtResource("2_patch")
+key = &"P_WEST_LEG"
+patch_id = 14
+rect = Rect2(-52, -58, 8, 12)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_apex"]
+script = ExtResource("2_patch")
+key = &"P_WEST_APEX"
+patch_id = 15
+rect = Rect2(-52, -70, 14, 10)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_niche"]
+script = ExtResource("2_patch")
+key = &"P_WEST_NICHE"
+patch_id = 16
+rect = Rect2(-49, -75, 8, 5)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_top"]
+script = ExtResource("2_patch")
+key = &"P_WEST_TOP"
+patch_id = 17
+rect = Rect2(-38, -68, 28, 10)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_low_bulge"]
+script = ExtResource("2_patch")
+key = &"P_WEST_LOW_BULGE"
+patch_id = 18
+rect = Rect2(-40, -49, 7, 3)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_west_top_alcove"]
+script = ExtResource("2_patch")
+key = &"P_WEST_TOP_ALCOVE"
+patch_id = 19
+rect = Rect2(-29, -58, 6, 3)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_east_hall"]
+script = ExtResource("2_patch")
+key = &"P_EAST_HALL"
+patch_id = 20
+rect = Rect2(18, -42, 10, 8)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_east_jog"]
+script = ExtResource("2_patch")
+key = &"P_EAST_JOG"
+patch_id = 21
+rect = Rect2(26, -46, 14, 8)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_east_room"]
+script = ExtResource("2_patch")
+key = &"P_EAST_ROOM"
+patch_id = 22
+rect = Rect2(38, -52, 26, 20)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_east_room_cross"]
+script = ExtResource("2_patch")
+key = &"P_EAST_ROOM_CROSS"
+patch_id = 23
+rect = Rect2(42, -56, 18, 28)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_east_bay"]
+script = ExtResource("2_patch")
+key = &"P_EAST_BAY"
+patch_id = 24
+rect = Rect2(42, -62, 8, 6)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_east_pocket"]
+script = ExtResource("2_patch")
+key = &"P_EAST_POCKET"
+patch_id = 25
+rect = Rect2(66, -40, 10, 10)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_vestibule"]
+script = ExtResource("2_patch")
+key = &"P_VESTIBULE"
+patch_id = 26
+rect = Rect2(-8, -66, 16, 8)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_junction"]
+script = ExtResource("2_patch")
+key = &"P_JUNCTION"
+patch_id = 27
+rect = Rect2(-6, -80, 16, 12)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_connector"]
+script = ExtResource("2_patch")
+key = &"P_CONNECTOR"
+patch_id = 28
+rect = Rect2(12, -78, 34, 8)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_chamber"]
+script = ExtResource("2_patch")
+key = &"P_CHAMBER"
+patch_id = 29
+rect = Rect2(22, -124, 40, 40)
+surface = &"arena"
+boundary_style = &"wall"
+
+
+[sub_resource type="Resource" id="Resource_p_exit_neck"]
+script = ExtResource("2_patch")
+key = &"P_EXIT_NECK"
+patch_id = 30
+rect = Rect2(38, -136, 8, 10)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_exit_run"]
+script = ExtResource("2_patch")
+key = &"P_EXIT_RUN"
+patch_id = 31
+rect = Rect2(38, -144, 34, 8)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_exit"]
+script = ExtResource("2_patch")
+key = &"P_EXIT"
+patch_id = 32
+rect = Rect2(66, -150, 14, 18)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_p_exit_spur"]
+script = ExtResource("2_patch")
+key = &"P_EXIT_SPUR"
+patch_id = 33
+rect = Rect2(56, -152, 6, 8)
+boundary_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_access_approach"]
+script = ExtResource("1_conn")
+key = &"C_ACCESS_APPROACH"
+connection_id = 0
+near_key = &"P_ACCESS_ROOM"
+far_key = &"P_APPROACH_LOW"
+patch_ids = Vector2i(5, 7)
+aperture = Rect2(-22, -20, 9, 4)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_approach_hub"]
+script = ExtResource("1_conn")
+key = &"C_APPROACH_HUB"
+connection_id = 1
+near_key = &"P_APPROACH_HIGH"
+far_key = &"P_HUB"
+patch_ids = Vector2i(8, 9)
+aperture = Rect2(-17, -32, 9, 4)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_hub_west"]
+script = ExtResource("1_conn")
+key = &"C_HUB_WEST"
+connection_id = 2
+near_key = &"P_HUB"
+far_key = &"P_WEST_NECK"
+patch_ids = Vector2i(9, 10)
+aperture = Rect2(-22, -41, 8, 6)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_west_low_leg"]
+script = ExtResource("1_conn")
+key = &"C_WEST_LOW_LEG"
+connection_id = 3
+near_key = &"P_WEST_LOW"
+far_key = &"P_WEST_LEG"
+patch_ids = Vector2i(11, 14)
+aperture = Rect2(-50, -48, 6, 4)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_west_leg_apex"]
+script = ExtResource("1_conn")
+key = &"C_WEST_LEG_APEX"
+connection_id = 4
+near_key = &"P_WEST_LEG"
+far_key = &"P_WEST_APEX"
+patch_ids = Vector2i(14, 15)
+aperture = Rect2(-52, -61, 8, 4)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_west_apex_top"]
+script = ExtResource("1_conn")
+key = &"C_WEST_APEX_TOP"
+connection_id = 5
+near_key = &"P_WEST_APEX"
+far_key = &"P_WEST_TOP"
+patch_ids = Vector2i(15, 17)
+aperture = Rect2(-40, -67, 4, 6)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_west_return"]
+script = ExtResource("1_conn")
+key = &"C_WEST_RETURN"
+connection_id = 6
+near_key = &"P_WEST_TOP"
+far_key = &"P_HUB"
+patch_ids = Vector2i(17, 9)
+aperture = Rect2(-17, -60, 6, 6)
+starts_open = false
+
+
+[sub_resource type="Resource" id="Resource_c_hub_east"]
+script = ExtResource("1_conn")
+key = &"C_HUB_EAST"
+connection_id = 7
+near_key = &"P_HUB"
+far_key = &"P_EAST_HALL"
+patch_ids = Vector2i(9, 20)
+aperture = Rect2(14, -41, 6, 6)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_east_hall_jog"]
+script = ExtResource("1_conn")
+key = &"C_EAST_HALL_JOG"
+connection_id = 8
+near_key = &"P_EAST_HALL"
+far_key = &"P_EAST_JOG"
+patch_ids = Vector2i(20, 21)
+aperture = Rect2(25, -43, 4, 6)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_east_hall_room"]
+script = ExtResource("1_conn")
+key = &"C_EAST_HALL_ROOM"
+connection_id = 9
+near_key = &"P_EAST_JOG"
+far_key = &"P_EAST_ROOM"
+patch_ids = Vector2i(21, 22)
+aperture = Rect2(36, -45, 6, 6)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_east_pocket"]
+script = ExtResource("1_conn")
+key = &"C_EAST_POCKET"
+connection_id = 10
+near_key = &"P_EAST_ROOM"
+far_key = &"P_EAST_POCKET"
+patch_ids = Vector2i(22, 25)
+aperture = Rect2(62.5, -37.5, 5, 5)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_lock_w"]
+script = ExtResource("1_conn")
+key = &"C_LOCK_W"
+connection_id = 11
+near_key = &"P_HUB"
+far_key = &"P_VESTIBULE"
+patch_ids = Vector2i(9, 26)
+aperture = Rect2(-7, -59.5, 6, 5)
+starts_open = false
+
+
+[sub_resource type="Resource" id="Resource_c_lock_e"]
+script = ExtResource("1_conn")
+key = &"C_LOCK_E"
+connection_id = 12
+near_key = &"P_VESTIBULE"
+far_key = &"P_JUNCTION"
+patch_ids = Vector2i(26, 27)
+aperture = Rect2(1, -69.5, 6, 5)
+starts_open = false
+
+
+[sub_resource type="Resource" id="Resource_c_junction_connector"]
+script = ExtResource("1_conn")
+key = &"C_JUNCTION_CONNECTOR"
+connection_id = 13
+near_key = &"P_JUNCTION"
+far_key = &"P_CONNECTOR"
+patch_ids = Vector2i(27, 28)
+aperture = Rect2(8.5, -77, 5, 6)
+has_barrier = false
+flank_style = &"ledge"
+
+
+[sub_resource type="Resource" id="Resource_c_connector_chamber"]
+script = ExtResource("1_conn")
+key = &"C_CONNECTOR_CHAMBER"
+connection_id = 14
+near_key = &"P_CONNECTOR"
+far_key = &"P_CHAMBER"
+patch_ids = Vector2i(28, 29)
+aperture = Rect2(39, -85.5, 6, 9)
+
+
+[sub_resource type="Resource" id="Resource_c_chamber_top"]
+script = ExtResource("1_conn")
+key = &"C_CHAMBER_TOP"
+connection_id = 15
+near_key = &"P_CHAMBER"
+far_key = &"P_EXIT_NECK"
+patch_ids = Vector2i(29, 30)
+aperture = Rect2(39, -127.5, 6, 5)
+starts_open = false
+
+
+[sub_resource type="Resource" id="Resource_e_access"]
+script = ExtResource("5_enc")
+key = &"E_ACCESS"
+encounter_id = 0
+regions = Array[Rect2]([Rect2(-37, -18, 26, 12), Rect2(-30, -22, 8, 4)])
+role = &"optional"
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(-16, 0, -14)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(-20, 0, -16)
+}])
+confines_player = false
+
+
+[sub_resource type="Resource" id="Resource_e_west"]
+script = ExtResource("5_enc")
+key = &"E_WEST"
+encounter_id = 1
+regions = Array[Rect2]([Rect2(-30, -42, 10, 8), Rect2(-50, -46, 24, 14), Rect2(-44, -32, 10, 5), Rect2(-56, -42, 6, 7), Rect2(-40, -49, 7, 3)])
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(-46, 0, -42)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(-38, 0, -44)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(-42, 0, -36)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(-34, 0, -38)
+}])
+confines_player = false
+
+
+[sub_resource type="Resource" id="Resource_e_east"]
+script = ExtResource("5_enc")
+key = &"E_EAST"
+encounter_id = 2
+regions = Array[Rect2]([Rect2(38, -52, 26, 20), Rect2(42, -56, 18, 28), Rect2(42, -62, 8, 6)])
+role = &"optional"
+roster = Array[Dictionary]([{
+"enemy_key": &"watcher",
+"position": Vector3(60, 0, -50)
+}, {
+"enemy_key": &"watcher",
+"position": Vector3(58, 0, -32)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(52, 0, -44)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(56, 0, -40)
+}])
+confines_player = false
+
+
+[sub_resource type="Resource" id="Resource_e_wave_1"]
+script = ExtResource("5_enc")
+key = &"E_WAVE_1"
+encounter_id = 3
+regions = Array[Rect2]([Rect2(22, -124, 40, 40)])
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(34, 0, -104)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(50, 0, -104)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(42, 0, -112)
+}])
+
+
+[sub_resource type="Resource" id="Resource_e_wave_2"]
+script = ExtResource("5_enc")
+key = &"E_WAVE_2"
+encounter_id = 4
+regions = Array[Rect2]([Rect2(22, -124, 40, 40)])
+roster = Array[Dictionary]([{
+"enemy_key": &"watcher",
+"position": Vector3(30, 0, -112)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(42, 0, -100)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(52, 0, -108)
+}])
+
+
+[sub_resource type="Resource" id="Resource_e_wave_3"]
+script = ExtResource("5_enc")
+key = &"E_WAVE_3"
+encounter_id = 5
+regions = Array[Rect2]([Rect2(22, -124, 40, 40)])
+roster = Array[Dictionary]([{
+"enemy_key": &"watcher",
+"position": Vector3(54, 0, -112)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(32, 0, -100)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(48, 0, -114)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(42, 0, -108)
+}])
+
+
+[sub_resource type="Resource" id="Resource_t_west"]
+script = ExtResource("4_trig")
+key = &"T_WEST"
+trigger_id = 0
+region = Rect2(-28, -42, 4, 8)
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_WEST"
+}])
+
+
+[sub_resource type="Resource" id="Resource_t_west_clear"]
+script = ExtResource("4_trig")
+key = &"T_WEST_CLEAR"
+trigger_id = 1
+kind = &"encounter_cleared"
+source_key = &"E_WEST"
+source_id = 1
+effects = Array[Dictionary]([{
+"kind": &"reveal_switch",
+"target_key": &"S_WEST_KEY"
+}])
+
+
+[sub_resource type="Resource" id="Resource_t_east"]
+script = ExtResource("4_trig")
+key = &"T_EAST"
+trigger_id = 2
+region = Rect2(40, -46, 6, 12)
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_EAST"
+}])
+
+
+[sub_resource type="Resource" id="Resource_t_party"]
+script = ExtResource("4_trig")
+key = &"T_PARTY"
+trigger_id = 3
+kind = &"group_occupancy"
+region = Rect2(40, -91, 4, 4)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"block_connection",
+"target_key": &"C_CONNECTOR_CHAMBER"
+}, {
+"kind": &"activate_encounter",
+"target_key": &"E_WAVE_1"
+}])
+
+
+[sub_resource type="Resource" id="Resource_t_wave_1_clear"]
+script = ExtResource("4_trig")
+key = &"T_WAVE_1_CLEAR"
+trigger_id = 4
+kind = &"encounter_cleared"
+source_key = &"E_WAVE_1"
+source_id = 3
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_WAVE_2"
+}])
+
+
+[sub_resource type="Resource" id="Resource_t_wave_2_clear"]
+script = ExtResource("4_trig")
+key = &"T_WAVE_2_CLEAR"
+trigger_id = 5
+kind = &"encounter_cleared"
+source_key = &"E_WAVE_2"
+source_id = 4
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_WAVE_3"
+}])
+
+
+[sub_resource type="Resource" id="Resource_t_wave_3_clear"]
+script = ExtResource("4_trig")
+key = &"T_WAVE_3_CLEAR"
+trigger_id = 6
+kind = &"encounter_cleared"
+source_key = &"E_WAVE_3"
+source_id = 5
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_CHAMBER_TOP"
+}])
+
+
+[sub_resource type="Resource" id="Resource_t_access"]
+script = ExtResource("4_trig")
+key = &"T_ACCESS"
+trigger_id = 7
+region = Rect2(-37, -10, 6, 4)
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_ACCESS"
+}])
+
+
+[sub_resource type="Resource" id="Resource_t_exit"]
+script = ExtResource("4_trig")
+key = &"T_EXIT"
+trigger_id = 8
+kind = &"group_occupancy"
+region = Rect2(72, -146, 4, 4)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"complete_floor",
+"target_id": -1
+}])
+
+
+[sub_resource type="Resource" id="Resource_s_west_key"]
+script = ExtResource("7_switch")
+key = &"S_WEST_KEY"
+switch_id = 0
+position = Vector3(-45, 0, -72.5)
+radius = 0.8
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_LOCK_W"
+}, {
+"kind": &"open_connection",
+"target_key": &"C_WEST_RETURN"
+}])
+starts_hidden = true
+
+
+[sub_resource type="Resource" id="Resource_s_east_key"]
+script = ExtResource("7_switch")
+key = &"S_EAST_KEY"
+switch_id = 1
+position = Vector3(46, 0, -59.5)
+radius = 0.8
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_LOCK_E"
+}])
+
+
+[sub_resource type="Resource" id="Resource_o_hub_node"]
+script = ExtResource("8_obstacle")
+key = &"O_HUB_NODE"
+obstacle_id = 0
+rect = Rect2(-1.5, -44.5, 3, 3)
+height = 1.0
+
+
+[sub_resource type="Resource" id="Resource_o_east_key_cover"]
+script = ExtResource("8_obstacle")
+key = &"O_EAST_KEY_COVER"
+obstacle_id = 1
+rect = Rect2(42.5, -55.5, 3, 3)
+height = 1.6
+
+
+[sub_resource type="Resource" id="Resource_o_east_cover_a"]
+script = ExtResource("8_obstacle")
+key = &"O_EAST_COVER_A"
+obstacle_id = 2
+rect = Rect2(48, -41, 3, 3)
+height = 1.6
+
+
+[sub_resource type="Resource" id="Resource_o_east_cover_b"]
+script = ExtResource("8_obstacle")
+key = &"O_EAST_COVER_B"
+obstacle_id = 3
+rect = Rect2(55, -48, 3, 3)
+height = 1.6
+
+
+[sub_resource type="Resource" id="Resource_o_chamber_core"]
+script = ExtResource("8_obstacle")
+key = &"O_CHAMBER_CORE"
+obstacle_id = 4
+rect = Rect2(40.5, -105.5, 3, 3)
+height = 1.0
+
+
+[sub_resource type="Resource" id="Resource_o_chamber_nw"]
+script = ExtResource("8_obstacle")
+key = &"O_CHAMBER_NW"
+obstacle_id = 5
+rect = Rect2(22, -124, 6, 6)
+height = 2.4
+
+
+[sub_resource type="Resource" id="Resource_o_chamber_ne"]
+script = ExtResource("8_obstacle")
+key = &"O_CHAMBER_NE"
+obstacle_id = 6
+rect = Rect2(56, -124, 6, 6)
+height = 2.4
+
+
+[sub_resource type="Resource" id="Resource_o_chamber_sw"]
+script = ExtResource("8_obstacle")
+key = &"O_CHAMBER_SW"
+obstacle_id = 7
+rect = Rect2(22, -90, 6, 6)
+height = 1.0
+
+
+[sub_resource type="Resource" id="Resource_o_chamber_se"]
+script = ExtResource("8_obstacle")
+key = &"O_CHAMBER_SE"
+obstacle_id = 8
+rect = Rect2(56, -90, 6, 6)
+height = 1.0
+
+
+[sub_resource type="Resource" id="Resource_b_access_a"]
+script = ExtResource("9_breakable")
+key = &"B_ACCESS_A"
+breakable_id = 0
+position = Vector3(-14, 0, -9)
+
+
+[sub_resource type="Resource" id="Resource_b_access_b"]
+script = ExtResource("9_breakable")
+key = &"B_ACCESS_B"
+breakable_id = 1
+position = Vector3(-34, 0, -16)
+
+
+[sub_resource type="Resource" id="Resource_b_access_c"]
+script = ExtResource("9_breakable")
+key = &"B_ACCESS_C"
+breakable_id = 2
+position = Vector3(-26, 0, -20.5)
+
+
+[sub_resource type="Resource" id="Resource_b_west_a"]
+script = ExtResource("9_breakable")
+key = &"B_WEST_A"
+breakable_id = 3
+position = Vector3(-40, 0, -29)
+
+
+[sub_resource type="Resource" id="Resource_b_west_b"]
+script = ExtResource("9_breakable")
+key = &"B_WEST_B"
+breakable_id = 4
+position = Vector3(-53, 0, -38)
+
+
+[sub_resource type="Resource" id="Resource_b_pocket_a"]
+script = ExtResource("9_breakable")
+key = &"B_POCKET_A"
+breakable_id = 5
+position = Vector3(72, 0, -38)
+
+
+[sub_resource type="Resource" id="Resource_b_pocket_b"]
+script = ExtResource("9_breakable")
+key = &"B_POCKET_B"
+breakable_id = 6
+position = Vector3(74, 0, -34)
+
+
+[sub_resource type="Resource" id="Resource_b_pocket_c"]
+script = ExtResource("9_breakable")
+key = &"B_POCKET_C"
+breakable_id = 7
+position = Vector3(71, 0, -32)
+
+
+[sub_resource type="Resource" id="Resource_pad_seq_0"]
+script = ExtResource("6_pad")
+key = &"PAD_SEQ_0"
+pad_id = 0
+rect = Rect2(19, -78, 6, 8)
+safe_ticks = 210
+active_ticks = 30
+phase_offset_ticks = 210
+damage = 10.0
+
+
+[sub_resource type="Resource" id="Resource_pad_seq_1"]
+script = ExtResource("6_pad")
+key = &"PAD_SEQ_1"
+pad_id = 1
+rect = Rect2(25, -78, 6, 8)
+safe_ticks = 210
+active_ticks = 30
+phase_offset_ticks = 170
+damage = 10.0
+
+
+[sub_resource type="Resource" id="Resource_pad_seq_2"]
+script = ExtResource("6_pad")
+key = &"PAD_SEQ_2"
+pad_id = 2
+rect = Rect2(31, -78, 6, 8)
+safe_ticks = 210
+active_ticks = 30
+phase_offset_ticks = 130
+damage = 10.0
+
+
+[resource]
+script = ExtResource("3_layout")
+layout_id = &"foundry_assembly"
+stratum_id = &"foundry"
+patches = Array[ExtResource("2_patch")]([SubResource("Resource_p_arrival"), SubResource("Resource_p_u_rim"), SubResource("Resource_p_stair_1"), SubResource("Resource_p_stair_2"), SubResource("Resource_p_stair_3"), SubResource("Resource_p_access_room"), SubResource("Resource_p_access_recess"), SubResource("Resource_p_approach_low"), SubResource("Resource_p_approach_high"), SubResource("Resource_p_hub"), SubResource("Resource_p_west_neck"), SubResource("Resource_p_west_low"), SubResource("Resource_p_west_bay"), SubResource("Resource_p_west_recess"), SubResource("Resource_p_west_leg"), SubResource("Resource_p_west_apex"), SubResource("Resource_p_west_niche"), SubResource("Resource_p_west_top"), SubResource("Resource_p_west_low_bulge"), SubResource("Resource_p_west_top_alcove"), SubResource("Resource_p_east_hall"), SubResource("Resource_p_east_jog"), SubResource("Resource_p_east_room"), SubResource("Resource_p_east_room_cross"), SubResource("Resource_p_east_bay"), SubResource("Resource_p_east_pocket"), SubResource("Resource_p_vestibule"), SubResource("Resource_p_junction"), SubResource("Resource_p_connector"), SubResource("Resource_p_chamber"), SubResource("Resource_p_exit_neck"), SubResource("Resource_p_exit_run"), SubResource("Resource_p_exit"), SubResource("Resource_p_exit_spur")])
+connections = Array[ExtResource("1_conn")]([SubResource("Resource_c_access_approach"), SubResource("Resource_c_approach_hub"), SubResource("Resource_c_hub_west"), SubResource("Resource_c_west_low_leg"), SubResource("Resource_c_west_leg_apex"), SubResource("Resource_c_west_apex_top"), SubResource("Resource_c_west_return"), SubResource("Resource_c_hub_east"), SubResource("Resource_c_east_hall_jog"), SubResource("Resource_c_east_hall_room"), SubResource("Resource_c_east_pocket"), SubResource("Resource_c_lock_w"), SubResource("Resource_c_lock_e"), SubResource("Resource_c_junction_connector"), SubResource("Resource_c_connector_chamber"), SubResource("Resource_c_chamber_top")])
+triggers = Array[ExtResource("4_trig")]([SubResource("Resource_t_west"), SubResource("Resource_t_west_clear"), SubResource("Resource_t_east"), SubResource("Resource_t_party"), SubResource("Resource_t_wave_1_clear"), SubResource("Resource_t_wave_2_clear"), SubResource("Resource_t_wave_3_clear"), SubResource("Resource_t_access"), SubResource("Resource_t_exit")])
+encounters = Array[ExtResource("5_enc")]([SubResource("Resource_e_access"), SubResource("Resource_e_west"), SubResource("Resource_e_east"), SubResource("Resource_e_wave_1"), SubResource("Resource_e_wave_2"), SubResource("Resource_e_wave_3")])
+breakables = Array[ExtResource("9_breakable")]([SubResource("Resource_b_access_a"), SubResource("Resource_b_access_b"), SubResource("Resource_b_access_c"), SubResource("Resource_b_west_a"), SubResource("Resource_b_west_b"), SubResource("Resource_b_pocket_a"), SubResource("Resource_b_pocket_b"), SubResource("Resource_b_pocket_c")])
+hit_switches = Array[ExtResource("7_switch")]([SubResource("Resource_s_west_key"), SubResource("Resource_s_east_key")])
+obstacles = Array[ExtResource("8_obstacle")]([SubResource("Resource_o_hub_node"), SubResource("Resource_o_east_key_cover"), SubResource("Resource_o_east_cover_a"), SubResource("Resource_o_east_cover_b"), SubResource("Resource_o_chamber_core"), SubResource("Resource_o_chamber_nw"), SubResource("Resource_o_chamber_ne"), SubResource("Resource_o_chamber_sw"), SubResource("Resource_o_chamber_se")])
+spike_pads = Array[ExtResource("6_pad")]([SubResource("Resource_pad_seq_0"), SubResource("Resource_pad_seq_1"), SubResource("Resource_pad_seq_2")])
+entry_point = Vector3(-50, 0, 0)
+end_marker = Vector3(74, 0, -144)

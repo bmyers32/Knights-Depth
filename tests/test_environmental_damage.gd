@@ -58,6 +58,53 @@ func _kinds(events: Array[Event]) -> Array:
 	return kinds
 
 
+# --- 0: THE COUNTDOWN A WARNING IS DRAWN FROM ------------------------------------------------
+
+## Fixture pad: 10 safe, 10 active. The countdown is the safe ticks LEFT, and 0 for the whole of
+## the active phase -- so a picture driven by it reaches "now" on the very tick damage can land.
+func test_the_countdown_reaches_zero_exactly_when_the_pad_turns_on() -> void:
+	var expected: Array[int] = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+	for cycle in 2:
+		for step in expected.size():
+			assert_eq(sim.spike_pad_ticks_until_active(PAD), expected[step],
+				"cycle %d, tick %d into it" % [cycle, step])
+			assert_eq(sim.spike_pad_ticks_until_active(PAD) == 0, sim.debug_describe_spike_pad(PAD)["active"],
+				"zero means active and nothing else does (cycle %d, tick %d)" % [cycle, step])
+			sim.tick([] as Array[Command], DT)
+
+
+## The first tick the countdown reads 0 is the first tick an Envoy standing there is hurt: the
+## warning cannot be late, because it is the same number the damage is gated on.
+func test_the_countdown_cannot_lag_behind_the_damage() -> void:
+	for i in 40:
+		var counted_down: bool = sim.spike_pad_ticks_until_active(PAD) == 0
+		var events: Array[Event] = sim.tick([] as Array[Command], DT)
+		assert_eq(_kinds(events).has("hit"), counted_down,
+			"tick %d: damage and the countdown disagree about whether the pad is on" % i)
+
+
+func test_the_countdown_honours_a_phase_offset() -> void:
+	sim.register_spike_pad(1, Rect2(10.0, 0.0, 2.0, 2.0), 10, 10, 4, 12.0, &"force")
+	assert_eq(sim.spike_pad_ticks_until_active(1), 6, "four ticks further into its safe window")
+	_run(6)
+	assert_eq(sim.spike_pad_ticks_until_active(1), 0)
+	assert_gt(sim.spike_pad_ticks_until_active(PAD), 0, "while its neighbour is still counting")
+
+
+## Asking is not ticking: the query is read-only, and a stopped world holds its countdown.
+func test_asking_for_the_countdown_changes_nothing() -> void:
+	_run(3)
+	var first: int = sim.spike_pad_ticks_until_active(PAD)
+	for i in 50:
+		assert_eq(sim.spike_pad_ticks_until_active(PAD), first)
+	assert_eq(sim.tick_count, 3)
+	assert_eq(sim.debug_describe_spike_pad(PAD)["ticks_into_cycle"], 3)
+
+
+func test_a_pad_this_floor_does_not_have_has_no_countdown() -> void:
+	assert_eq(sim.spike_pad_ticks_until_active(99), -1)
+
+
 # --- 1: THE CYCLE IS AUTHORITATIVE AND DETERMINISTIC -------------------------------------------
 
 func test_the_pad_cycles_between_safe_and_active() -> void:

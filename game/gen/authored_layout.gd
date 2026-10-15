@@ -29,6 +29,12 @@ extends Resource
 ## floor, which is known by its stratum. Authored here and not derived from depth or stratum,
 ## because where a place currently sits in the descent is not what it is.
 @export var place_label: String = ""
+## WHICH STRATUM THIS FLOOR BELONGS TO (2026-10-13, first consumer: the Foundry). The floor knows
+## its stratum; the generator knows only which floor sits at which depth. That answers the
+## question the three-entry selection left open -- selection is by depth, stratum FOLLOWS the
+## layout -- without a table. Defaults to archive so every floor authored before this is
+## unchanged, the Terminal's borrowed config included.
+@export var stratum_id: StringName = &"archive"
 
 @export var patches: Array[WalkablePatch] = []
 @export var connections: Array[TraversalConnection] = []

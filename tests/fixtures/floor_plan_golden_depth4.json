@@ -1,0 +1,1631 @@
+{
+	"authored_layout": true,
+	"breakables": [
+		{
+			"blocking_rect": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"breakable_id": 0,
+			"conceals_trigger_id": -1,
+			"durability": 1.0,
+			"position": {
+				"x": -14.0,
+				"y": 0.0,
+				"z": -9.0
+			},
+			"radius": 0.7
+		},
+		{
+			"blocking_rect": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"breakable_id": 1,
+			"conceals_trigger_id": -1,
+			"durability": 1.0,
+			"position": {
+				"x": -34.0,
+				"y": 0.0,
+				"z": -16.0
+			},
+			"radius": 0.7
+		},
+		{
+			"blocking_rect": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"breakable_id": 2,
+			"conceals_trigger_id": -1,
+			"durability": 1.0,
+			"position": {
+				"x": -26.0,
+				"y": 0.0,
+				"z": -20.5
+			},
+			"radius": 0.7
+		},
+		{
+			"blocking_rect": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"breakable_id": 3,
+			"conceals_trigger_id": -1,
+			"durability": 1.0,
+			"position": {
+				"x": -40.0,
+				"y": 0.0,
+				"z": -29.0
+			},
+			"radius": 0.7
+		},
+		{
+			"blocking_rect": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"breakable_id": 4,
+			"conceals_trigger_id": -1,
+			"durability": 1.0,
+			"position": {
+				"x": -53.0,
+				"y": 0.0,
+				"z": -38.0
+			},
+			"radius": 0.7
+		},
+		{
+			"blocking_rect": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"breakable_id": 5,
+			"conceals_trigger_id": -1,
+			"durability": 1.0,
+			"position": {
+				"x": 72.0,
+				"y": 0.0,
+				"z": -38.0
+			},
+			"radius": 0.7
+		},
+		{
+			"blocking_rect": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"breakable_id": 6,
+			"conceals_trigger_id": -1,
+			"durability": 1.0,
+			"position": {
+				"x": 74.0,
+				"y": 0.0,
+				"z": -34.0
+			},
+			"radius": 0.7
+		},
+		{
+			"blocking_rect": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"breakable_id": 7,
+			"conceals_trigger_id": -1,
+			"durability": 1.0,
+			"position": {
+				"x": 71.0,
+				"y": 0.0,
+				"z": -32.0
+			},
+			"radius": 0.7
+		}
+	],
+	"connections": [
+		{
+			"aperture": {
+				"d": 4.0,
+				"w": 9.0,
+				"x": -22.0,
+				"z": -20.0
+			},
+			"connection_id": 0,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				5,
+				7
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 4.0,
+				"w": 9.0,
+				"x": -17.0,
+				"z": -32.0
+			},
+			"connection_id": 1,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				8,
+				9
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 6.0,
+				"w": 8.0,
+				"x": -22.0,
+				"z": -41.0
+			},
+			"connection_id": 2,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				9,
+				10
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 4.0,
+				"w": 6.0,
+				"x": -50.0,
+				"z": -48.0
+			},
+			"connection_id": 3,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				11,
+				14
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 4.0,
+				"w": 8.0,
+				"x": -52.0,
+				"z": -61.0
+			},
+			"connection_id": 4,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				14,
+				15
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 6.0,
+				"w": 4.0,
+				"x": -40.0,
+				"z": -67.0
+			},
+			"connection_id": 5,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				15,
+				17
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 6.0,
+				"w": 6.0,
+				"x": -17.0,
+				"z": -60.0
+			},
+			"connection_id": 6,
+			"flank_style": "wall",
+			"has_barrier": true,
+			"patch_ids": [
+				17,
+				9
+			],
+			"starts_open": false
+		},
+		{
+			"aperture": {
+				"d": 6.0,
+				"w": 6.0,
+				"x": 14.0,
+				"z": -41.0
+			},
+			"connection_id": 7,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				9,
+				20
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 6.0,
+				"w": 4.0,
+				"x": 25.0,
+				"z": -43.0
+			},
+			"connection_id": 8,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				20,
+				21
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 6.0,
+				"w": 6.0,
+				"x": 36.0,
+				"z": -45.0
+			},
+			"connection_id": 9,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				21,
+				22
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 5.0,
+				"w": 5.0,
+				"x": 62.5,
+				"z": -37.5
+			},
+			"connection_id": 10,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				22,
+				25
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 5.0,
+				"w": 6.0,
+				"x": -7.0,
+				"z": -59.5
+			},
+			"connection_id": 11,
+			"flank_style": "wall",
+			"has_barrier": true,
+			"patch_ids": [
+				9,
+				26
+			],
+			"starts_open": false
+		},
+		{
+			"aperture": {
+				"d": 5.0,
+				"w": 6.0,
+				"x": 1.0,
+				"z": -69.5
+			},
+			"connection_id": 12,
+			"flank_style": "wall",
+			"has_barrier": true,
+			"patch_ids": [
+				26,
+				27
+			],
+			"starts_open": false
+		},
+		{
+			"aperture": {
+				"d": 6.0,
+				"w": 5.0,
+				"x": 8.5,
+				"z": -77.0
+			},
+			"connection_id": 13,
+			"flank_style": "ledge",
+			"has_barrier": false,
+			"patch_ids": [
+				27,
+				28
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 9.0,
+				"w": 6.0,
+				"x": 39.0,
+				"z": -85.5
+			},
+			"connection_id": 14,
+			"flank_style": "wall",
+			"has_barrier": true,
+			"patch_ids": [
+				28,
+				29
+			],
+			"starts_open": true
+		},
+		{
+			"aperture": {
+				"d": 5.0,
+				"w": 6.0,
+				"x": 39.0,
+				"z": -127.5
+			},
+			"connection_id": 15,
+			"flank_style": "wall",
+			"has_barrier": true,
+			"patch_ids": [
+				29,
+				30
+			],
+			"starts_open": false
+		}
+	],
+	"depth": 4,
+	"encounters": [
+		{
+			"confines_player": false,
+			"encounter_id": 0,
+			"regions": [
+				{
+					"d": 12.0,
+					"w": 26.0,
+					"x": -37.0,
+					"z": -18.0
+				},
+				{
+					"d": 4.0,
+					"w": 8.0,
+					"x": -30.0,
+					"z": -22.0
+				}
+			],
+			"role": "optional",
+			"roster": [
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": -16.0,
+						"y": 0.0,
+						"z": -14.0
+					}
+				},
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": -20.0,
+						"y": 0.0,
+						"z": -16.0
+					}
+				}
+			],
+			"spawn_at_floor_load": false
+		},
+		{
+			"confines_player": false,
+			"encounter_id": 1,
+			"regions": [
+				{
+					"d": 8.0,
+					"w": 10.0,
+					"x": -30.0,
+					"z": -42.0
+				},
+				{
+					"d": 14.0,
+					"w": 24.0,
+					"x": -50.0,
+					"z": -46.0
+				},
+				{
+					"d": 5.0,
+					"w": 10.0,
+					"x": -44.0,
+					"z": -32.0
+				},
+				{
+					"d": 7.0,
+					"w": 6.0,
+					"x": -56.0,
+					"z": -42.0
+				},
+				{
+					"d": 3.0,
+					"w": 7.0,
+					"x": -40.0,
+					"z": -49.0
+				}
+			],
+			"role": "mandatory",
+			"roster": [
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": -46.0,
+						"y": 0.0,
+						"z": -42.0
+					}
+				},
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": -38.0,
+						"y": 0.0,
+						"z": -44.0
+					}
+				},
+				{
+					"enemy_key": "ooze",
+					"position": {
+						"x": -42.0,
+						"y": 0.0,
+						"z": -36.0
+					}
+				},
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": -34.0,
+						"y": 0.0,
+						"z": -38.0
+					}
+				}
+			],
+			"spawn_at_floor_load": false
+		},
+		{
+			"confines_player": false,
+			"encounter_id": 2,
+			"regions": [
+				{
+					"d": 20.0,
+					"w": 26.0,
+					"x": 38.0,
+					"z": -52.0
+				},
+				{
+					"d": 28.0,
+					"w": 18.0,
+					"x": 42.0,
+					"z": -56.0
+				},
+				{
+					"d": 6.0,
+					"w": 8.0,
+					"x": 42.0,
+					"z": -62.0
+				}
+			],
+			"role": "optional",
+			"roster": [
+				{
+					"enemy_key": "watcher",
+					"position": {
+						"x": 60.0,
+						"y": 0.0,
+						"z": -50.0
+					}
+				},
+				{
+					"enemy_key": "watcher",
+					"position": {
+						"x": 58.0,
+						"y": 0.0,
+						"z": -32.0
+					}
+				},
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": 52.0,
+						"y": 0.0,
+						"z": -44.0
+					}
+				},
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": 56.0,
+						"y": 0.0,
+						"z": -40.0
+					}
+				}
+			],
+			"spawn_at_floor_load": false
+		},
+		{
+			"confines_player": true,
+			"encounter_id": 3,
+			"regions": [
+				{
+					"d": 40.0,
+					"w": 40.0,
+					"x": 22.0,
+					"z": -124.0
+				}
+			],
+			"role": "mandatory",
+			"roster": [
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": 34.0,
+						"y": 0.0,
+						"z": -104.0
+					}
+				},
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": 50.0,
+						"y": 0.0,
+						"z": -104.0
+					}
+				},
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": 42.0,
+						"y": 0.0,
+						"z": -112.0
+					}
+				}
+			],
+			"spawn_at_floor_load": false
+		},
+		{
+			"confines_player": true,
+			"encounter_id": 4,
+			"regions": [
+				{
+					"d": 40.0,
+					"w": 40.0,
+					"x": 22.0,
+					"z": -124.0
+				}
+			],
+			"role": "mandatory",
+			"roster": [
+				{
+					"enemy_key": "watcher",
+					"position": {
+						"x": 30.0,
+						"y": 0.0,
+						"z": -112.0
+					}
+				},
+				{
+					"enemy_key": "ooze",
+					"position": {
+						"x": 42.0,
+						"y": 0.0,
+						"z": -100.0
+					}
+				},
+				{
+					"enemy_key": "ooze",
+					"position": {
+						"x": 52.0,
+						"y": 0.0,
+						"z": -108.0
+					}
+				}
+			],
+			"spawn_at_floor_load": false
+		},
+		{
+			"confines_player": true,
+			"encounter_id": 5,
+			"regions": [
+				{
+					"d": 40.0,
+					"w": 40.0,
+					"x": 22.0,
+					"z": -124.0
+				}
+			],
+			"role": "mandatory",
+			"roster": [
+				{
+					"enemy_key": "watcher",
+					"position": {
+						"x": 54.0,
+						"y": 0.0,
+						"z": -112.0
+					}
+				},
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": 32.0,
+						"y": 0.0,
+						"z": -100.0
+					}
+				},
+				{
+					"enemy_key": "fang",
+					"position": {
+						"x": 48.0,
+						"y": 0.0,
+						"z": -114.0
+					}
+				},
+				{
+					"enemy_key": "ooze",
+					"position": {
+						"x": 42.0,
+						"y": 0.0,
+						"z": -108.0
+					}
+				}
+			],
+			"spawn_at_floor_load": false
+		}
+	],
+	"end_marker": {
+		"x": 74.0,
+		"y": 0.0,
+		"z": -144.0
+	},
+	"entry_point": {
+		"x": -50.0,
+		"y": 0.0,
+		"z": 0.0
+	},
+	"floor_seed": 1263247943567427387,
+	"hit_switches": [
+		{
+			"effects": [
+				{
+					"kind": "open_connection",
+					"target_id": 11
+				},
+				{
+					"kind": "open_connection",
+					"target_id": 6
+				}
+			],
+			"mode": "one_shot",
+			"position": {
+				"x": -45.0,
+				"y": 0.0,
+				"z": -72.5
+			},
+			"radius": 0.8,
+			"starts_hidden": true,
+			"switch_id": 0
+		},
+		{
+			"effects": [
+				{
+					"kind": "open_connection",
+					"target_id": 12
+				}
+			],
+			"mode": "one_shot",
+			"position": {
+				"x": 46.0,
+				"y": 0.0,
+				"z": -59.5
+			},
+			"radius": 0.8,
+			"starts_hidden": false,
+			"switch_id": 1
+		}
+	],
+	"obstacles": [
+		{
+			"height": 1.0,
+			"obstacle_id": 0,
+			"rect": {
+				"d": 3.0,
+				"w": 3.0,
+				"x": -1.5,
+				"z": -44.5
+			}
+		},
+		{
+			"height": 1.6,
+			"obstacle_id": 1,
+			"rect": {
+				"d": 3.0,
+				"w": 3.0,
+				"x": 42.5,
+				"z": -55.5
+			}
+		},
+		{
+			"height": 1.6,
+			"obstacle_id": 2,
+			"rect": {
+				"d": 3.0,
+				"w": 3.0,
+				"x": 48.0,
+				"z": -41.0
+			}
+		},
+		{
+			"height": 1.6,
+			"obstacle_id": 3,
+			"rect": {
+				"d": 3.0,
+				"w": 3.0,
+				"x": 55.0,
+				"z": -48.0
+			}
+		},
+		{
+			"height": 1.0,
+			"obstacle_id": 4,
+			"rect": {
+				"d": 3.0,
+				"w": 3.0,
+				"x": 40.5,
+				"z": -105.5
+			}
+		},
+		{
+			"height": 2.4,
+			"obstacle_id": 5,
+			"rect": {
+				"d": 6.0,
+				"w": 6.0,
+				"x": 22.0,
+				"z": -124.0
+			}
+		},
+		{
+			"height": 2.4,
+			"obstacle_id": 6,
+			"rect": {
+				"d": 6.0,
+				"w": 6.0,
+				"x": 56.0,
+				"z": -124.0
+			}
+		},
+		{
+			"height": 1.0,
+			"obstacle_id": 7,
+			"rect": {
+				"d": 6.0,
+				"w": 6.0,
+				"x": 22.0,
+				"z": -90.0
+			}
+		},
+		{
+			"height": 1.0,
+			"obstacle_id": 8,
+			"rect": {
+				"d": 6.0,
+				"w": 6.0,
+				"x": 56.0,
+				"z": -90.0
+			}
+		}
+	],
+	"patches": [
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 1.5,
+			"patch_id": 0,
+			"rect": {
+				"d": 12.0,
+				"w": 12.0,
+				"x": -56.0,
+				"z": -6.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 1.5,
+			"patch_id": 1,
+			"rect": {
+				"d": 5.0,
+				"w": 19.0,
+				"x": -50.0,
+				"z": 5.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 1.125,
+			"patch_id": 2,
+			"rect": {
+				"d": 4.0,
+				"w": 6.0,
+				"x": -37.0,
+				"z": 1.0
+			},
+			"surface": "ramp"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.75,
+			"patch_id": 3,
+			"rect": {
+				"d": 4.0,
+				"w": 6.0,
+				"x": -37.0,
+				"z": -3.0
+			},
+			"surface": "ramp"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.375,
+			"patch_id": 4,
+			"rect": {
+				"d": 3.0,
+				"w": 6.0,
+				"x": -37.0,
+				"z": -6.0
+			},
+			"surface": "ramp"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 5,
+			"rect": {
+				"d": 12.0,
+				"w": 26.0,
+				"x": -37.0,
+				"z": -18.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 6,
+			"rect": {
+				"d": 4.0,
+				"w": 8.0,
+				"x": -30.0,
+				"z": -22.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 7,
+			"rect": {
+				"d": 8.0,
+				"w": 9.0,
+				"x": -22.0,
+				"z": -26.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 8,
+			"rect": {
+				"d": 6.0,
+				"w": 9.0,
+				"x": -17.0,
+				"z": -30.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 9,
+			"rect": {
+				"d": 26.0,
+				"w": 32.0,
+				"x": -16.0,
+				"z": -56.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 10,
+			"rect": {
+				"d": 8.0,
+				"w": 10.0,
+				"x": -30.0,
+				"z": -42.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 11,
+			"rect": {
+				"d": 14.0,
+				"w": 24.0,
+				"x": -50.0,
+				"z": -46.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 12,
+			"rect": {
+				"d": 5.0,
+				"w": 10.0,
+				"x": -44.0,
+				"z": -32.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 13,
+			"rect": {
+				"d": 7.0,
+				"w": 6.0,
+				"x": -56.0,
+				"z": -42.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 14,
+			"rect": {
+				"d": 12.0,
+				"w": 8.0,
+				"x": -52.0,
+				"z": -58.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 15,
+			"rect": {
+				"d": 10.0,
+				"w": 14.0,
+				"x": -52.0,
+				"z": -70.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 16,
+			"rect": {
+				"d": 5.0,
+				"w": 8.0,
+				"x": -49.0,
+				"z": -75.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 17,
+			"rect": {
+				"d": 10.0,
+				"w": 28.0,
+				"x": -38.0,
+				"z": -68.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 18,
+			"rect": {
+				"d": 3.0,
+				"w": 7.0,
+				"x": -40.0,
+				"z": -49.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 19,
+			"rect": {
+				"d": 3.0,
+				"w": 6.0,
+				"x": -29.0,
+				"z": -58.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 20,
+			"rect": {
+				"d": 8.0,
+				"w": 10.0,
+				"x": 18.0,
+				"z": -42.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 21,
+			"rect": {
+				"d": 8.0,
+				"w": 14.0,
+				"x": 26.0,
+				"z": -46.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 22,
+			"rect": {
+				"d": 20.0,
+				"w": 26.0,
+				"x": 38.0,
+				"z": -52.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 23,
+			"rect": {
+				"d": 28.0,
+				"w": 18.0,
+				"x": 42.0,
+				"z": -56.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 24,
+			"rect": {
+				"d": 6.0,
+				"w": 8.0,
+				"x": 42.0,
+				"z": -62.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 25,
+			"rect": {
+				"d": 10.0,
+				"w": 10.0,
+				"x": 66.0,
+				"z": -40.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 26,
+			"rect": {
+				"d": 8.0,
+				"w": 16.0,
+				"x": -8.0,
+				"z": -66.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 27,
+			"rect": {
+				"d": 12.0,
+				"w": 16.0,
+				"x": -6.0,
+				"z": -80.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 28,
+			"rect": {
+				"d": 8.0,
+				"w": 34.0,
+				"x": 12.0,
+				"z": -78.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "wall",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 29,
+			"rect": {
+				"d": 40.0,
+				"w": 40.0,
+				"x": 22.0,
+				"z": -124.0
+			},
+			"surface": "arena"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 30,
+			"rect": {
+				"d": 10.0,
+				"w": 8.0,
+				"x": 38.0,
+				"z": -136.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 31,
+			"rect": {
+				"d": 8.0,
+				"w": 34.0,
+				"x": 38.0,
+				"z": -144.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 32,
+			"rect": {
+				"d": 18.0,
+				"w": 14.0,
+				"x": 66.0,
+				"z": -150.0
+			},
+			"surface": "stone"
+		},
+		{
+			"boundary_east": "",
+			"boundary_north": "",
+			"boundary_south": "",
+			"boundary_style": "ledge",
+			"boundary_west": "",
+			"elevation": 0.0,
+			"patch_id": 33,
+			"rect": {
+				"d": 8.0,
+				"w": 6.0,
+				"x": 56.0,
+				"z": -152.0
+			},
+			"surface": "stone"
+		}
+	],
+	"place_label": "",
+	"run_seed": 20260828,
+	"spike_pads": [
+		{
+			"active_ticks": 30,
+			"damage": 10.0,
+			"damage_type": "force",
+			"eligible_allegiances": [
+				"player"
+			],
+			"pad_id": 0,
+			"phase_offset_ticks": 210,
+			"rect": {
+				"d": 8.0,
+				"w": 6.0,
+				"x": 19.0,
+				"z": -78.0
+			},
+			"safe_ticks": 210
+		},
+		{
+			"active_ticks": 30,
+			"damage": 10.0,
+			"damage_type": "force",
+			"eligible_allegiances": [
+				"player"
+			],
+			"pad_id": 1,
+			"phase_offset_ticks": 170,
+			"rect": {
+				"d": 8.0,
+				"w": 6.0,
+				"x": 25.0,
+				"z": -78.0
+			},
+			"safe_ticks": 210
+		},
+		{
+			"active_ticks": 30,
+			"damage": 10.0,
+			"damage_type": "force",
+			"eligible_allegiances": [
+				"player"
+			],
+			"pad_id": 2,
+			"phase_offset_ticks": 130,
+			"rect": {
+				"d": 8.0,
+				"w": 6.0,
+				"x": 31.0,
+				"z": -78.0
+			},
+			"safe_ticks": 210
+		}
+	],
+	"stratum_id": "foundry",
+	"triggers": [
+		{
+			"effects": [
+				{
+					"kind": "activate_encounter",
+					"target_id": 1
+				}
+			],
+			"kind": "region_entered",
+			"once": true,
+			"region": {
+				"d": 8.0,
+				"w": 4.0,
+				"x": -28.0,
+				"z": -42.0
+			},
+			"renders_as_plate": false,
+			"source_id": -1,
+			"starts_enabled": true,
+			"trigger_id": 0
+		},
+		{
+			"effects": [
+				{
+					"kind": "reveal_switch",
+					"target_id": 0
+				}
+			],
+			"kind": "encounter_cleared",
+			"once": true,
+			"region": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"renders_as_plate": false,
+			"source_id": 1,
+			"starts_enabled": true,
+			"trigger_id": 1
+		},
+		{
+			"effects": [
+				{
+					"kind": "activate_encounter",
+					"target_id": 2
+				}
+			],
+			"kind": "region_entered",
+			"once": true,
+			"region": {
+				"d": 12.0,
+				"w": 6.0,
+				"x": 40.0,
+				"z": -46.0
+			},
+			"renders_as_plate": false,
+			"source_id": -1,
+			"starts_enabled": true,
+			"trigger_id": 2
+		},
+		{
+			"effects": [
+				{
+					"kind": "block_connection",
+					"target_id": 14
+				},
+				{
+					"kind": "activate_encounter",
+					"target_id": 3
+				}
+			],
+			"kind": "group_occupancy",
+			"once": true,
+			"region": {
+				"d": 4.0,
+				"w": 4.0,
+				"x": 40.0,
+				"z": -91.0
+			},
+			"renders_as_plate": true,
+			"source_id": -1,
+			"starts_enabled": true,
+			"trigger_id": 3
+		},
+		{
+			"effects": [
+				{
+					"kind": "activate_encounter",
+					"target_id": 4
+				}
+			],
+			"kind": "encounter_cleared",
+			"once": true,
+			"region": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"renders_as_plate": false,
+			"source_id": 3,
+			"starts_enabled": true,
+			"trigger_id": 4
+		},
+		{
+			"effects": [
+				{
+					"kind": "activate_encounter",
+					"target_id": 5
+				}
+			],
+			"kind": "encounter_cleared",
+			"once": true,
+			"region": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"renders_as_plate": false,
+			"source_id": 4,
+			"starts_enabled": true,
+			"trigger_id": 5
+		},
+		{
+			"effects": [
+				{
+					"kind": "open_connection",
+					"target_id": 15
+				}
+			],
+			"kind": "encounter_cleared",
+			"once": true,
+			"region": {
+				"d": 0.0,
+				"w": 0.0,
+				"x": 0.0,
+				"z": 0.0
+			},
+			"renders_as_plate": false,
+			"source_id": 5,
+			"starts_enabled": true,
+			"trigger_id": 6
+		},
+		{
+			"effects": [
+				{
+					"kind": "activate_encounter",
+					"target_id": 0
+				}
+			],
+			"kind": "region_entered",
+			"once": true,
+			"region": {
+				"d": 4.0,
+				"w": 6.0,
+				"x": -37.0,
+				"z": -10.0
+			},
+			"renders_as_plate": false,
+			"source_id": -1,
+			"starts_enabled": true,
+			"trigger_id": 7
+		},
+		{
+			"effects": [
+				{
+					"kind": "complete_floor",
+					"target_id": -1
+				}
+			],
+			"kind": "group_occupancy",
+			"once": true,
+			"region": {
+				"d": 4.0,
+				"w": 4.0,
+				"x": 72.0,
+				"z": -146.0
+			},
+			"renders_as_plate": true,
+			"source_id": -1,
+			"starts_enabled": true,
+			"trigger_id": 8
+		}
+	]
+}

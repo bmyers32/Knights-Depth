@@ -45,6 +45,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P35 | Floor-completion / transition presentation | PROPOSED | Winning a floor gives weaker feedback than dying — a `print()` vs an overlay. Audit existing exit vocabulary first |
 | P36 | Macro composition seam (families, missions, arcade) | HELD | Released only on a human Floor 2 PASS; topology vocabulary already homed in floor_layers.gd |
 | P38 | Pre-expedition ready room | PROPOSED — **direction captured 2026-10-10, NOT BUILT** | Party staging space before a descent; distinct from the Commons and from in-expedition safe terminals. Entry must stay separable from floor loading |
+| P39 | Foundry presentation pass + Floor 4 loot-room payoff | PROPOSED — **recorded 2026-10-15, NOT BUILT** | Architectural character for the Foundry after Stage 1 spatial PASS; the east loot room holds placeholder breakables awaiting a reward system |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4085,6 +4086,36 @@ only — never production order, and nothing was built to accommodate it.
 - Note for P35: statuses already end at the completion event, not on arrival, so an elevator
   or confirm state that lets ticks pass between completing and descending inherits a
   status-free party without further work.
+
+### P39 — Foundry presentation pass + Floor 4 loot-room payoff
+**Status:** PROPOSED, recorded 2026-10-15 at the Floor 4 Stage 1 closeout. NOT BUILT. Direction
+only; no world canon is changed by this entry.
+
+**Why:** the human Stage 1 spatial PASS (2026-10-15) accepted Floor 4's geometry and confirmed
+the floor still reads visually sparse. That was ruled NOT a reason for another geometry redesign,
+nor for more hazards, turrets or obstacles "to make it look fuller". It is a presentation debt.
+
+**Deferred Foundry presentation priorities** (architectural character over hazard density):
+- Non-walkable monumental architecture around and beneath the playable floor.
+- Monumental ancient digital infrastructure.
+- Distinct floor surfaces and environmental markings.
+- Machinery and exposed computational substrate.
+- Lighting, controlled emissions and environmental depth.
+- Readable transitions between traversable ground and decorative structures.
+
+**Loot-room dependency, stated exactly:** Floor 4's optional east room (`P_EAST_POCKET`, restored
+2026-10-15) holds three ordinary breakables (`B_POCKET_A/B/C`) that drop NOTHING -- no reward,
+loot or pickup system exists. The room is kept so a future reward system has a home; until one
+lands it is a placeholder, and nothing should describe it as a working loot room.
+
+**Known renderer debts this pass must respect or fix first:** FloorBuilder draws ordinary
+breakables and obstacle wall faces at elevation 0 whatever the ground beneath them
+(`floor_builder.gd` `_build_ordinary_breakable`; `floor_plan.gd` solid segments). This is why
+Floor 4 raises only its bare landing. Also open: the 0.375 stair risers read as one strip;
+tracers and bare-ground aim are drawn at the Envoy's own height on raised ground.
+
+**Gate:** art/juice budget follows GAME-RULES §1.5 -- after Stage 2 (physical keys) and Stage 3
+(west ambush + hazard) are playtested, not before.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

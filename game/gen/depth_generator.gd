@@ -13,8 +13,6 @@ extends RefCounted
 ## The signature is kept intact rather than replaced by a `load_layout()` call so that turning
 ## procedural assembly back on is a change of body, not a change of contract.
 
-const _SLICE_STRATUM: StringName = &"archive"
-
 const _LAYOUT_PROTOTYPE: String = "res://game/content/layouts/archive_prototype.tres"
 const _LAYOUT_ROUNDABOUT: String = "res://game/content/layouts/archive_roundabout.tres"
 const _LAYOUT_TERMINAL: String = "res://game/content/layouts/terminal.tres"
@@ -22,6 +20,9 @@ const _LAYOUT_TERMINAL: String = "res://game/content/layouts/terminal.tres"
 ## The layout itself knows nothing about this number, so inserting Archive floors above it later
 ## moves this constant and touches no content.
 const _TERMINAL_DEPTH: int = 3
+const _LAYOUT_FOUNDRY: String = "res://game/content/layouts/foundry_assembly.tres"
+## WHERE THE FIRST FOUNDRY FLOOR SITS -- content placement, exactly as the Terminal's depth is.
+const _FOUNDRY_DEPTH: int = 4
 
 ## 64-bit odd constants (PCG's multiplier and increment). Chosen over String.hash() on purpose:
 ## hash() is stable within an engine version but NOT guaranteed across them, and GAME-RULES §5's
@@ -32,24 +33,26 @@ const _SEED_MIX_B: int = 1442695040888963407
 
 
 static func generate(seed: int, depth: int) -> FloorPlan:
-	var stratum: StratumConfig = ContentDB.get_resource(&"stratum", _SLICE_STRATUM)
+	# THE STRATUM FOLLOWS THE LAYOUT (2026-10-13): the generator selects a floor by depth and the
+	# floor says which stratum it belongs to. One selection, not two that could disagree.
+	var layout: AuthoredLayout = load(_layout_path_for(depth))
+	var stratum: StratumConfig = ContentDB.get_resource(&"stratum", layout.stratum_id)
 	var plan := FloorPlan.new()
 	plan.run_seed = seed
 	plan.depth = depth
 	plan.floor_seed = derive_floor_seed(seed, depth)
 	plan.stratum_id = stratum.stratum_id
 	plan.authored_layout = true
-	# THREE AUTHORED FLOORS, selected by DEPTH. Still not a layout framework. The third entry would
-	# ordinarily be the moment to abstract (§1.4), and it deliberately is not (ruled 2026-10-12):
-	# Foundry is the consumer that will show whether selection is by depth or by stratum, and a
-	# table built before that would be a guess. When procedural assembly returns it replaces this
-	# body, not the signature.
+	# FOUR AUTHORED FLOORS, selected by DEPTH. Still not a layout framework (ruled 2026-10-12).
+	# The Foundry was the consumer that would show whether selection is by depth or by stratum,
+	# and it showed neither needs a table: depth picks the floor, the floor names its stratum.
+	# When procedural assembly returns it replaces this body, not the signature.
 	#
 	# THE FLOORS ARE CONTENT NOW (P36 Slice A). They were builder functions; they are .tres. Only
 	# the authored VALUES moved, which is what a representation migration means. The compiler
 	# copies rather than aliases: a loaded resource is shared by path, and a plan that pointed at
 	# it would let one run's state reach the next.
-	LayoutCompiler.compile(load(_layout_path_for(depth)), plan)
+	LayoutCompiler.compile(layout, plan)
 	# STRUCTURAL VALIDATION RUNS ON EVERY PLAN, whoever produced it. Placed here rather than in
 	# each layout so a future procedural producer inherits the guards without being asked to
 	# remember them. Detection only -- a plan is never silently repaired.
@@ -57,10 +60,13 @@ static func generate(seed: int, depth: int) -> FloorPlan:
 	return plan
 
 
-## Every depth other than the Terminal's resolves exactly as it did before the Terminal existed.
+## Every depth other than the Terminal's and the Foundry's resolves exactly as it did before
+## either existed.
 static func _layout_path_for(depth: int) -> String:
 	if depth == _TERMINAL_DEPTH:
 		return _LAYOUT_TERMINAL
+	if depth == _FOUNDRY_DEPTH:
+		return _LAYOUT_FOUNDRY
 	return _LAYOUT_ROUNDABOUT if depth >= 2 else _LAYOUT_PROTOTYPE
 
 

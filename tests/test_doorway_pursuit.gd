@@ -247,7 +247,7 @@ func test_a_wide_enough_aperture_passes() -> void:
 
 
 func test_both_authored_floors_admit_every_body_they_place() -> void:
-	for depth in [1, 2]:
+	for depth in [1, 2, 4]:
 		DepthGenerator.generate(0, depth)  # validate() runs inside, with real radii
 		assert_push_error_count(0, "depth %d authors a doorway its own roster cannot use" % depth)
 

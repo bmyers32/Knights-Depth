@@ -123,7 +123,7 @@ func test_a_route_reachable_the_long_way_round_is_not_a_failure() -> void:
 # --- 4: THE SHIPPED FLOORS ---------------------------------------------------------------------
 
 func test_both_authored_floors_pass_the_guard() -> void:
-	for depth in [1, 2]:
+	for depth in [1, 2, 4]:
 		DepthGenerator.generate(0, depth)  # validate() runs inside generate
 		assert_push_error_count(0, "authored floor at depth %d must have no bypassable gate" % depth)
 
@@ -252,7 +252,7 @@ func test_the_barrier_lies_across_travel_for_every_aperture_shape() -> void:
 
 
 func test_both_authored_floors_have_correctly_oriented_barriers() -> void:
-	for depth in [1, 2]:
+	for depth in [1, 2, 4]:
 		var plan: FloorPlan = DepthGenerator.generate(0, depth)
 		var sim := SimWorld.new()
 		sim.set_damage_matrix({}, 1.5, 0.5)
@@ -331,6 +331,6 @@ func test_a_switch_buried_in_an_obstacle_is_reported() -> void:
 
 
 func test_both_authored_floors_keep_their_controls_clear() -> void:
-	for depth in [1, 2]:
+	for depth in [1, 2, 4]:
 		DepthGenerator.generate(0, depth)
 		assert_push_error_count(0, "depth %d hides a control under permanent geometry" % depth)
