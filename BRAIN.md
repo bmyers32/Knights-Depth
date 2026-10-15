@@ -945,6 +945,21 @@ negatives from a young instrument as evidence about the instrument, not corrobor
 and the reveal tool measuring from inside a wall. It has now paid for itself four times.
 
 
+### A filter the runner ignores silently runs everything
+**Incident (M2, 2026-10-15, Floor 4 loot-room amendment):** a Floor 4-only run was launched
+with `-gtest=res://tests/test_floor4.gd`. GUT did not reject the flag; it ran the WHOLE suite
+under the arena's QA itinerary `[4]`, took 400+ s instead of seconds, and produced a wall of
+Floor 1-2 failures that looked like a regression in the change under test. `-gselect=test_floor4`
+is the filter that works (28 tests, seconds).
+**Mechanism:** a scoping flag that is unknown, misspelled or matches nothing usually degrades to
+"no filter" rather than to an error, so the run measures a different population than the one
+asked about -- here, one exposed to an unrelated local setting.
+**Failure if ignored:** a slow run is mistaken for a hang, or unrelated red is mistaken for the
+change's fault (or, worse, a filtered run reports green for tests it never selected).
+**Applies wherever:** any CLI test/selection filter, log grep or glob that feeds a verdict.
+Confirm the COUNT the runner reports (e.g. "Tests 28", "Ran Tests matching ...") before reading
+its result.
+
 ## Candidate Principles (pre-lock)
 Design laws captured from the post-M1 combat advisory arc. These are NOT wisdom entries
 (no incident produced them) and NOT law yet. Governance ladder — the only path to
