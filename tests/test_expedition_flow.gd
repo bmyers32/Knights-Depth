@@ -422,6 +422,14 @@ func _play_floor_two_to_its_exit(arena: Node3D) -> void:
 
 ## The Foundry's critical path, as test_floor4.gd walks it: both keys (west first), the gate, the
 ## connector, the chamber. Stops short of the exit plate.
+## One attack click aimed at a world point, the shipped way (pressed then released).
+func _click_at(arena: Node3D, point: Vector3) -> void:
+	var envoy_id: int = arena.envoy.actor_id
+	var aim: Vector3 = point - arena.sim.entities[envoy_id]
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim, "phase": "pressed"})] as Array[Command], DT)
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim, "phase": "released"})] as Array[Command], DT)
+
+
 func _play_floor_four_to_its_exit(arena: Node3D) -> void:
 	# Off the raised landing, round the U and down the stairs into the lower access.
 	for waypoint: Vector3 in [Vector3(-46, 0, 7.5), Vector3(-34, 0, 7.5), Vector3(-34, 0, -4), Vector3(-34, 0, -9), Vector3(-24, 0, -12)]:
@@ -435,18 +443,38 @@ func _play_floor_four_to_its_exit(arena: Node3D) -> void:
 	]:
 		assert_true(_walk_to(arena, waypoint, 1.0), "F4 west: to %s" % waypoint)
 	_kill(arena, arena.sim._encounter_roster[FOUNDRY.id_for(&"E_WEST")])
-	arena._report_events(arena.sim.debug_activate_hit_switch(FOUNDRY.id_for(&"S_WEST_KEY")))
-	# Home along the top band and through the door the key opened.
+	# The keys are physical (Stage 2): lifted and delivered with the attack press. The west key
+	# waits at the far end of the top band; lifting it wakes the return ambush.
+	for waypoint: Vector3 in [Vector3(-42, 0, -64), Vector3(-20, 0, -63)]:
+		assert_true(_walk_to(arena, waypoint, 1.0), "F4 west: to %s" % waypoint)
+	assert_true(_walk_to(arena, Vector3(-14.6, 0, -63), 0.3), "F4: to the west key")
+	_click_at(arena, FOUNDRY.carriables[0].position)
+	_kill(arena, arena.sim._encounter_roster[FOUNDRY.id_for(&"E_WEST_RETURN")])
+	# Home the way in: there is no shortcut from the key to the hub.
 	for waypoint: Vector3 in [
-		Vector3(-40, 0, -64), Vector3(-20, 0, -63), Vector3(-15, 0, -57), Vector3(-10, 0, -52),
+		Vector3(-42, 0, -64), Vector3(-47, 0, -62), Vector3(-47, 0, -52), Vector3(-47, 0, -44),
+		Vector3(-47, 0, -39), Vector3(-27, 0, -38), Vector3(-16, 0, -38),
+	]:
+		assert_true(_walk_to(arena, waypoint, 1.0), "F4 west home: to %s" % waypoint)
+	assert_true(_walk_to(arena, Vector3(-4, 0, -54.5), 0.3), "F4: to Gate 1's receiver")
+	_click_at(arena, Vector3(-4, 0, -57))
+	for waypoint: Vector3 in [
 		Vector3(8, 0, -40), Vector3(21, 0, -38), Vector3(31, 0, -42), Vector3(41, 0, -42),
 	]:
 		assert_true(_walk_to(arena, waypoint, 1.0), "F4 east: to %s" % waypoint)
 	_kill(arena, arena.sim._encounter_roster[FOUNDRY.id_for(&"E_EAST")])
-	arena._report_events(arena.sim.debug_activate_hit_switch(FOUNDRY.id_for(&"S_EAST_KEY")))
+	assert_true(_walk_to(arena, Vector3(46, 0, -58.6), 0.3), "F4: into the east key bay")
+	_click_at(arena, FOUNDRY.carriables[1].position)
 	for waypoint: Vector3 in [
-		Vector3(31, 0, -42), Vector3(21, 0, -38), Vector3(8, 0, -40), Vector3(-4, 0, -50), Vector3(-4, 0, -62),
-		Vector3(4, 0, -62), Vector3(4, 0, -74), Vector3(11, 0, -74), Vector3(42, 0, -74), Vector3(42, 0, -82),
+		Vector3(47, 0, -50), Vector3(41, 0, -42), Vector3(31, 0, -42), Vector3(21, 0, -38), Vector3(8, 0, -40), Vector3(-4, 0, -54.5),
+		Vector3(-4, 0, -62),
+	]:
+		assert_true(_walk_to(arena, waypoint, 1.0), "F4 to Gate 2: to %s" % waypoint)
+	assert_true(_walk_to(arena, Vector3(4, 0, -62.5), 0.3), "F4: to Gate 2's receiver")
+	_click_at(arena, Vector3(4, 0, -65))
+	assert_true(bool(arena.sim._connection_open[FOUNDRY.id_for(&"C_LOCK_E")]), "F4: both keys delivered")
+	for waypoint: Vector3 in [
+		Vector3(4, 0, -74), Vector3(11, 0, -74), Vector3(42, 0, -74), Vector3(42, 0, -82),
 	]:
 		assert_true(_walk_to(arena, waypoint, 1.0), "F4 north: to %s" % waypoint)
 	assert_true(_walk_to(arena, _centre(FOUNDRY.region_for(&"T_PARTY")), 0.3), "F4: onto the party plate")

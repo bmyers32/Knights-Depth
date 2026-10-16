@@ -27,12 +27,13 @@ const _EFFECT_TARGET_LAYER: Dictionary = {
 	&"open_connection": &"connection", &"block_connection": &"connection",
 	&"toggle_connection": &"connection", &"activate_encounter": &"encounter",
 	&"enable_trigger": &"trigger", &"reveal_switch": &"switch",
+	&"reveal_carriable": &"carriable",
 	&"complete_floor": &"none", &"restore_envoy_health": &"none",
 }
 
 const _TRIGGER_SOURCE_LAYER: Dictionary = {
 	&"breakable_destroyed": &"breakable", &"encounter_cleared": &"encounter",
-	&"switch_activated": &"switch",
+	&"switch_activated": &"switch", &"carriable_lifted": &"carriable",
 }
 
 
@@ -135,6 +136,13 @@ static func compile(layout: AuthoredLayout, plan: FloorPlan) -> void:
 			allegiances.append(allegiance)
 		copy.eligible_allegiances = allegiances
 		plan.spike_pads.append(copy)
+
+	for carriable: CarriablePlan in layout.carriables:
+		var copy := CarriablePlan.new()
+		copy.carriable_id = carriable.carriable_id
+		copy.position = carriable.position
+		copy.starts_hidden = carriable.starts_hidden
+		plan.carriables.append(copy)
 
 	plan.place_label = layout.place_label
 	plan.entry_point = layout.entry_point

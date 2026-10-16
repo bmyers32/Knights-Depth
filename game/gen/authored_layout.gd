@@ -8,7 +8,7 @@ extends Resource
 ## the values were never code in the first place. They are coordinates.
 ##
 ## WHAT THIS IS NOT. It is not a floor FORMAT, a room grammar, a segment pool or a mission. It
-## holds exactly the eight layer arrays a FloorPlan already has, plus its two markers, and
+## holds exactly the nine layer arrays a FloorPlan already has, plus its two markers, and
 ## nothing above a single floor. Sequences, families and roles have ONE consumer each today and
 ## are deferred on that ground (P36 audit).
 ##
@@ -44,6 +44,7 @@ extends Resource
 @export var hit_switches: Array[HitSwitchPlan] = []
 @export var obstacles: Array[ObstaclePlan] = []
 @export var spike_pads: Array[SpikePadPlan] = []
+@export var carriables: Array[CarriablePlan] = []
 
 @export var entry_point: Vector3 = Vector3.ZERO
 @export var end_marker: Vector3 = Vector3.ZERO
@@ -67,6 +68,7 @@ func records_in(layer: StringName) -> Array:
 		"switch": return hit_switches
 		"obstacle": return obstacles
 		"pad": return spike_pads
+		"carriable": return carriables
 	return []
 
 
@@ -126,6 +128,7 @@ func _all_records() -> Array:
 	records.append_array(hit_switches)
 	records.append_array(obstacles)
 	records.append_array(spike_pads)
+	records.append_array(carriables)
 	return records
 
 
@@ -133,7 +136,7 @@ func _all_records() -> Array:
 ## interchangeable and a single `id` would invite treating them as if they were.
 static func _numeric_id(record: Resource) -> int:
 	for field: String in ["patch_id", "connection_id", "trigger_id", "encounter_id",
-			"breakable_id", "switch_id", "obstacle_id", "pad_id"]:
+			"breakable_id", "switch_id", "obstacle_id", "pad_id", "carriable_id"]:
 		if field in record:
 			return record.get(field)
 	return -1

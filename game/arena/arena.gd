@@ -145,6 +145,8 @@ var _projectile_tracers: Dictionary = {}
 ## How far above its floor a tracer flies. Presentation only -- the sim resolves every shot on
 ## the flat plane, and lifting the picture must never be mistaken for giving shots a height.
 const _MUZZLE_HEIGHT: float = 0.9
+## How high a carried key rides above its carrier. Presentation only, like the muzzle height.
+const _CARRIED_KEY_LIFT: float = 1.6
 ## actor_id -> {"opens_tick": int, "ends_tick": int, "marked": bool} for the P29 vulnerable
 ## cue. Absolute sim ticks derived from the telegraph Event's OWN tick plus authored
 ## content -- Event.tick is the authoritative timestamp (BRAIN), never tick_count sampled
@@ -181,6 +183,7 @@ func begin_expedition() -> void:
 	# same stats.combat_radius registered as the combatant body on the next line.
 	sim.add_entity(envoy.actor_id, envoy.position, envoy.stats.move_speed, Vector3(0.0, 0.0, -1.0), envoy.stats.combat_radius)
 	sim.register_combatant(envoy.actor_id, envoy.stats.max_health, envoy.stats.family, 0, envoy.stats.combat_radius, &"player")
+	sim.register_carrier(envoy.actor_id, envoy.stats.pickup_reach, envoy.stats.pickup_cone_half_angle_degrees, envoy.stats.pickup_underfoot_radius)
 	# The ONE actor that survives a floor transition. Everything else on a floor belongs to
 	# that floor (SimWorld.STATE_SCOPES).
 	sim.mark_run_persistent(envoy.actor_id)
@@ -355,6 +358,8 @@ func _unpack_floor(plan: FloorPlan) -> void:
 	for hit_switch in plan.hit_switches:
 		sim.register_hit_switch(hit_switch.switch_id, hit_switch.position, hit_switch.radius,
 			hit_switch.mode, hit_switch.effects, hit_switch.starts_hidden)
+	for carriable in plan.carriables:
+		sim.register_carriable(carriable.carriable_id, carriable.position, carriable.starts_hidden)
 	for trigger in plan.triggers:
 		sim.register_trigger(trigger.trigger_id, trigger.kind, trigger.region, trigger.source_id, trigger.once, trigger.effects, trigger.starts_enabled)
 
@@ -457,6 +462,7 @@ func _step(commands: Array[Command], delta: float) -> void:
 		var actor: Node3D = _enemies[actor_id]
 		actor.sync_from_sim(_grounded(sim.entities.get(actor_id, actor.position)))
 	_report_events(events)
+	_project_carrying()
 	_resolve_floor_complete()
 	_advance_windup_cues()
 	if debug_show_attack_state:
@@ -479,6 +485,21 @@ func _step(commands: Array[Command], delta: float) -> void:
 			var selection: Dictionary = sim.debug_describe_action_selection(actor_id, envoy.actor_id)
 			if not selection.is_empty():
 				print("action selection: ", selection)
+
+
+## CARRYING, PROJECTED. A carried key rides above its carrier, and the focus ring shows what the
+## next attack press would do. Both are READS: the ring asks the sim the same question the press
+## asks (SimWorld.interaction_focus) with the Envoy's live aim, so it can never promise a pickup the
+## sim would refuse, nor hide one it would grant.
+func _project_carrying() -> void:
+	var carried: int = sim.carried_by(envoy.actor_id)
+	if carried >= 0:
+		_floor_builder.place_carriable(carried, envoy.position + Vector3(0.0, _CARRIED_KEY_LIFT, 0.0))
+	var focus: Dictionary = {}
+	if _envoy_alive and not expedition.is_complete:
+		focus = sim.interaction_focus(envoy.actor_id, envoy.current_aim())
+	_floor_builder.show_interaction_focus(String(focus.get("kind", "")),
+		int(focus.get("carriable_id", -1)), int(focus.get("trigger_id", -1)))
 
 
 ## Acts on a floor completion AFTER its whole event batch has been reported. The Expedition
@@ -787,6 +808,18 @@ func _report_events(events: Array[Event]) -> void:
 				# connection_changed, through the same path a plate's would.
 				print("switch activated: ", event.payload)
 				_floor_builder.set_switch_state(int(event.payload.get("switch_id", -1)), true)
+			"carriable_revealed":
+				print("key revealed: ", event.payload)
+				_floor_builder.set_carriable_visible(int(event.payload["carriable_id"]), true)
+			"carriable_lifted":
+				print("KEY LIFTED: ", event.payload)
+			"carriable_dropped":
+				# Where it fell is the sim's fact; this only draws it there.
+				print("KEY DROPPED: ", event.payload)
+				_floor_builder.place_carriable(int(event.payload["carriable_id"]), _grounded(event.payload["position"]))
+			"carriable_inserted":
+				print("KEY DELIVERED: ", event.payload)
+				_floor_builder.seat_carriable(int(event.payload["carriable_id"]), int(event.payload["trigger_id"]))
 			"switch_revealed":
 				print("switch revealed: ", event.payload)
 				_floor_builder.set_switch_visible(int(event.payload.get("switch_id", -1)), true)

@@ -12,6 +12,7 @@ extends RefCounted
 ## pattern add_entity already established for move_speed.
 
 const _FACING_EPSILON_SQ: float = 0.000001
+const _ALIGNMENT_TIE_EPSILON: float = 0.000001
 ## Manual-pass lunge-clamp addition: the ONE shared epsilon for "authoritative
 ## contact distance" (combined combat radii), used by BOTH Burn contact-spread
 ## (_actors_overlap) and the melee lunge clamp (_find_earliest_lunge_contact) via
@@ -124,6 +125,9 @@ var _parry_exposed_until_tick: Dictionary = {}
 var _parry_exposed_damage_multiplier: Dictionary = {}
 var _combat_radius: Dictionary = {}  # actor_id -> float, contact-spread proximity radius (combatants only)
 var _allegiance: Dictionary = {}  # actor_id -> StringName ("player" | "enemy"), for spread allegiance rules
+## actor_id -> {reach, cos_half_angle, underfoot} from EnvoyStats (Floor 4 Stage 2). An actor with no entry can
+## never lift anything, which is what keeps every enemy out of the carrying rules by construction.
+var _carry_reach: Dictionary = {}
 ## actor_id -> {id: String, ticks_remaining: int, next_tick: int, applied_tick: int}.
 ## One record per actor (single-status-slot law, GAME-RULES §3) instead of four
 ## parallel dictionaries -- the fields always travel together, so a status ending is
@@ -284,6 +288,11 @@ var _connection_open: Dictionary = {}    # connection_id -> bool  (THE gate stat
 ## switch_id -> {position, radius, mode, effects, hidden, spent}. A PERSISTENT hit target: it
 ## survives activation, unlike a breakable, which is the whole reason it is not one.
 var _hit_switches: Dictionary = {}
+## carriable_id -> {position, hidden, carrier (-1 = loose), inserted}. A DELIVERED key stays in the
+## table, inert, so the floor can still say where it went; it can never be lifted again.
+var _carriables: Dictionary = {}
+## actor_id -> carriable_id: the inverse of a carriable's carrier. At most one per Envoy.
+var _carrying: Dictionary = {}
 ## Static obstacle footprints, subtracted from every region this floor builds.
 var _obstacle_rects: Array[Rect2] = []
 ## pad_id -> {rect, safe_ticks, active_ticks, phase_offset, damage, damage_type, was_active}.
@@ -382,6 +391,7 @@ const STATE_SCOPES: Dictionary = {
 	"_families": SCOPE_RUN_ACTOR,
 	"_iframe_ticks_on_hit": SCOPE_RUN_ACTOR,
 	"_combat_radius": SCOPE_RUN_ACTOR,
+	"_carry_reach": SCOPE_RUN_ACTOR,
 	"_allegiance": SCOPE_RUN_ACTOR,
 	"_flinch_thresholds": SCOPE_RUN_ACTOR,
 	"_equipped_weapon": SCOPE_RUN_ACTOR,
@@ -445,6 +455,9 @@ const STATE_SCOPES: Dictionary = {
 	"_connections": SCOPE_FLOOR,
 	"_connection_open": SCOPE_FLOOR,
 	"_hit_switches": SCOPE_FLOOR,
+	# Keys belong to the floor they were authored on; nobody carries one down an elevator.
+	"_carriables": SCOPE_FLOOR,
+	"_carrying": SCOPE_FLOOR,
 	"_obstacle_rects": SCOPE_FLOOR,
 	"_spike_pads": SCOPE_FLOOR,
 	"_gate_barriers": SCOPE_FLOOR,
@@ -721,6 +734,21 @@ func register_hit_switch(switch_id: int, position: Vector3, radius: float, mode:
 	}
 
 
+## A physical object an Envoy can lift and deliver. Not a combatant and not a hit target: it joins
+## no scan, and only _resolve_interaction_target ever looks at it.
+func register_carriable(carriable_id: int, position: Vector3, starts_hidden: bool = false) -> void:
+	_carriables[carriable_id] = {"position": position, "hidden": starts_hidden, "carrier": -1, "inserted": false}
+
+
+## Grants an actor the ability to lift carriables, with its content-owned reach and focus cone
+## (EnvoyStats). The cone is stored as its cosine, the form the alignment test compares against.
+func register_carrier(actor_id: int, reach: float, cone_half_angle_degrees: float, underfoot_radius: float) -> void:
+	_carry_reach[actor_id] = {
+		"reach": reach, "cos_half_angle": cos(deg_to_rad(cone_half_angle_degrees)),
+		"underfoot": underfoot_radius,
+	}
+
+
 ## TERRITORY IS A UNION OF REGIONS, never one rect (ruled 2026-08-29). Confinement itself was
 ## validated and is kept; what human play falsified was the accidental assumption that a
 ## territory equals exactly one WalkablePatch, which read as an ambient enemy "stuck on the
@@ -813,6 +841,7 @@ func debug_describe_floor() -> Dictionary:
 		"encounters": _encounter_state.duplicate(),
 		"active_confinement": _active_confinement,
 		"breakables": _breakables.size(), "floor_complete": _floor_complete,
+		"carriables": _carriables.duplicate(true), "carrying": _carrying.duplicate(),
 	}
 
 
@@ -942,6 +971,11 @@ func _apply_floor_effect(effect: Dictionary) -> Array[Event]:
 				return []
 			_hit_switches[target_id]["hidden"] = false
 			return [Event.new(tick_count, "switch_revealed", {"switch_id": target_id})]
+		"reveal_carriable":
+			if not _carriables.has(target_id) or not bool(_carriables[target_id]["hidden"]):
+				return []
+			_carriables[target_id]["hidden"] = false
+			return [Event.new(tick_count, "carriable_revealed", {"carriable_id": target_id})]
 		"complete_floor":
 			if _floor_complete:
 				return []
@@ -1147,6 +1181,181 @@ func debug_destroy_breakable(breakable_id: int) -> Array[Event]:
 ## Presses a switch through the ORDINARY activation path, for the same reason.
 func debug_activate_hit_switch(switch_id: int) -> Array[Event]:
 	return _resolve_hit_on_switch(switch_id)
+
+
+# --- CARRYING: lift, drop, deliver (Floor 4 Stage 2, ruled 2026-10-16) -----------------------
+
+## WHAT THIS PRESS WOULD DO, decided in one place for both consumers: the press itself
+## (_apply_attack) and the focus indicator (interaction_focus). They cannot disagree, because they
+## are the same call on the same inputs. Returns {} when the press is an ordinary attack.
+##
+##   carrying, standing in an unfilled receiver   -> insert
+##   carrying, anywhere else                      -> drop (voluntary)
+##   empty-handed, a key FOCUSED                  -> lift
+##
+## FOCUS IS THE WAY YOU AIM (revised after the Stage 2 playtest, 2026-10-16: cursor-on-key was
+## "overly precise"). A key is focused when it is within reach, lies inside the aim cone -- the
+## angle between the aim direction and the direction to the key is at most the half-angle -- and
+## the straight way to it is walkable ground (never across a void, a closed door or a mass).
+## The cursor need not touch the key; it only has to point generally at it.
+##
+## Three things keep it from hijacking a fight:
+##   - AIMING AT AN ENEMY IS ALWAYS AN ATTACK: when the cursor's point (which `aim` carries as an
+##     offset from the Envoy) lies on a valid enemy's body, no key is considered at all, even one
+##     between you and it.
+##   - A KEY BEHIND OR BESIDE YOU is outside the cone, so the swing you aim forward stays a swing.
+##   - A KEY UNDER YOUR FEET has no direction and is never focused: step off it and aim back. This
+##     is what stops the drop -> lift -> drop cycle -- the press after a voluntary drop, without
+##     moving, is an ordinary attack, not a re-lift.
+## Several candidates: the most closely aligned wins, then the nearer, then the lower id. Both
+## weapons aim with the same vector, so the rule is identical for sword and gun.
+func _resolve_interaction_target(actor_id: int, aim: Vector3) -> Dictionary:
+	if not _carrying.has(actor_id) and not _carry_reach.has(actor_id):
+		return {}
+	if _health.get(actor_id, 0.0) <= 0.0 or _combat_absent.has(actor_id):
+		return {}
+	var position: Vector3 = entities.get(actor_id, Vector3.ZERO)
+	if _carrying.has(actor_id):
+		var receiver_id: int = _receiver_at(position)
+		if receiver_id >= 0:
+			return {"kind": "insert", "trigger_id": receiver_id, "carriable_id": _carrying[actor_id]}
+		return {"kind": "drop", "carriable_id": _carrying[actor_id]}
+	# A swing already in motion owns this press (it buffers, as it always did): pickup is refused
+	# during an executing attack rather than cancelling it.
+	var hold_state: String = _melee_hold.get(actor_id, {}).get("state", "")
+	if hold_state == "windup" or hold_state == "executing":
+		return {}
+	var offset := Vector3(aim.x, 0.0, aim.z)
+	if not (is_finite(offset.x) and is_finite(offset.z)) or offset.length_squared() <= _FACING_EPSILON_SQ:
+		return {}
+	var aim_point := Vector3(position.x + offset.x, 0.0, position.z + offset.z)
+	var combatant_ids: Array = _health.keys()
+	combatant_ids.sort()
+	for other_id: int in combatant_ids:
+		if not _is_valid_target(actor_id, other_id):
+			continue
+		if _flat_distance(aim_point, entities.get(other_id, Vector3.ZERO)) <= float(_combat_radius.get(other_id, 0.0)):
+			return {}
+	var reach: Dictionary = _carry_reach[actor_id]
+	var aim_direction: Vector3 = offset.normalized()
+	var best_id: int = -1
+	var best_alignment: float = -INF
+	var best_distance: float = INF
+	var carriable_ids: Array = _carriables.keys()
+	carriable_ids.sort()  # ties go to the lower id, never Dictionary order
+	for carriable_id: int in carriable_ids:
+		var carriable: Dictionary = _carriables[carriable_id]
+		if bool(carriable["hidden"]) or bool(carriable["inserted"]) or int(carriable["carrier"]) >= 0:
+			continue
+		var at: Vector3 = carriable["position"]
+		var to_key := Vector3(at.x - position.x, 0.0, at.z - position.z)
+		var distance: float = to_key.length()
+		if distance > float(reach["reach"]) or distance < float(reach["underfoot"]):
+			continue
+		var alignment: float = aim_direction.dot(to_key / distance)
+		if alignment < float(reach["cos_half_angle"]):
+			continue
+		# Equal alignment within float noise is a tie (two keys on one line), settled by distance.
+		var tied: bool = absf(alignment - best_alignment) <= _ALIGNMENT_TIE_EPSILON
+		if (alignment < best_alignment and not tied) or (tied and distance >= best_distance):
+			continue
+		if _bounds != null and not _segment_is_clear(_bounds, position, at, 0.0, 0.0):
+			continue
+		best_id = carriable_id
+		best_alignment = alignment
+		best_distance = distance
+	if best_id < 0:
+		return {}
+	return {"kind": "lift", "carriable_id": best_id}
+
+
+## The unfilled receiver whose region the Envoy stands in, or -1. INCLUSIVE, like every occupancy
+## question. A receiver is filled exactly when its `once` trigger has fired.
+func _receiver_at(position: Vector3) -> int:
+	var trigger_ids: Array = _triggers.keys()
+	trigger_ids.sort()
+	for trigger_id: int in trigger_ids:
+		var trigger: Dictionary = _triggers[trigger_id]
+		if trigger["kind"] != &"carriable_inserted" or _triggers_fired.has(trigger_id):
+			continue
+		if not bool(_trigger_enabled.get(trigger_id, true)):
+			continue
+		if WalkableBounds.contains(trigger["region"], position.x, position.z):
+			return trigger_id
+	return -1
+
+
+func _perform_interaction(actor_id: int, interaction: Dictionary) -> Array[Event]:
+	match String(interaction["kind"]):
+		"lift":
+			return _lift_carriable(actor_id, int(interaction["carriable_id"]))
+		"insert":
+			return _insert_carried(actor_id, int(interaction["trigger_id"]))
+		"drop":
+			return _release_carried(actor_id, "voluntary", entities.get(actor_id, Vector3.ZERO))
+	return []
+
+
+## Lifting leaves nothing behind to fire later: any open hold, combo step and buffered press are
+## cleared (no phantom swing once the key is dropped), and a raised shield is lowered.
+func _lift_carriable(actor_id: int, carriable_id: int) -> Array[Event]:
+	var events: Array[Event] = _clear_attack_input_state(actor_id)
+	if _shield_state.get(actor_id, "ready") == "held":
+		_shield_state[actor_id] = "ready"
+	_carriables[carriable_id]["carrier"] = actor_id
+	_carrying[actor_id] = carriable_id
+	events.append(Event.new(tick_count, "carriable_lifted", {"carriable_id": carriable_id, "actor_id": actor_id}))
+	# Watchers of this key respond to its FIRST lift only: the trigger is spent once it fires, so
+	# re-lifting a dropped key re-arms nothing (the west return ambush, 2026-10-16).
+	events.append_array(_fire_triggers_watching(&"carriable_lifted", carriable_id))
+	return events
+
+
+## Delivery consumes the key directly -- it is never set down first -- and then fires the receiver,
+## whose authored effects open its gate. Which key it was is never asked.
+func _insert_carried(actor_id: int, trigger_id: int) -> Array[Event]:
+	var carriable_id: int = _carrying[actor_id]
+	_carrying.erase(actor_id)
+	var carriable: Dictionary = _carriables[carriable_id]
+	carriable["carrier"] = -1
+	carriable["inserted"] = true
+	var events: Array[Event] = [Event.new(tick_count, "carriable_inserted", {
+		"carriable_id": carriable_id, "actor_id": actor_id, "trigger_id": trigger_id,
+	})]
+	events.append_array(_fire_trigger(trigger_id))
+	return events
+
+
+## THE ONE WAY A KEY LEAVES ITS CARRIER UNDELIVERED: a voluntary drop, a damaging hit, or death.
+## It lands at `at`, a position the carrier legally occupied this tick, so it is always on
+## walkable ground and always within reach of somewhere an Envoy can stand.
+func _release_carried(actor_id: int, reason: String, at: Vector3) -> Array[Event]:
+	if not _carrying.has(actor_id):
+		return []
+	var carriable_id: int = _carrying[actor_id]
+	_carrying.erase(actor_id)
+	_carriables[carriable_id]["carrier"] = -1
+	_carriables[carriable_id]["position"] = at
+	return [Event.new(tick_count, "carriable_dropped", {
+		"carriable_id": carriable_id, "actor_id": actor_id, "position": at, "reason": reason,
+	})]
+
+
+static func _flat_distance(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+## READ-ONLY: what an attack press with this aim would do right now -- the SAME function the press
+## runs, so the focus indicator is a projection of the rule, never a second opinion about it.
+## Presentation passes its live aim each frame; under M3 this is the client previewing a request
+## the server still validates.
+func interaction_focus(actor_id: int, aim: Vector3) -> Dictionary:
+	return _resolve_interaction_target(actor_id, aim)
+
+
+## Read-only: which carriable an actor holds, or -1.
+func carried_by(actor_id: int) -> int:
+	return int(_carrying.get(actor_id, -1))
 
 
 ## Every VISIBLE switch the melee cone covers. Hidden ones are absent from the scan entirely, so
@@ -1962,16 +2171,36 @@ func _apply_attack(command: Command) -> Array[Event]:
 	if _combat_absent.has(actor_id):
 		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "combat_absent"})]
 
-	var weapon_id: String = _equipped_weapon.get(actor_id, "")
-	var is_phased_melee: bool = _melee_combo_profiles.has(weapon_id)
-	if not is_phased_melee and not _weapons.has(weapon_id):
-		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "invalid_weapon"})]
-
 	# phase defaults to "pressed" -- every pre-Slice-B Command (every existing test,
 	# every gun/enemy attack) carries no phase key at all and falls straight through
 	# to the untouched instant-resolve path below, byte-for-byte (backward-compat
 	# contract, locked spec).
 	var phase: String = String(command.params.get("phase", "pressed"))
+
+	# CARRYING RIDES THE PRIMARY ATTACK PRESS (Floor 4 Stage 2, ruled 2026-10-16). Decided here,
+	# BEFORE any weapon path, so a sword and a gun arbitrate identically and nothing downstream can
+	# see a press that was spent on a key. One press resolves at most one action: deliver, drop,
+	# lift, or -- only when none of those applies -- an ordinary attack.
+	#
+	# A SPENT PRESS NEEDS NO SWALLOWING. Its held/released can only act on a hold that a press
+	# opened, and this one opened none: a lift also clears any hold, combo step and buffered press
+	# left from before, and a drop or delivery is a carrier's press, which never had one. So the
+	# same button can never also charge, tap or re-lift -- lifting happens on "pressed" only.
+	# (A consumed-press flag was built and mutation-tested; it guarded nothing observable.)
+	if phase == "pressed":
+		var interaction: Dictionary = _resolve_interaction_target(actor_id, command.params.get("aim", Vector3.ZERO))
+		if not interaction.is_empty():
+			return _perform_interaction(actor_id, interaction)
+	# Unreachable through envoy.gd (a carrier's every press resolves to a drop or a delivery above),
+	# and refused anyway: a carrier never attacks, whatever arrives.
+	if _carrying.has(actor_id):
+		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "carrying"})]
+
+	var weapon_id: String = _equipped_weapon.get(actor_id, "")
+	var is_phased_melee: bool = _melee_combo_profiles.has(weapon_id)
+	if not is_phased_melee and not _weapons.has(weapon_id):
+		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "invalid_weapon"})]
+
 	if is_phased_melee:
 		return _apply_phased_melee_attack(actor_id, weapon_id, phase, command)
 	if phase != "pressed":
@@ -2825,6 +3054,13 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		var target_hold_state: String = _melee_hold.get(target_id, {}).get("state", "")
 		if target_hold_state == "windup" or target_hold_state == "executing":
 			events.append_array(_cancel_open_melee_hold(target_id, true))
+	# A DISCRETE DAMAGING HIT KNOCKS A KEY LOOSE (ruled 2026-10-16) -- an enemy blow, a projectile,
+	# a spike pad, all of which arrive here. Blocked and i-frame hits returned above and never get
+	# this far, and a zero-damage hit is refused explicitly. Burn ticks never pass through this
+	# function, which is why they do not drop a key; Burn DEATH releases it at its own site. The
+	# key lands where the blow found its carrier, before knockback carried them off it.
+	if damage > 0.0:
+		events.append_array(_release_carried(target_id, "death" if remaining_health <= 0.0 else "hit", target_position))
 	return events
 
 
@@ -3201,6 +3437,17 @@ func _apply_block(command: Command) -> Array[Event]:
 	elif state == "ready":
 		_shield_meter[actor_id] = min(_shield_meter.get(actor_id, 0.0) + shield.regen_per_tick, shield.meter_max)
 	# "held": meter stays frozen — no regen while actively blocking.
+
+	# A CARRIER HAS NO SHIELD (ruled 2026-10-16): no block, so no bump either -- both live behind
+	# the rising edge refused here. The meter still regenerates above; carrying suspends the
+	# shield, it does not drain it. Because the edge is tracked even now, a block still held when
+	# the key is dropped does not raise the shield until it is pressed again.
+	if _carrying.has(actor_id):
+		if state == "held":
+			_shield_state[actor_id] = "ready"
+		if rising_edge:
+			return [Event.new(tick_count, "block_rejected", {"actor_id": actor_id, "reason": "carrying"})]
+		return []
 
 	# This tick's input against the (possibly just-recovered) state.
 	if state == "broken":
@@ -4243,6 +4490,7 @@ func _resolve_burrow_emergence_timeout(actor_id: int) -> Array[Event]:
 	_health[actor_id] = 0.0
 	_end_burrow(actor_id)
 	var events: Array[Event] = [Event.new(tick_count, "died", {"actor_id": actor_id})]
+	events.append_array(_release_carried(actor_id, "death", entry))  # death from any cause releases a key
 	events.append_array(_clear_attack_input_state(actor_id))
 	_clear_clamps_targeting(actor_id)
 	_clear_reaction_state(actor_id)
@@ -4746,6 +4994,8 @@ func _advance_status_ticks() -> Array[Event]:
 				_status_instances.erase(actor_id)
 				events.append_array(_clear_attack_input_state(actor_id))
 				_clear_clamps_targeting(actor_id)
+				# Burn ticks never drop a key; dying of Burn always does (ruled 2026-10-16).
+				events.append_array(_release_carried(actor_id, "death", entities.get(actor_id, Vector3.ZERO)))
 				died = true
 		if not died:
 			instance.ticks_remaining -= 1

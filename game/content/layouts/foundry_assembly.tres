@@ -6,7 +6,7 @@
 [ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="4_trig"]
 [ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="5_enc"]
 [ext_resource type="Script" path="res://game/gen/spike_pad_plan.gd" id="6_pad"]
-[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="7_switch"]
+[ext_resource type="Script" path="res://game/gen/carriable_plan.gd" id="7_carriable"]
 [ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="8_obstacle"]
 [ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="9_breakable"]
 
@@ -363,17 +363,6 @@ has_barrier = false
 flank_style = &"ledge"
 
 
-[sub_resource type="Resource" id="Resource_c_west_return"]
-script = ExtResource("1_conn")
-key = &"C_WEST_RETURN"
-connection_id = 6
-near_key = &"P_WEST_TOP"
-far_key = &"P_HUB"
-patch_ids = Vector2i(17, 9)
-aperture = Rect2(-17, -60, 6, 6)
-starts_open = false
-
-
 [sub_resource type="Resource" id="Resource_c_hub_east"]
 script = ExtResource("1_conn")
 key = &"C_HUB_EAST"
@@ -522,16 +511,35 @@ regions = Array[Rect2]([Rect2(38, -52, 26, 20), Rect2(42, -56, 18, 28), Rect2(42
 role = &"optional"
 roster = Array[Dictionary]([{
 "enemy_key": &"watcher",
-"position": Vector3(60, 0, -50)
+"position": Vector3(53, 0, -50)
 }, {
 "enemy_key": &"watcher",
-"position": Vector3(58, 0, -32)
+"position": Vector3(50, 0, -46)
 }, {
 "enemy_key": &"fang",
 "position": Vector3(52, 0, -44)
 }, {
 "enemy_key": &"fang",
 "position": Vector3(56, 0, -40)
+}])
+confines_player = false
+
+
+[sub_resource type="Resource" id="Resource_e_west_return"]
+script = ExtResource("5_enc")
+key = &"E_WEST_RETURN"
+encounter_id = 6
+regions = Array[Rect2]([Rect2(-38, -68, 28, 10), Rect2(-29, -58, 6, 3), Rect2(-52, -70, 14, 10), Rect2(-49, -75, 8, 5)])
+role = &"optional"
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(-29, 0, -61)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(-30, 0, -65.5)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(-45, 0, -64)
 }])
 confines_player = false
 
@@ -601,16 +609,16 @@ effects = Array[Dictionary]([{
 }])
 
 
-[sub_resource type="Resource" id="Resource_t_west_clear"]
+[sub_resource type="Resource" id="Resource_t_west_lift"]
 script = ExtResource("4_trig")
-key = &"T_WEST_CLEAR"
+key = &"T_WEST_LIFT"
 trigger_id = 1
-kind = &"encounter_cleared"
-source_key = &"E_WEST"
-source_id = 1
+kind = &"carriable_lifted"
+source_key = &"K_WEST"
+source_id = 0
 effects = Array[Dictionary]([{
-"kind": &"reveal_switch",
-"target_key": &"S_WEST_KEY"
+"kind": &"activate_encounter",
+"target_key": &"E_WEST_RETURN"
 }])
 
 
@@ -704,32 +712,42 @@ effects = Array[Dictionary]([{
 }])
 
 
-[sub_resource type="Resource" id="Resource_s_west_key"]
-script = ExtResource("7_switch")
-key = &"S_WEST_KEY"
-switch_id = 0
-position = Vector3(-45, 0, -72.5)
-radius = 0.8
+[sub_resource type="Resource" id="Resource_r_gate_1"]
+script = ExtResource("4_trig")
+key = &"R_GATE_1"
+trigger_id = 9
+kind = &"carriable_inserted"
+region = Rect2(-7, -56, 6, 3)
 effects = Array[Dictionary]([{
 "kind": &"open_connection",
 "target_key": &"C_LOCK_W"
-}, {
-"kind": &"open_connection",
-"target_key": &"C_WEST_RETURN"
 }])
-starts_hidden = true
 
 
-[sub_resource type="Resource" id="Resource_s_east_key"]
-script = ExtResource("7_switch")
-key = &"S_EAST_KEY"
-switch_id = 1
-position = Vector3(46, 0, -59.5)
-radius = 0.8
+[sub_resource type="Resource" id="Resource_r_gate_2"]
+script = ExtResource("4_trig")
+key = &"R_GATE_2"
+trigger_id = 10
+kind = &"carriable_inserted"
+region = Rect2(1, -64, 6, 3)
 effects = Array[Dictionary]([{
 "kind": &"open_connection",
 "target_key": &"C_LOCK_E"
 }])
+
+
+[sub_resource type="Resource" id="Resource_k_west"]
+script = ExtResource("7_carriable")
+key = &"K_WEST"
+carriable_id = 0
+position = Vector3(-13, 0, -63)
+
+
+[sub_resource type="Resource" id="Resource_k_east"]
+script = ExtResource("7_carriable")
+key = &"K_EAST"
+carriable_id = 1
+position = Vector3(46, 0, -59.5)
 
 
 [sub_resource type="Resource" id="Resource_o_hub_node"]
@@ -898,12 +916,12 @@ script = ExtResource("3_layout")
 layout_id = &"foundry_assembly"
 stratum_id = &"foundry"
 patches = Array[ExtResource("2_patch")]([SubResource("Resource_p_arrival"), SubResource("Resource_p_u_rim"), SubResource("Resource_p_stair_1"), SubResource("Resource_p_stair_2"), SubResource("Resource_p_stair_3"), SubResource("Resource_p_access_room"), SubResource("Resource_p_access_recess"), SubResource("Resource_p_approach_low"), SubResource("Resource_p_approach_high"), SubResource("Resource_p_hub"), SubResource("Resource_p_west_neck"), SubResource("Resource_p_west_low"), SubResource("Resource_p_west_bay"), SubResource("Resource_p_west_recess"), SubResource("Resource_p_west_leg"), SubResource("Resource_p_west_apex"), SubResource("Resource_p_west_niche"), SubResource("Resource_p_west_top"), SubResource("Resource_p_west_low_bulge"), SubResource("Resource_p_west_top_alcove"), SubResource("Resource_p_east_hall"), SubResource("Resource_p_east_jog"), SubResource("Resource_p_east_room"), SubResource("Resource_p_east_room_cross"), SubResource("Resource_p_east_bay"), SubResource("Resource_p_east_pocket"), SubResource("Resource_p_vestibule"), SubResource("Resource_p_junction"), SubResource("Resource_p_connector"), SubResource("Resource_p_chamber"), SubResource("Resource_p_exit_neck"), SubResource("Resource_p_exit_run"), SubResource("Resource_p_exit"), SubResource("Resource_p_exit_spur")])
-connections = Array[ExtResource("1_conn")]([SubResource("Resource_c_access_approach"), SubResource("Resource_c_approach_hub"), SubResource("Resource_c_hub_west"), SubResource("Resource_c_west_low_leg"), SubResource("Resource_c_west_leg_apex"), SubResource("Resource_c_west_apex_top"), SubResource("Resource_c_west_return"), SubResource("Resource_c_hub_east"), SubResource("Resource_c_east_hall_jog"), SubResource("Resource_c_east_hall_room"), SubResource("Resource_c_east_pocket"), SubResource("Resource_c_lock_w"), SubResource("Resource_c_lock_e"), SubResource("Resource_c_junction_connector"), SubResource("Resource_c_connector_chamber"), SubResource("Resource_c_chamber_top")])
-triggers = Array[ExtResource("4_trig")]([SubResource("Resource_t_west"), SubResource("Resource_t_west_clear"), SubResource("Resource_t_east"), SubResource("Resource_t_party"), SubResource("Resource_t_wave_1_clear"), SubResource("Resource_t_wave_2_clear"), SubResource("Resource_t_wave_3_clear"), SubResource("Resource_t_access"), SubResource("Resource_t_exit")])
-encounters = Array[ExtResource("5_enc")]([SubResource("Resource_e_access"), SubResource("Resource_e_west"), SubResource("Resource_e_east"), SubResource("Resource_e_wave_1"), SubResource("Resource_e_wave_2"), SubResource("Resource_e_wave_3")])
+connections = Array[ExtResource("1_conn")]([SubResource("Resource_c_access_approach"), SubResource("Resource_c_approach_hub"), SubResource("Resource_c_hub_west"), SubResource("Resource_c_west_low_leg"), SubResource("Resource_c_west_leg_apex"), SubResource("Resource_c_west_apex_top"), SubResource("Resource_c_hub_east"), SubResource("Resource_c_east_hall_jog"), SubResource("Resource_c_east_hall_room"), SubResource("Resource_c_east_pocket"), SubResource("Resource_c_lock_w"), SubResource("Resource_c_lock_e"), SubResource("Resource_c_junction_connector"), SubResource("Resource_c_connector_chamber"), SubResource("Resource_c_chamber_top")])
+triggers = Array[ExtResource("4_trig")]([SubResource("Resource_t_west"), SubResource("Resource_t_west_lift"), SubResource("Resource_t_east"), SubResource("Resource_t_party"), SubResource("Resource_t_wave_1_clear"), SubResource("Resource_t_wave_2_clear"), SubResource("Resource_t_wave_3_clear"), SubResource("Resource_t_access"), SubResource("Resource_t_exit"), SubResource("Resource_r_gate_1"), SubResource("Resource_r_gate_2")])
+encounters = Array[ExtResource("5_enc")]([SubResource("Resource_e_access"), SubResource("Resource_e_west"), SubResource("Resource_e_east"), SubResource("Resource_e_west_return"), SubResource("Resource_e_wave_1"), SubResource("Resource_e_wave_2"), SubResource("Resource_e_wave_3")])
 breakables = Array[ExtResource("9_breakable")]([SubResource("Resource_b_access_a"), SubResource("Resource_b_access_b"), SubResource("Resource_b_access_c"), SubResource("Resource_b_west_a"), SubResource("Resource_b_west_b"), SubResource("Resource_b_pocket_a"), SubResource("Resource_b_pocket_b"), SubResource("Resource_b_pocket_c")])
-hit_switches = Array[ExtResource("7_switch")]([SubResource("Resource_s_west_key"), SubResource("Resource_s_east_key")])
 obstacles = Array[ExtResource("8_obstacle")]([SubResource("Resource_o_hub_node"), SubResource("Resource_o_east_key_cover"), SubResource("Resource_o_east_cover_a"), SubResource("Resource_o_east_cover_b"), SubResource("Resource_o_chamber_core"), SubResource("Resource_o_chamber_nw"), SubResource("Resource_o_chamber_ne"), SubResource("Resource_o_chamber_sw"), SubResource("Resource_o_chamber_se")])
 spike_pads = Array[ExtResource("6_pad")]([SubResource("Resource_pad_seq_0"), SubResource("Resource_pad_seq_1"), SubResource("Resource_pad_seq_2")])
+carriables = Array[ExtResource("7_carriable")]([SubResource("Resource_k_west"), SubResource("Resource_k_east")])
 entry_point = Vector3(-50, 0, 0)
 end_marker = Vector3(74, 0, -144)

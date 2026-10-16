@@ -13,6 +13,7 @@ extends RefCounted
 ##                 (effects)              what a controller does
 ##   ENCOUNTER     EncounterSite[]        region != room, activation is AUTHORED
 ##   INTERACTION   BreakablePlan[]        (InteractablePlan RETIRED -- see below)
+##                 CarriablePlan[]        things an Envoy lifts and delivers (2026-10-16)
 ##
 ## INTERACTABLES ARE RETIRED (2026-08-29). Once the party button became a plate and the
 ## meaningless final switch was deleted, the last authored interactable was the hidden switch --
@@ -20,6 +21,11 @@ extends RefCounted
 ## InteractablePlan, TRIGGER_INTERACTED and the whole `interact` Command path. Rule of two runs
 ## BOTH WAYS: vocabulary does not survive on the grounds that it might be useful later. It comes
 ## back, out of git, the day a real deliberate-press consumer exists.
+##
+## CARRYING DID NOT BRING IT BACK (ruled 2026-10-16). The first deliberate-press consumer -- the
+## Foundry's physical keys -- rides the PRIMARY ATTACK press instead: one button, and the sim
+## decides per press whether it lifts, drops, delivers or attacks. There is still no `interact`
+## Command and no E binding consumer.
 ##
 ## Constants live together here because they are a shared VOCABULARY rather than any one
 ## layer's property -- an effect names a connection, a trigger names an encounter, and none of
@@ -46,6 +52,8 @@ const EFFECT_TOGGLE_CONNECTION: StringName = &"toggle_connection"
 ## object that already exists stops being hidden. It is not a signalling channel, and there is
 ## deliberately no way to "reveal" something that is not a physical object in the world.
 const EFFECT_REVEAL_SWITCH: StringName = &"reveal_switch"
+## The same literal reveal, for a carriable: a hidden key stops being hidden and can be lifted.
+const EFFECT_REVEAL_CARRIABLE: StringName = &"reveal_carriable"
 ## Marks the floor finished. Deliberately just a fact + an Event: a floor never knows its place
 ## in a run, so what completion LEADS to (descent or run end) is the Expedition's decision.
 const EFFECT_COMPLETE_FLOOR: StringName = &"complete_floor"
@@ -79,6 +87,15 @@ const TRIGGER_BREAKABLE_DESTROYED: StringName = &"breakable_destroyed"
 ## other exists.
 const TRIGGER_SWITCH_ACTIVATED: StringName = &"switch_activated"
 const TRIGGER_ENCOUNTER_CLEARED: StringName = &"encounter_cleared"
+## A RECEIVER: an Envoy carrying any carriable, standing in this trigger's region, delivers it
+## with a primary-attack press (2026-10-16). Watches no source -- either key fits either receiver
+## because the receiver never asks which one it got. A receiver accepts exactly one delivery, so
+## it must be authored `once`; FloorPlan.validate refuses one that is not.
+const TRIGGER_CARRIABLE_INSERTED: StringName = &"carriable_inserted"
+## A carriable's FIRST lift (2026-10-16). Watches one key by id, like the breakable and switch
+## kinds; fires once, so a key dropped and lifted again re-arms nothing. First consumer: Floor 4's
+## west return ambush.
+const TRIGGER_CARRIABLE_LIFTED: StringName = &"carriable_lifted"
 
 # --- ENCOUNTER roles ------------------------------------------------------------------
 ## MANDATORY  completion may control required progression

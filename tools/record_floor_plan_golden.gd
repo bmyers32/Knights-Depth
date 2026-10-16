@@ -77,6 +77,26 @@ extends SceneTree
 ##               (one patch, one open doorway, its three breakables). Nothing else moved; patch
 ##               and connection ids after it shift by one. Depths 1-3 byte-identical. This
 ##               is the floor the human accepted as Stage 1 (spatial PASS, 2026-10-15).
+##   2026-10-16  RE-BASELINED, approved by the human before recording: the SERIALIZATION widened
+##               (FloorPlan gained the `carriables` layer, ALWAYS serialized, empty or not) and
+##               Floor 4 changed on purpose (Stage 2 physical keys). Depths 1-3 each gain exactly
+##               `"carriables": [],` and nothing else -- diff shown to the human beforehand and
+##               re-verified with git after recording. Depth 4: the two hit-switch stand-ins
+##               became carriables K_WEST/K_EAST at the same positions; T_WEST_CLEAR now reveals
+##               the west key and opens C_WEST_RETURN; receivers R_GATE_1/R_GATE_2 (triggers 9,
+##               10) open C_LOCK_W/C_LOCK_E. Geometry unchanged.
+##   2026-10-16  DEPTH 4 RE-RECORDED, same day, for the Stage 2 playtest iteration (human ruling:
+##               the west shortcut defeated key transport). Exactly four records changed: the
+##               C_WEST_RETURN connection (6) is DELETED, not closed; K_WEST moved from the apex
+##               niche to the far end of the top band, visible from the start; trigger 1
+##               (T_WEST_CLEAR -> T_WEST_LIFT) now fires on K_WEST's first lift and activates
+##               new optional encounter 6, E_WEST_RETURN (two Fangs and an Ooze on the way back).
+##               No other id shifted. Depths 1-3 byte-identical to the approved rebaseline above.
+##   2026-10-16  DEPTH 4 RE-RECORDED for the east Watcher defect (human-confirmed; Option A, human
+##               approved): E_EAST's two Watchers moved (60,-50)->(53,-50) and (58,-32)->(50,-46),
+##               inside their 18-unit leash of the whole doorway and of the key bay, so activation
+##               is no longer undone on the next tick. Three numbers changed; nothing else.
+##               The leash rule (2026-09-08) is untouched. Depths 1-3 byte-identical.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the
@@ -145,6 +165,8 @@ func _record(generator: GDScript, depth: int, output_path: String) -> bool:
 		print("  breakable %d conceals trigger %d %s blocking=%s" % [breakable["breakable_id"], breakable["conceals_trigger_id"], breakable["position"], breakable["blocking_rect"]])
 	for hit_switch in serialized["hit_switches"]:
 		print("  switch %d %-8s hidden=%s %s effects=%s" % [hit_switch["switch_id"], hit_switch["mode"], hit_switch["starts_hidden"], hit_switch["position"], hit_switch["effects"]])
+	for carriable in serialized["carriables"]:
+		print("  carriable %d hidden=%s %s" % [carriable["carriable_id"], carriable["starts_hidden"], carriable["position"]])
 	for obstacle in serialized["obstacles"]:
 		print("  obstacle %d height=%.1f %s" % [obstacle["obstacle_id"], obstacle["height"], obstacle["rect"]])
 	for pad in serialized["spike_pads"]:

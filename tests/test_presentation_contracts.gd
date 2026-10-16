@@ -63,7 +63,7 @@ func test_enemy_actors_expose_the_methods_the_arena_driver_calls() -> void:
 
 func test_envoy_exposes_the_charge_cue_methods_the_arena_driver_calls() -> void:
 	var exposed: Array = _method_names(load("res://game/actors/envoy/envoy.gd"))
-	for required in ["show_charge_ready", "clear_charge_ready", "sync_from_sim", "build_commands", "teleport_from_sim"]:
+	for required in ["show_charge_ready", "clear_charge_ready", "sync_from_sim", "build_commands", "teleport_from_sim", "current_aim"]:
 		assert_true(exposed.has(required), "envoy.gd must expose %s() -- arena.gd calls it every frame or on an Event" % required)
 
 
@@ -369,6 +369,33 @@ func test_floor_builder_exposes_the_methods_the_arena_driver_calls() -> void:
 	var exposed: Array = _method_names(preload("res://game/arena/floor_builder.gd"))
 	for required in ["build", "clear_floor"]:
 		assert_true(exposed.has(required), "arena.gd calls FloorBuilder.%s() on every floor load" % required)
+	for required in ["set_carriable_visible", "place_carriable", "seat_carriable", "show_interaction_focus"]:
+		assert_true(exposed.has(required), "arena.gd calls FloorBuilder.%s() for carrying (Floor 4 Stage 2)" % required)
+
+
+## CARRYING, PROJECTED, on the floor that has keys. Drives every carrying event and the focus
+## projection through the real driver: presentation is test-exempt, so a crash here would
+## otherwise first appear in a playtest.
+func test_arena_drives_carrying_and_the_focus_ring_without_crashing() -> void:
+	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+	arena.itinerary = [4] as Array[int]
+	add_child_autofree(arena)
+	var builder: FloorBuilder = arena._floor_builder
+	assert_eq(builder._carriables.size(), 2, "both keys are drawn")
+	assert_eq(builder._receivers.size(), 2, "both receivers are drawn")
+	assert_true(builder._carriables[0].visible, "the west key waits in plain sight (2026-10-16 iteration)")
+	arena._report_events([
+		Event.new(0, "carriable_revealed", {"carriable_id": 0}),
+		Event.new(0, "carriable_lifted", {"carriable_id": 1, "actor_id": arena.envoy.actor_id}),
+		Event.new(0, "carriable_dropped", {"carriable_id": 1, "actor_id": arena.envoy.actor_id, "position": Vector3(1, 0, 1), "reason": "voluntary"}),
+		Event.new(0, "carriable_inserted", {"carriable_id": 1, "actor_id": arena.envoy.actor_id, "trigger_id": 9}),
+	] as Array[Event])
+	assert_true(builder._carriables[0].visible, "a revealed key is drawn")
+	arena._project_carrying()
+	builder.show_interaction_focus("lift", 0, -1)
+	assert_true(builder._focus_ring.visible, "a focused key shows its ring")
+	builder.show_interaction_focus("", -1, -1)
+	assert_false(builder._focus_ring.visible, "and the ring goes when nothing is focused")
 
 
 ## The generated roster must be the plan's roster. Pins the presentation half of the floor

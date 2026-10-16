@@ -546,6 +546,7 @@
 			"radius": 1.0
 		}
 	],
+	"carriables": [],
 	"connections": [
 		{
 			"aperture": {

@@ -82,7 +82,8 @@ func build_commands(tick: int) -> Array[Command]:
 
 	# NO INTERACT VERB (2026-08-29). Every floor control is now something you STAND ON, so the
 	# `interact` Command was retired with its last consumer rather than kept warm for a future
-	# one (§1.4 rule of two, run backwards). It returns out of git when a press is earned.
+	# one (§1.4 rule of two, run backwards). Carrying keys (2026-10-16) did not bring it back: a
+	# key is lifted, dropped and delivered by the attack press above, which the sim arbitrates.
 
 	if Input.is_action_just_pressed("switch_weapon"):
 		# No weapon_id in params — this only ever advances the sim-owned loadout
@@ -90,6 +91,12 @@ func build_commands(tick: int) -> Array[Command]:
 		# Directive 1 boundary-rule comment at sim_world.gd's dispatch site).
 		commands.append(Command.new(tick, actor_id, "switch_weapon"))
 	return commands
+
+
+## The aim an attack press would carry right now. Presentation-only: the arena hands it to
+## SimWorld.interaction_focus so the focus ring answers with the sim's own rule.
+func current_aim() -> Vector3:
+	return _compute_mouse_aim()
 
 
 ## Mouse-to-world aim, two-stage (manual playtest finding: a ground-plane-only ray

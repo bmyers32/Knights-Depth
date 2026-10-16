@@ -1,7 +1,10 @@
 extends GutTest
 ## THE FIRST FOUNDRY FLOOR (depth 4) -- GREYBOX, re-authored 2026-10-13 and again 2026-10-14
 ## (Stage 1: closer to the reference's shape). Stage 1 geometry spatially ACCEPTED by the human
-## 2026-10-15, with the east loot room restored; keys are still hit-switch stand-ins (Stage 2).
+## 2026-10-15, with the east loot room restored. Stage 2 (2026-10-16): the keys are PHYSICAL --
+## lifted, carried and delivered with the primary attack press. Stage 2 iteration (same day, after
+## the human mechanic playtest): the west loop lost its shortcut home, its key waits visibly at
+## the far end, and lifting it wakes a return ambush -- the key is carried back the way you came.
 ##
 ## A normal expedition floor on a hub: arrival -> lower access -> HUB -> west loop and east room,
 ## each holding one KEY -> a north gate that needs both -> a write-sequence connector -> the main
@@ -10,8 +13,10 @@ extends GutTest
 ## the north connector.
 ##
 ## THE TWO-KEY GATE IS CONTENT, NOT A MECHANIC. Two ordinary closed connections stand in series,
-## each opened by its own wing's hit switch. "Both, in either order" falls out of that with no
-## AND-condition, no counter and no inventory -- and these tests are what keep it true.
+## each with ONE receiver on its approach side: Gate 1's in the hub, Gate 2's in the vestibule
+## between them. Either key fits either receiver, and Gate 2's can only be stood in once Gate 1 is
+## open -- so the first key delivered always opens Gate 1 and the second opens Gate 2, in either
+## wing order, with no AND-condition, no counter and no inventory. These tests keep it true.
 
 const DT := 1.0 / 30.0
 const L = preload("res://game/content/layouts/foundry_assembly.tres")
@@ -171,8 +176,8 @@ func test_nothing_drawn_on_the_floor_stands_on_raised_ground() -> void:
 	var points: Array = [plan.end_marker]
 	for breakable: BreakablePlan in plan.breakables:
 		points.append(breakable.position)
-	for hit_switch: HitSwitchPlan in plan.hit_switches:
-		points.append(hit_switch.position)
+	for carriable: CarriablePlan in plan.carriables:
+		points.append(carriable.position)
 	for spawn: Dictionary in plan.all_spawns():
 		points.append(spawn["position"])
 	for rect: Rect2 in plan.obstacle_rects():
@@ -180,7 +185,7 @@ func test_nothing_drawn_on_the_floor_stands_on_raised_ground() -> void:
 	for pad: SpikePadPlan in plan.spike_pads:
 		points.append(_centre(pad.rect))
 	for trigger: FloorTrigger in plan.triggers:
-		if trigger.renders_as_plate:
+		if trigger.renders_as_plate or trigger.kind == FloorLayers.TRIGGER_CARRIABLE_INSERTED:
 			points.append(_centre(trigger.region))
 	for point: Vector3 in points:
 		for patch: WalkablePatch in plan.patches:
@@ -214,8 +219,8 @@ func test_the_east_loot_room_is_optional() -> void:
 	assert_eq(doors[0].connection_id, _id(&"C_EAST_POCKET"))
 	assert_true(doors[0].starts_open, "it can never lock anyone in or out")
 	var room: Rect2 = _patch(&"P_EAST_POCKET")
-	for hit_switch: HitSwitchPlan in plan.hit_switches:
-		assert_false(room.has_point(Vector2(hit_switch.position.x, hit_switch.position.z)), "a key is in the loot room")
+	for carriable: CarriablePlan in plan.carriables:
+		assert_false(room.has_point(Vector2(carriable.position.x, carriable.position.z)), "a key is in the loot room")
 	for trigger: FloorTrigger in plan.triggers:
 		assert_false(trigger.region.intersects(room), "trigger %d fires in the loot room" % trigger.trigger_id)
 	for site: EncounterSite in plan.encounters:
@@ -288,11 +293,18 @@ func test_the_write_front_outruns_a_walking_envoy() -> void:
 
 # --- 4: THE TWO-KEY GATE, AS DATA -------------------------------------------------------------
 
-func _effects_of_switch(key: StringName) -> Array:
-	for hit_switch: HitSwitchPlan in plan.hit_switches:
-		if hit_switch.switch_id == _id(key):
-			return hit_switch.effects
-	return []
+func _trigger(key: StringName) -> FloorTrigger:
+	for trigger: FloorTrigger in plan.triggers:
+		if trigger.trigger_id == _id(key):
+			return trigger
+	return null
+
+
+func _carriable(key: StringName) -> CarriablePlan:
+	for carriable: CarriablePlan in plan.carriables:
+		if carriable.carriable_id == _id(key):
+			return carriable
+	return null
 
 
 func _starts_open(key: StringName) -> bool:
@@ -325,26 +337,121 @@ func test_the_north_route_passes_two_locks_in_series() -> void:
 						"connection %d joins %s to %s round the gate" % [connection.connection_id, south, north])
 
 
-## Each key opens its OWN lock and never the other: that is the whole of "both are required".
-func test_each_key_opens_its_own_lock_and_only_that_lock() -> void:
-	var west: Array = _effects_of_switch(&"S_WEST_KEY")
-	var east: Array = _effects_of_switch(&"S_EAST_KEY")
-	var west_targets: Array = []
-	for effect: Dictionary in west:
-		assert_eq(effect["kind"], FloorLayers.EFFECT_OPEN_CONNECTION)
-		west_targets.append(int(effect["target_id"]))
-	west_targets.sort()
-	var expected: Array = [_id(&"C_LOCK_W"), _id(&"C_WEST_RETURN")]
-	expected.sort()
-	assert_eq(west_targets, expected, "the west key opens its lock and the way back to the hub")
-	assert_eq(east.size(), 1)
-	assert_eq(int(east[0]["target_id"]), _id(&"C_LOCK_E"))
-	# Nothing else on the floor may open either lock.
+## Exactly two keys and two receivers, and each receiver opens its own gate and nothing else.
+## Nothing else on the floor may open either gate: delivery is the only way through.
+func test_each_receiver_opens_its_own_gate_and_nothing_else_does() -> void:
+	assert_eq(plan.carriables.size(), 2, "two physical keys")
+	assert_eq(plan.hit_switches.size(), 0, "the hit-switch stand-ins are gone")
+	var receivers: Array = plan.triggers.filter(func(t: FloorTrigger) -> bool: return t.kind == FloorLayers.TRIGGER_CARRIABLE_INSERTED)
+	assert_eq(receivers.size(), 2, "one receiver per gate")
+	for pairing: Array in [[&"R_GATE_1", &"C_LOCK_W"], [&"R_GATE_2", &"C_LOCK_E"]]:
+		var receiver: FloorTrigger = _trigger(pairing[0])
+		assert_eq(receiver.kind, FloorLayers.TRIGGER_CARRIABLE_INSERTED)
+		assert_true(receiver.once, "a receiver takes one key")
+		assert_eq(receiver.effects.size(), 1)
+		assert_eq(receiver.effects[0]["kind"], FloorLayers.EFFECT_OPEN_CONNECTION)
+		assert_eq(int(receiver.effects[0]["target_id"]), _id(pairing[1]), "%s opens %s" % pairing)
 	for trigger: FloorTrigger in plan.triggers:
+		if trigger.kind == FloorLayers.TRIGGER_CARRIABLE_INSERTED:
+			continue
 		for effect: Dictionary in trigger.effects:
 			assert_false(int(effect.get("target_id", -1)) in [_id(&"C_LOCK_W"), _id(&"C_LOCK_E")]
 				and effect["kind"] in [FloorLayers.EFFECT_OPEN_CONNECTION, FloorLayers.EFFECT_TOGGLE_CONNECTION],
-				"trigger %d opens a lock without its key" % trigger.trigger_id)
+				"trigger %d opens a gate without a key" % trigger.trigger_id)
+
+
+## SEQUENTIAL BY GEOMETRY, not by a rule: Gate 1's receiver stands in the hub, Gate 2's in the
+## vestibule that only Gate 1 reaches. Each region sits wholly on its own side.
+func test_the_receivers_stand_in_series() -> void:
+	var hub: Rect2 = _patch(&"P_HUB")
+	var vestibule: Rect2 = _patch(&"P_VESTIBULE")
+	var first: Rect2 = _trigger(&"R_GATE_1").region
+	var second: Rect2 = _trigger(&"R_GATE_2").region
+	assert_true(hub.encloses(first), "Gate 1's receiver is in the hub")
+	assert_true(vestibule.encloses(second), "Gate 2's receiver is in the vestibule")
+	assert_false(hub.intersects(second), "Gate 2's receiver cannot be stood in from the hub")
+
+
+const WEST_PATCHES: Array[StringName] = [&"P_WEST_NECK", &"P_WEST_LOW", &"P_WEST_BAY", &"P_WEST_RECESS",
+	&"P_WEST_LEG", &"P_WEST_APEX", &"P_WEST_NICHE", &"P_WEST_TOP", &"P_WEST_LOW_BULGE", &"P_WEST_TOP_ALCOVE"]
+
+
+## NO SHORTCUT HOME (Stage 2 iteration, 2026-10-16). The loop winds round its void but meets the
+## rest of the floor at exactly one doorway, the one it is entered by -- so the key goes home the
+## way it came. Not a door that opens late: the old return connection is gone from the floor.
+func test_the_west_loop_is_entered_and_left_by_one_doorway() -> void:
+	var west: Array = WEST_PATCHES.map(func(key: StringName) -> int: return _id(key))
+	var ways_out: Array = []
+	for connection: TraversalConnection in plan.connections:
+		var near_in: bool = connection.patch_ids.x in west
+		var far_in: bool = connection.patch_ids.y in west
+		if near_in != far_in:
+			ways_out.append(connection.connection_id)
+	assert_eq(ways_out, [_id(&"C_HUB_WEST")], "the loop's only doorway is the one from the hub")
+
+
+## The key waits in plain sight at the loop's far end -- the top band's end beside the hub, across
+## the void from it -- not conjured by a clear. The hub is close enough to see it and too far to
+## reach it.
+func test_the_west_key_waits_visible_at_the_far_end_of_the_loop() -> void:
+	var key: CarriablePlan = _carriable(&"K_WEST")
+	assert_false(key.starts_hidden, "the key is discoverable, not revealed")
+	var top: Rect2 = _patch(&"P_WEST_TOP")
+	assert_true(top.has_point(Vector2(key.position.x, key.position.z)), "it stands on the top band")
+	assert_lt(top.end.x - key.position.x, 4.0, "at the band's far end")
+	var entry: Rect2 = _patch(&"P_WEST_NECK")
+	assert_gt(_patch(&"P_HUB").position.y - key.position.z, 5.0, "across the void from the hub, not beside a door into it")
+	assert_gt(Vector2(key.position.x, key.position.z).distance_to(entry.get_center()), 20.0, "and nowhere near the loop's entrance")
+	for trigger: FloorTrigger in plan.triggers:
+		for effect: Dictionary in trigger.effects:
+			assert_ne(effect["kind"], FloorLayers.EFFECT_REVEAL_CARRIABLE, "no key on this floor is conjured")
+
+
+## THE RETURN AMBUSH, AS DATA. The key's FIRST lift wakes a small, finite roster standing on the
+## way back; it is optional, seals nobody in, and stands a fair distance from the key.
+func test_the_first_lift_of_the_west_key_wakes_the_return_ambush() -> void:
+	var trigger: FloorTrigger = _trigger(&"T_WEST_LIFT")
+	assert_eq(trigger.kind, FloorLayers.TRIGGER_CARRIABLE_LIFTED)
+	assert_eq(trigger.source_id, _id(&"K_WEST"))
+	assert_true(trigger.once, "the first lift only")
+	assert_eq(trigger.effects.map(func(e: Dictionary) -> Array: return [e["kind"], e["target_id"]]),
+		[[FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, _id(&"E_WEST_RETURN")]])
+	var ambush: EncounterSite = _encounter(&"E_WEST_RETURN")
+	assert_eq(ambush.role, FloorLayers.ROLE_OPTIONAL, "it can be evaded; clearing it is never required")
+	assert_false(ambush.confines_player, "and it seals nobody in")
+	assert_false(ambush.spawn_at_floor_load, "it is not there until the key is lifted")
+	assert_between(ambush.roster.size(), 2, 4, "small and finite")
+	var key: CarriablePlan = _carriable(&"K_WEST")
+	for spawn: Dictionary in ambush.roster:
+		var at: Vector3 = spawn["position"]
+		assert_gt(Vector2(at.x, at.z).distance_to(Vector2(key.position.x, key.position.z)), 14.0,
+			"%s at %s arrives on top of the carrier" % [spawn["enemy_key"], at])
+	var west: Array[Rect2] = []
+	for key_name: StringName in WEST_PATCHES:
+		west.append(_patch(key_name))
+	for region: Rect2 in ambush.regions:
+		var on_the_route: bool = false
+		for patch: Rect2 in west:
+			on_the_route = on_the_route or patch.encloses(region)
+		assert_true(on_the_route, "ambush ground %s is off the loop" % region)
+	# Nothing else on the floor watches a key's lift.
+	for other: FloorTrigger in plan.triggers:
+		if other.trigger_id != trigger.trigger_id:
+			assert_ne(other.kind, FloorLayers.TRIGGER_CARRIABLE_LIFTED)
+
+
+## NO CLOSED GATE CAN STRAND A KEY. The floor's only closing effect is the party plate's, beyond
+## both gates; both gates open only by delivery. So by the time anything can close, both keys are
+## already in their receivers and can no longer be lost.
+func test_no_closing_effect_is_reachable_while_a_key_is_loose() -> void:
+	var closers: Array = []
+	for trigger: FloorTrigger in plan.triggers:
+		for effect: Dictionary in trigger.effects:
+			if effect["kind"] in [FloorLayers.EFFECT_BLOCK_CONNECTION, FloorLayers.EFFECT_TOGGLE_CONNECTION]:
+				closers.append(trigger.trigger_id)
+	assert_eq(closers, [_id(&"T_PARTY")], "the party plate is the only thing on the floor that closes a route")
+	var chamber: Rect2 = _patch(&"P_CHAMBER")
+	assert_true(chamber.encloses(_trigger(&"T_PARTY").region), "and it stands north of both gates")
 
 
 ## The locks stand on the side of the hub their wing is on, so the gate reads as two halves.
@@ -357,13 +464,10 @@ func test_each_lock_stands_on_its_own_wings_side() -> void:
 			assert_gt(connection.aperture.position.x, hub_x, "the east lock is on the east half")
 
 
-## The east key is in the open, so it must not be strikeable from the doorway: every line from
-## the room's entrance to the key runs through the mass authored in front of it.
+## The east key sits behind cover: every line from the room's entrance to the key runs through the
+## mass authored in front of it, so the room has to be entered to find it (Stage 1 composition).
 func test_the_east_key_cannot_be_shot_from_the_doorway() -> void:
-	var key_at := Vector2.ZERO
-	for hit_switch: HitSwitchPlan in plan.hit_switches:
-		if hit_switch.switch_id == _id(&"S_EAST_KEY"):
-			key_at = Vector2(hit_switch.position.x, hit_switch.position.z)
+	var key_at := Vector2(_carriable(&"K_EAST").position.x, _carriable(&"K_EAST").position.z)
 	var door := Rect2()
 	for connection: TraversalConnection in plan.connections:
 		if connection.connection_id == _id(&"C_EAST_HALL_ROOM"):
@@ -386,8 +490,10 @@ const TO_THE_ACCESS_ROOM: Array[Vector3] = [Vector3(-46, 0, 7.5), Vector3(-34, 0
 const TO_THE_HUB: Array[Vector3] = [Vector3(-17.5, 0, -21), Vector3(-12.5, 0, -27), Vector3(-12.5, 0, -34)]
 ## Out along the bottom band (waking its fight at the neck), up the west leg to the apex.
 const WEST_OUT: Array[Vector3] = [Vector3(-16, 0, -38), Vector3(-27, 0, -38), Vector3(-47, 0, -39), Vector3(-47, 0, -44), Vector3(-47, 0, -52), Vector3(-47, 0, -62), Vector3(-45, 0, -69)]
-## Home a different way: east along the top band and through the door the key opened.
-const WEST_HOME: Array[Vector3] = [Vector3(-40, 0, -64), Vector3(-20, 0, -63), Vector3(-15, 0, -57), Vector3(-10, 0, -52)]
+## On round the apex and east along the top band to the key at its far end.
+const WEST_TO_KEY: Array[Vector3] = [Vector3(-42, 0, -64), Vector3(-20, 0, -63)]
+## Home THE WAY IN: back along the band, down the leg, through the low band and the neck.
+const WEST_HOME: Array[Vector3] = [Vector3(-42, 0, -64), Vector3(-47, 0, -62), Vector3(-47, 0, -52), Vector3(-47, 0, -44), Vector3(-47, 0, -39), Vector3(-27, 0, -38), Vector3(-16, 0, -38)]
 const EAST_OUT: Array[Vector3] = [Vector3(8, 0, -40), Vector3(21, 0, -38), Vector3(31, 0, -42), Vector3(41, 0, -42), Vector3(47, 0, -50)]
 const EAST_HOME: Array[Vector3] = [Vector3(41, 0, -42), Vector3(31, 0, -42), Vector3(21, 0, -38), Vector3(8, 0, -40)]
 const THROUGH_THE_GATE: Array[Vector3] = [Vector3(-4, 0, -50), Vector3(-4, 0, -62), Vector3(4, 0, -62), Vector3(4, 0, -74)]
@@ -439,10 +545,50 @@ func _state(arena: Node3D, encounter_key: StringName) -> String:
 	return String(arena.sim._encounter_state.get(_id(encounter_key), ""))
 
 
-## Strikes a key the ordinary way a hit does, through the driver, so the gate meshes hear it.
-func _strike(arena: Node3D, switch_key: StringName) -> void:
-	arena._report_events(arena.sim.debug_activate_hit_switch(_id(switch_key)))
-	_idle(arena, 1)
+## Where to stand to lift each key, and to deliver at each receiver.
+const WEST_KEY_STAND := Vector3(-14.6, 0, -63)
+const EAST_KEY_STAND := Vector3(46, 0, -58.6)
+## Out of the bay the way in came: a straight line home from the key clips the cover mass.
+const EAST_BAY_EXIT := Vector3(47, 0, -50)
+const GATE_1_STAND := Vector3(-4, 0, -54.5)
+const GATE_2_ROUTE: Array[Vector3] = [Vector3(-4, 0, -54.5), Vector3(-4, 0, -62), Vector3(4, 0, -62.5)]
+
+
+## One primary-attack click, the shipped way: pressed then released, through the driver.
+func _click(arena: Node3D, aim: Vector3) -> void:
+	var envoy_id: int = arena.envoy.actor_id
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim, "phase": "pressed"})] as Array[Command], DT)
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim, "phase": "released"})] as Array[Command], DT)
+
+
+func _carried(arena: Node3D) -> int:
+	return arena.sim.carried_by(arena.envoy.actor_id)
+
+
+func _key_position(arena: Node3D, key: StringName) -> Vector3:
+	return arena.sim._carriables[_id(key)]["position"]
+
+
+## Lifts a key by aiming the attack press at it, from where the Envoy stands.
+func _lift(arena: Node3D, key: StringName) -> void:
+	_click(arena, _key_position(arena, key) - arena.sim.entities[arena.envoy.actor_id])
+
+
+func _filled(arena: Node3D, receiver_key: StringName) -> bool:
+	return arena.sim._triggers_fired.has(_id(receiver_key))
+
+
+## Delivers the carried key at the first receiver that can take it: Gate 1's if it is still empty,
+## otherwise through Gate 1 to Gate 2's.
+func _deliver(arena: Node3D) -> void:
+	assert_ne(_carried(arena), -1, "sanity: carrying a key to deliver")
+	if not _filled(arena, &"R_GATE_1"):
+		assert_true(_walk_to(arena, GATE_1_STAND, 0.3), "to Gate 1's receiver")
+	else:
+		for waypoint: Vector3 in GATE_2_ROUTE:
+			assert_true(_walk_to(arena, waypoint, 0.3), "to Gate 2's receiver: %s" % waypoint)
+	_click(arena, Vector3(0, 0, -2))
+	assert_eq(_carried(arena), -1, "the press delivered the key")
 
 
 ## Through the lower access, FIGHTING its pack the way a player does. A roster that is walked
@@ -457,28 +603,36 @@ func _reach_the_hub(arena: Node3D) -> void:
 	_walk(arena, TO_THE_HUB, "access")
 
 
-func _take_the_west_key(arena: Node3D) -> void:
+## Out round the loop to the key, lifting it (which wakes the ambush). Leaves the Envoy carrying.
+func _reach_and_lift_the_west_key(arena: Node3D) -> void:
 	_walk(arena, WEST_OUT, "west")
 	assert_eq(_state(arena, &"E_WEST"), "active", "the loop's fight woke on the way in")
-	assert_true(bool(arena.sim._hit_switches[_id(&"S_WEST_KEY")]["hidden"]), "the west key is not there until the fight is won")
-	_strike(arena, &"S_WEST_KEY")
-	assert_false(_open(arena, &"C_LOCK_W"), "and a hidden key cannot be struck")
 	_kill(arena, &"E_WEST")
-	assert_false(bool(arena.sim._hit_switches[_id(&"S_WEST_KEY")]["hidden"]), "clearing the loop reveals it")
-	assert_false(_open(arena, &"C_WEST_RETURN"), "the way back stays shut until the key is struck")
-	_strike(arena, &"S_WEST_KEY")
-	assert_true(_open(arena, &"C_LOCK_W"), "the west key opens the west lock")
-	assert_true(_open(arena, &"C_WEST_RETURN"), "and the short way back to the hub")
-	_walk(arena, WEST_HOME, "west return")
+	_walk(arena, WEST_TO_KEY, "west, to the key")
+	assert_true(_walk_to(arena, WEST_KEY_STAND, 0.3), "to the far end of the top band")
+	assert_eq(_state(arena, &"E_WEST_RETURN"), "dormant", "the ambush waits for the lift, not for the walk")
+	_lift(arena, &"K_WEST")
+	assert_eq(_carried(arena), _id(&"K_WEST"), "the attack press lifts the focused key")
+	assert_eq(_state(arena, &"E_WEST_RETURN"), "active", "and the lift wakes the way back")
+
+
+func _take_the_west_key(arena: Node3D) -> void:
+	_reach_and_lift_the_west_key(arena)
+	_kill(arena, &"E_WEST_RETURN")  # a traversal test; the fight has its own test below
+	_walk(arena, WEST_HOME, "west return, carrying")
+	_deliver(arena)
 
 
 func _take_the_east_key(arena: Node3D) -> void:
 	_walk(arena, EAST_OUT, "east")
 	assert_eq(_state(arena, &"E_EAST"), "active", "the room's fight woke on the way in")
 	_kill(arena, &"E_EAST")
-	_strike(arena, &"S_EAST_KEY")
-	assert_true(_open(arena, &"C_LOCK_E"), "the east key opens the east lock")
-	_walk(arena, EAST_HOME, "east return")
+	assert_true(_walk_to(arena, EAST_KEY_STAND, 0.3), "into the key bay")
+	_lift(arena, &"K_EAST")
+	assert_eq(_carried(arena), _id(&"K_EAST"))
+	assert_true(_walk_to(arena, EAST_BAY_EXIT), "out of the bay, carrying")
+	_walk(arena, EAST_HOME, "east return, carrying")
+	_deliver(arena)
 
 
 ## Off the east room and back, through the real arena: the doorway is walkable and the side trip
@@ -508,24 +662,273 @@ func test_waiting_on_arrival_never_costs_health() -> void:
 	assert_eq(arena.sim.health_of(arena.envoy.actor_id), before)
 
 
-func test_the_west_key_alone_does_not_open_the_north_route() -> void:
+## THE FIRST KEY, WHICHEVER WING IT CAME FROM, OPENS GATE 1 AND ONLY GATE 1.
+func test_the_west_key_alone_opens_only_gate_one() -> void:
 	var arena: Node3D = _boot()
 	_reach_the_hub(arena)
 	_take_the_west_key(arena)
-	assert_true(_open(arena, &"C_LOCK_W"))
-	assert_false(_open(arena, &"C_LOCK_E"), "the east lock is the east key's")
+	assert_true(_open(arena, &"C_LOCK_W"), "the first key delivered opens Gate 1")
+	assert_false(_open(arena, &"C_LOCK_E"))
 	assert_true(_walk_to(arena, Vector3(-4, 0, -62)), "the vestibule is now reachable")
 	assert_false(_walk_to(arena, Vector3(4, 0, -74), 1.0, 400), "and the junction beyond it is not")
 
 
-func test_the_east_key_alone_does_not_open_the_north_route() -> void:
+func test_the_east_key_alone_opens_only_gate_one() -> void:
 	var arena: Node3D = _boot()
 	_reach_the_hub(arena)
 	_take_the_east_key(arena)
-	assert_true(_open(arena, &"C_LOCK_E"))
-	assert_false(_open(arena, &"C_LOCK_W"), "the west lock is the west key's")
-	assert_false(_walk_to(arena, Vector3(-4, 0, -62), 1.0, 400), "the hub's own lock still stands")
-	assert_false(_open(arena, &"C_WEST_RETURN"), "and the east key opened nothing in the west")
+	assert_true(_open(arena, &"C_LOCK_W"), "either key fits Gate 1: the east key opens it too")
+	assert_false(_open(arena, &"C_LOCK_E"))
+	assert_eq(_state(arena, &"E_WEST_RETURN"), "dormant", "and the east key woke nothing in the west")
+
+
+## Gate 2's receiver is behind Gate 1, so a carried key cannot reach it first.
+func test_gate_two_receiver_cannot_be_reached_before_gate_one_opens() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	_walk(arena, EAST_OUT, "east")
+	_kill(arena, &"E_EAST")
+	assert_true(_walk_to(arena, EAST_KEY_STAND, 0.3))
+	_lift(arena, &"K_EAST")
+	assert_true(_walk_to(arena, EAST_BAY_EXIT))
+	_walk(arena, EAST_HOME, "east return, carrying")
+	assert_true(_walk_to(arena, GATE_1_STAND, 0.3))
+	assert_false(_walk_to(arena, Vector3(4, 0, -62.5), 0.3, 400), "Gate 1 still stands between the hub and Gate 2's receiver")
+	assert_eq(_carried(arena), _id(&"K_EAST"), "the key is still in hand")
+
+
+## A KEY KNOCKED LOOSE ON EITHER ROUTE CAN BE PICKED UP AGAIN, and a dropped key never blocks the
+## fight around it. Drop by hit (a real enemy blow), recover by aiming at it, deliver.
+func test_a_key_knocked_loose_on_the_east_route_is_recovered() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	_walk(arena, EAST_OUT, "east")
+	assert_true(_walk_to(arena, EAST_KEY_STAND, 0.3))
+	_lift(arena, &"K_EAST")
+	assert_eq(_carried(arena), _id(&"K_EAST"))
+	# The east roster is live here. Wait for a real blow rather than staging one.
+	var knocked: bool = false
+	for i in 900:
+		_idle(arena, 1)
+		if _carried(arena) == -1:
+			knocked = true
+			break
+	assert_true(knocked, "a Watcher in its own room hits a carrier who stands still")
+	var key_at: Vector3 = _key_position(arena, &"K_EAST")
+	assert_true(plan.make_bounds().fits(key_at, 0.45), "it fell where an Envoy can stand")
+	_kill(arena, &"E_EAST")
+	assert_true(_walk_to(arena, _beside(key_at), 0.2), "the fallen key lies on walkable ground")
+	_lift(arena, &"K_EAST")
+	assert_eq(_carried(arena), _id(&"K_EAST"), "and is lifted again")
+	assert_true(_walk_to(arena, EAST_BAY_EXIT))
+	_walk(arena, EAST_HOME, "east return, carrying")
+	_deliver(arena)
+	assert_true(_open(arena, &"C_LOCK_W"))
+
+
+func test_a_key_dropped_on_the_west_route_is_recovered_and_cannot_be_lost_once_delivered() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	_reach_and_lift_the_west_key(arena)
+	_kill(arena, &"E_WEST_RETURN")
+	_walk(arena, WEST_HOME.slice(0, 2), "partway home")
+	_click(arena, Vector3(0, 0, -2))  # a voluntary drop, mid-route
+	assert_eq(_carried(arena), -1)
+	var key_at: Vector3 = _key_position(arena, &"K_WEST")
+	_walk_to(arena, _beside(key_at), 0.2)
+	_lift(arena, &"K_WEST")
+	assert_eq(_carried(arena), _id(&"K_WEST"), "recovered: step off it and aim back")
+	_walk(arena, WEST_HOME.slice(2), "the rest of the way home")
+	_deliver(arena)
+	assert_true(bool(arena.sim._carriables[_id(&"K_WEST")]["inserted"]))
+	_lift(arena, &"K_WEST")
+	assert_eq(_carried(arena), -1, "a delivered key can never be lifted back out")
+	assert_true(_open(arena, &"C_LOCK_W"), "and its gate stays open")
+
+
+## THE RETURN AMBUSH, THROUGH THE REAL ARENA: the lift wakes it once, it comes from a distance a
+## carrier can read, and a carrier who stands there is reached -- not instantly.
+func test_the_west_lift_wakes_the_ambush_at_a_readable_distance() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	_reach_and_lift_the_west_key(arena)
+	var envoy_at: Vector3 = arena.sim.entities[arena.envoy.actor_id]
+	var engaged: int = 0
+	for actor_id: int in arena.sim._encounter_roster[_id(&"E_WEST_RETURN")]:
+		assert_false(arena.sim._combat_absent.has(actor_id), "actor %d is present the moment the key is lifted" % actor_id)
+		assert_gt(_flat(arena.sim.entities[actor_id], envoy_at), 12.0, "actor %d appears too close to the carrier" % actor_id)
+		engaged += int(String(arena.sim._ai_state.get(actor_id, "")) == "active")
+	assert_gt(engaged, 0, "the nearest of them come for the key at once")
+	var lifted_at: int = arena.sim.tick_count
+	var dropped_at: int = -1
+	for i in 900:
+		_idle(arena, 1)
+		if _carried(arena) == -1:
+			dropped_at = arena.sim.tick_count
+			break
+	assert_ne(dropped_at, -1, "a carrier who stands still is reached")
+	assert_gt(dropped_at - lifted_at, 60, "but with at least two seconds to see it coming and drop the key")
+
+
+## The ambush is spent by the first lift: dropping and re-lifting the key wakes nothing more.
+func test_re_lifting_the_west_key_wakes_no_second_ambush() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	_reach_and_lift_the_west_key(arena)
+	var roster: Array = arena.sim._encounter_roster[_id(&"E_WEST_RETURN")].duplicate()
+	_kill(arena, &"E_WEST_RETURN")
+	assert_eq(_state(arena, &"E_WEST_RETURN"), "cleared")
+	assert_true(arena.sim._triggers_fired.has(_id(&"T_WEST_LIFT")), "the first lift spent its trigger")
+	for i in 3:
+		_click(arena, Vector3(0, 0, -2))
+		assert_eq(_carried(arena), -1, "sanity: dropped")
+		var key_at: Vector3 = _key_position(arena, &"K_WEST")
+		assert_true(_walk_to(arena, _beside(key_at), 0.2))
+		_lift(arena, &"K_WEST")
+		assert_eq(_carried(arena), _id(&"K_WEST"), "sanity: lifted again")
+		assert_eq(_state(arena, &"E_WEST_RETURN"), "cleared", "re-lift %d woke nothing" % i)
+	assert_eq(arena.sim._encounter_roster[_id(&"E_WEST_RETURN")], roster, "and no roster grew")
+	for actor_id: int in roster:
+		assert_eq(arena.sim.health_of(actor_id), 0.0, "and nothing that was beaten came back")
+
+
+## DROP THE KEY AND FIGHT: a real fight with the shipped sword, against the real roster, then the
+## key is lifted again and carried home.
+func test_the_carrier_can_drop_the_key_and_fight_the_ambush() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	_reach_and_lift_the_west_key(arena)
+	_click(arena, Vector3(0, 0, -2))
+	assert_eq(_carried(arena), -1, "dropped to fight")
+	var key_at: Vector3 = _key_position(arena, &"K_WEST")
+	var envoy_id: int = arena.envoy.actor_id
+	for i in 4000:
+		if _state(arena, &"E_WEST_RETURN") == "cleared":
+			break
+		var target: int = -1
+		var nearest: float = INF
+		for actor_id: int in arena.sim._encounter_roster[_id(&"E_WEST_RETURN")]:
+			if arena.sim.health_of(actor_id) <= 0.0 or arena.sim._combat_absent.has(actor_id):
+				continue
+			var distance: float = _flat(arena.sim.entities[actor_id], arena.sim.entities[envoy_id])
+			if distance < nearest:
+				nearest = distance
+				target = actor_id
+		if target < 0:
+			_idle(arena, 1)
+		elif nearest > 1.8:
+			var toward: Vector3 = arena.sim.entities[target] - arena.sim.entities[envoy_id]
+			toward.y = 0.0
+			arena._step([Command.new(arena.sim.tick_count, envoy_id, "move", {"direction": toward.normalized()})] as Array[Command], DT)
+		else:
+			_click(arena, arena.sim.entities[target] - arena.sim.entities[envoy_id])
+			_idle(arena, 8)
+	assert_eq(_state(arena, &"E_WEST_RETURN"), "cleared", "the ambush is beaten with the sword")
+	assert_eq(_carried(arena), -1, "no key was lifted by any swing of that fight")
+	assert_eq(_key_position(arena, &"K_WEST"), key_at, "and the key lay where it was dropped throughout")
+	assert_true(_walk_to(arena, _beside(key_at), 0.2))
+	_lift(arena, &"K_WEST")
+	assert_eq(_carried(arena), _id(&"K_WEST"))
+	_walk(arena, WEST_HOME, "west return, carrying")
+	_deliver(arena)
+	assert_true(_open(arena, &"C_LOCK_W"))
+
+
+## A standable point a step from a lying key -- never on it, since a key underfoot has no
+## direction to aim at (SimWorld._resolve_interaction_target).
+func _beside(key_at: Vector3) -> Vector3:
+	var bounds: WalkableBounds = plan.make_bounds()
+	for offset: Vector3 in [Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)]:
+		if bounds.fits(key_at + offset, 0.45):
+			return key_at + offset
+	return key_at + Vector3(1, 0, 0)
+
+
+func _flat(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+# --- 6: THE EAST ROOM, ON THE ROUTE A PLAYER WALKS --------------------------------------------
+
+## Diagnosed after the human playtest (2026-10-16): the east room DOES activate on the normal
+## route -- the doorway trigger fires as the player steps in -- and its Fangs engage.
+func test_the_east_room_wakes_on_the_normal_route_to_its_key() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	assert_eq(_state(arena, &"E_EAST"), "dormant", "sanity: nothing east is awake from the hub")
+	_walk(arena, EAST_OUT, "east")
+	assert_eq(_state(arena, &"E_EAST"), "active", "the doorway wakes the room on the way to the key")
+	assert_true(_walk_to(arena, EAST_KEY_STAND, 0.3), "into the key bay")
+	var fangs_engaged: int = 0
+	for actor_id: int in arena.sim._encounter_roster[_id(&"E_EAST")]:
+		# Present, or underground mid-burrow -- never still deferred.
+		assert_true(not arena.sim._combat_absent.has(actor_id) or arena.sim._burrow.has(actor_id),
+			"actor %d never arrived" % actor_id)
+		if arena.sim._families.get(actor_id, &"") == &"fang":
+			fangs_engaged += int(String(arena.sim._ai_state.get(actor_id, "")) == "active")
+	assert_gt(fangs_engaged, 0, "a Fang is on the carrier by the time the key is in reach")
+
+
+## EVERY WATCHER JOINS THE FIGHT ON THE ROUTE A PLAYER WALKS (defect confirmed by human play,
+## 2026-10-16). Both Watchers used to stand 20+ units from the doorway that wakes the room --
+## beyond their 18-unit leash -- so activation engaged them and the leash dropped them back to
+## idle on the next tick, and from the key bay they were out of detection range: the room's
+## ranged pressure never arrived. Fixed in CONTENT (Option A): each Watcher now stands within its
+## leash of every point of the doorway and of the key bay. The leash rule (2026-09-08) is untouched.
+func test_the_east_watchers_engage_and_fire_on_the_normal_route() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	var watchers: Array = []
+	for actor_id: int in arena.sim._encounter_roster[_id(&"E_EAST")]:
+		if arena.sim._families.get(actor_id, &"") == &"watcher":
+			watchers.append(actor_id)
+	assert_eq(watchers.size(), 2, "sanity: the room fields two Watchers")
+	var shots: Dictionary = {}
+	var seen: Dictionary = {}
+	var route: Array[Vector3] = []
+	route.append_array(EAST_OUT)
+	route.append(EAST_KEY_STAND)
+	for waypoint: Vector3 in route:
+		for i in 1500:
+			var offset: Vector3 = waypoint - arena.sim.entities[arena.envoy.actor_id]
+			offset.y = 0.0
+			if offset.length() < 0.3:
+				break
+			arena._step([Command.new(arena.sim.tick_count, arena.envoy.actor_id, "move", {"direction": offset.normalized()})] as Array[Command], DT)
+			_count_shots(arena, watchers, shots, seen)
+	_lift(arena, &"K_EAST")
+	for i in 150:  # a carrier lingering in the bay
+		_idle(arena, 1)
+		_count_shots(arena, watchers, shots, seen)
+	for watcher_id: int in watchers:
+		assert_gt(int(shots.get(watcher_id, 0)), 0, "Watcher %d never fired on the way to the key" % watcher_id)
+		assert_eq(String(arena.sim._ai_state.get(watcher_id, "")), "active", "Watcher %d is still in the fight at the bay" % watcher_id)
+
+
+## AND THE ORDINARY LEASH STILL LETS THE ROOM BE WALKED AWAY FROM: the placement fix engages the
+## Watchers without making them follow a retreating player across the floor.
+func test_the_east_room_gives_up_when_the_player_retreats_to_the_hub() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	_walk(arena, EAST_OUT, "east")
+	assert_eq(_state(arena, &"E_EAST"), "active")
+	_walk(arena, EAST_HOME, "retreating")
+	_walk(arena, [Vector3(-8, 0, -40), Vector3(-12, 0, -50)] as Array[Vector3], "across the hub")
+	_idle(arena, 60)
+	for actor_id: int in arena.sim._encounter_roster[_id(&"E_EAST")]:
+		if arena.sim.health_of(actor_id) <= 0.0:
+			continue
+		assert_eq(String(arena.sim._ai_state.get(actor_id, "")), "idle", "actor %d is still chasing across the floor" % actor_id)
+
+
+func _count_shots(arena: Node3D, watchers: Array, shots: Dictionary, seen: Dictionary) -> void:
+	for projectile_id: int in arena.sim._projectiles:
+		if seen.has(projectile_id):
+			continue
+		seen[projectile_id] = true
+		var attacker: int = int(arena.sim._projectiles[projectile_id]["attacker_id"])
+		if attacker in watchers:
+			shots[attacker] = int(shots.get(attacker, 0)) + 1
 
 
 ## BOTH ORDERS, each walked end to end and each ending the expedition.
@@ -549,7 +952,7 @@ func _play_through(west_first: bool) -> void:
 	else:
 		_take_the_east_key(arena)
 		_take_the_west_key(arena)
-	assert_true(_open(arena, &"C_LOCK_W") and _open(arena, &"C_LOCK_E"), "both keys, in either order, open the gate")
+	assert_true(_open(arena, &"C_LOCK_W") and _open(arena, &"C_LOCK_E"), "both keys, in either order, open both gates")
 
 	_walk(arena, THROUGH_THE_GATE, "gate")
 	_walk(arena, TO_THE_PLATE, "connector")

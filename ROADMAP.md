@@ -46,6 +46,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P36 | Macro composition seam (families, missions, arcade) | HELD | Released only on a human Floor 2 PASS; topology vocabulary already homed in floor_layers.gd |
 | P38 | Pre-expedition ready room | PROPOSED — **direction captured 2026-10-10, NOT BUILT** | Party staging space before a descent; distinct from the Commons and from in-expedition safe terminals. Entry must stay separable from floor loading |
 | P39 | Foundry presentation pass + Floor 4 loot-room payoff | PROPOSED — **recorded 2026-10-15, NOT BUILT** | Architectural character for the Foundry after Stage 1 spatial PASS; the east loot room holds placeholder breakables awaiting a reward system |
+| P40 | Elevation as a floor-design tool | DIRECTION — **recorded 2026-10-16, NOT BUILT** | Human observation: Floor 4's elevation is minimal and near-cosmetic. Future floors use height for hierarchy, reveals and depth, in three capability tiers; no quota, no speculative height sim |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4102,6 +4103,10 @@ nor for more hazards, turrets or obstacles "to make it look fuller". It is a pre
 - Machinery and exposed computational substrate.
 - Lighting, controlled emissions and environmental depth.
 - Readable transitions between traversable ground and decorative structures.
+- APPARENT DEPTH round the approved playable floor (human, 2026-10-16: Floor 4 "still reads as
+  mostly flat despite the stepped entry"): monumental machinery, platforms and supports, chasms,
+  lower structures seen below the walkable edge, and background layers -- all non-walkable, all
+  tier A of P40, none of it a change to the accepted geometry.
 
 **Loot-room dependency, stated exactly:** Floor 4's optional east room (`P_EAST_POCKET`, restored
 2026-10-15) holds three ordinary breakables (`B_POCKET_A/B/C`) that drop NOTHING -- no reward,
@@ -4116,6 +4121,39 @@ tracers and bare-ground aim are drawn at the Envoy's own height on raised ground
 
 **Gate:** art/juice budget follows GAME-RULES §1.5 -- after Stage 2 (physical keys) and Stage 3
 (west ambush + hazard) are playtested, not before.
+
+### P40 — Elevation as a floor-design tool
+**Status:** DIRECTION, recorded 2026-10-16 after the Floor 4 Stage 2 playtest. NOT BUILT. Binds
+future authored floors and the eventual generator; does NOT reopen Floor 4's accepted geometry.
+
+**Observation:** Floor 4's elevation (a raised landing stepping down to the access) is minimal and
+almost entirely cosmetic; the floor reads as flat. A few small steps in an otherwise flat map is
+not using elevation.
+
+**What elevation should do, when a floor design justifies it:** spatial hierarchy and
+orientation; ascending and descending traversal; architectural reveals and destination framing;
+visible depth below and around the walkable floor; raised platforms, bridges, terraces and
+vertical structural mass; variety between floor archetypes. **No universal quota** -- a floor
+uses height because its design needs it, never to satisfy a count.
+
+**Current technical boundary (do not misrepresent it):** the sim is planar. `WalkablePatch`
+elevation is presentation-only; visual ramps and steps establish no authoritative height for
+combat, collision, line of sight or navigation (see the "Elevation is presentation only" note
+above, and P39's renderer debts).
+
+**Capability tiers -- name the tier before designing to it:**
+- **A. Visual verticality on planar navigation.** Achievable now: non-walkable structure above and
+  below the floor, chasms, lower layers, supports, raised decorative mass. Explore incrementally.
+- **B. Genuine traversable slopes** that keep actor grounding, targeting, camera and projectile
+  visuals consistent. Explore incrementally when a concrete floor needs one; the known
+  raised-ground renderer debts (P39) are the first cost.
+- **C. Height-dependent gameplay** -- anything needing sim, combat, collision, LOS or AI
+  navigation to know height. DEFERRED. Never implemented speculatively, and never faked: a
+  gameplay-significant height difference must not be represented by unsupported cosmetic geometry.
+
+**Good early candidate:** an elevated walkway above non-walkable machinery (tier A/B -- one
+walkable layer, depth beneath it). **Deferred until authoritative height is justified:**
+overlapping combat-capable upper and lower levels (tier C).
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

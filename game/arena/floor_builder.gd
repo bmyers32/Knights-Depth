@@ -67,6 +67,20 @@ const _BREAKABLE_COLOR: Color = Color(0.52, 0.40, 0.24)
 const _PLATE_COLOR: Color = Color(0.92, 0.62, 0.24)
 ## A LOCAL control you discovered: cooler, dimmer, thinner. Same mechanism, quieter voice.
 const _PLATE_MINOR_COLOR: Color = Color(0.40, 0.66, 0.78)
+## A KEY IS A THING YOU PICK UP: pale and bright, unlike anything you strike or stand on.
+const _KEY_COLOR: Color = Color(0.70, 0.95, 0.98)
+const _KEY_SIZE: Vector3 = Vector3(0.5, 0.5, 0.5)
+## A receiver is an empty socket until it is fed, then it glows -- the gate beside it carries the
+## primary read, exactly as with a switch.
+const _RECEIVER_COLOR: Color = Color(0.22, 0.42, 0.46)
+const _RECEIVER_FILLED_COLOR: Color = Color(0.55, 0.92, 0.95)
+const _RECEIVER_THICKNESS: float = 0.08
+## A socket's glow: dim while empty, bright when it is the press's target or has been filled.
+const _RECEIVER_IDLE_GLOW: float = 0.2
+const _RECEIVER_LIT_GLOW: float = 0.9
+## The focus ring: restrained by ruling -- a thin halo that says "this press lifts it", no more.
+const _FOCUS_COLOR: Color = Color(0.92, 0.96, 0.85)
+const _FOCUS_RING_RADIUS: float = 0.55
 const _PLATE_THICKNESS: float = 0.12
 const _PLATE_MINOR_THICKNESS: float = 0.06
 
@@ -76,6 +90,10 @@ var _hazards: Dictionary = {}        # pad_id -> spike-pad mesh
 var _gate_barriers: Dictionary = {}  # connection_id -> the sim's authoritative barrier line
 var _plates: Dictionary = {}         # trigger_id -> plate mesh
 var _breakables: Dictionary = {}     # breakable_id -> mesh
+var _carriables: Dictionary = {}     # carriable_id -> key mesh
+var _receivers: Dictionary = {}      # trigger_id -> socket mesh
+var _receiver_centres: Dictionary = {}  # trigger_id -> world centre, where a delivered key sits
+var _focus_ring: MeshInstance3D = null
 ## rect -> elevation, so an actor's transform can be lifted onto raised ground.
 var _elevation_rects: Array = []
 
@@ -104,6 +122,12 @@ func build(plan: FloorPlan, first_actor_id: int, gate_barriers: Dictionary = {})
 		_build_obstacle(obstacle)
 	for pad in plan.spike_pads:
 		_build_spike_pad(pad)
+	for carriable in plan.carriables:
+		_build_carriable(carriable)
+	for trigger in plan.triggers:
+		if trigger.kind == FloorLayers.TRIGGER_CARRIABLE_INSERTED:
+			_build_receiver(trigger)
+	_build_focus_ring()
 	# A PLATE IS A PICTURE OF A TRIGGER, exactly as a gate is a picture of a rule: the sim fires
 	# on occupancy whether or not this mesh exists. It is drawn from the trigger itself so the
 	# thing you stand on and the thing that fires can never be authored in two places. A DORMANT
@@ -146,6 +170,10 @@ func clear_floor() -> void:
 	_hazards.clear()
 	_plates.clear()
 	_breakables.clear()
+	_carriables.clear()
+	_receivers.clear()
+	_receiver_centres.clear()
+	_focus_ring = null
 	_elevation_rects.clear()
 	for child in get_children():
 		remove_child(child)
@@ -180,6 +208,45 @@ func set_plate_visible(trigger_id: int, shown: bool) -> void:
 func set_switch_visible(switch_id: int, shown: bool) -> void:
 	if _switches.has(switch_id):
 		_switches[switch_id].visible = shown
+
+
+## Hidden keys are built and hidden, never spawned later -- the dormant-plate rule.
+func set_carriable_visible(carriable_id: int, shown: bool) -> void:
+	if _carriables.has(carriable_id):
+		_carriables[carriable_id].visible = shown
+
+
+## Draws a key where the sim says it is: above its carrier, or where it fell.
+func place_carriable(carriable_id: int, at: Vector3) -> void:
+	if _carriables.has(carriable_id):
+		_carriables[carriable_id].position = at + Vector3(0.0, _KEY_SIZE.y * 0.5, 0.0)
+
+
+## A delivered key sits in its socket for good, and the socket lights.
+func seat_carriable(carriable_id: int, trigger_id: int) -> void:
+	if _carriables.has(carriable_id) and _receiver_centres.has(trigger_id):
+		place_carriable(carriable_id, _receiver_centres[trigger_id])
+	if _receivers.has(trigger_id):
+		var material: StandardMaterial3D = _receivers[trigger_id].material_override
+		material.albedo_color = _RECEIVER_FILLED_COLOR
+		material.emission = _RECEIVER_FILLED_COLOR
+		material.emission_energy_multiplier = _RECEIVER_LIT_GLOW
+
+
+## Shows what the next attack press would do, as the SIM decided it (arena reads
+## SimWorld.interaction_focus). A ring under a key that would be lifted; a brighter socket where
+## the carried key would be delivered; nothing otherwise. Never computes eligibility itself.
+func show_interaction_focus(kind: String, carriable_id: int, trigger_id: int) -> void:
+	if _focus_ring != null:
+		_focus_ring.visible = kind == "lift" and _carriables.has(carriable_id)
+		if _focus_ring.visible:
+			var at: Vector3 = _carriables[carriable_id].position
+			_focus_ring.position = Vector3(at.x, at.y - _KEY_SIZE.y * 0.5 + 0.03, at.z)
+	for receiver_id: int in _receivers:
+		var material: StandardMaterial3D = _receivers[receiver_id].material_override
+		if material.albedo_color == _RECEIVER_FILLED_COLOR:
+			continue
+		material.emission_energy_multiplier = _RECEIVER_LIT_GLOW if (kind == "insert" and receiver_id == trigger_id) else _RECEIVER_IDLE_GLOW
 
 
 func remove_breakable(breakable_id: int) -> void:
@@ -370,6 +437,47 @@ func _build_hit_switch(hit_switch: HitSwitchPlan) -> void:
 	mesh.material_override.emission_energy_multiplier = 0.6
 	mesh.visible = not hit_switch.starts_hidden
 	_switches[hit_switch.switch_id] = mesh
+
+
+func _build_carriable(carriable: CarriablePlan) -> void:
+	var mesh: MeshInstance3D = _add_box(_KEY_SIZE,
+		carriable.position + Vector3(0.0, elevation_at(carriable.position) + _KEY_SIZE.y * 0.5, 0.0), _KEY_COLOR)
+	mesh.material_override.emission_enabled = true
+	mesh.material_override.emission = _KEY_COLOR
+	mesh.material_override.emission_energy_multiplier = 0.7
+	mesh.visible = not carriable.starts_hidden
+	_carriables[carriable.carriable_id] = mesh
+
+
+## THE MESH IS EXACTLY THE RECEIVER'S REGION, for the plate's reason: delivery is decided by
+## standing in that region, so the picture of where to stand must be the region itself.
+func _build_receiver(trigger: FloorTrigger) -> void:
+	var region: Rect2 = trigger.region
+	var centre := Vector3(region.get_center().x, 0.0, region.get_center().y)
+	centre.y = elevation_at(centre)
+	var socket: MeshInstance3D = _add_box(Vector3(region.size.x, _RECEIVER_THICKNESS, region.size.y),
+		centre + Vector3(0.0, _RECEIVER_THICKNESS * 0.5, 0.0), _RECEIVER_COLOR)
+	socket.material_override.emission_enabled = true
+	socket.material_override.emission = _RECEIVER_COLOR
+	socket.material_override.emission_energy_multiplier = _RECEIVER_IDLE_GLOW
+	_receivers[trigger.trigger_id] = socket
+	_receiver_centres[trigger.trigger_id] = centre + Vector3(0.0, _RECEIVER_THICKNESS, 0.0)
+
+
+func _build_focus_ring() -> void:
+	var torus := TorusMesh.new()
+	torus.inner_radius = _FOCUS_RING_RADIUS * 0.82
+	torus.outer_radius = _FOCUS_RING_RADIUS
+	var material := StandardMaterial3D.new()
+	material.albedo_color = _FOCUS_COLOR
+	material.emission_enabled = true
+	material.emission = _FOCUS_COLOR
+	material.emission_energy_multiplier = 0.8
+	_focus_ring = MeshInstance3D.new()
+	_focus_ring.mesh = torus
+	_focus_ring.material_override = material
+	_focus_ring.visible = false
+	add_child(_focus_ring)
 
 
 ## DRAWN FROM ITS FOOTPRINT when it has one, so the mesh and the ground it occupies are the same

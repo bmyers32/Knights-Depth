@@ -37,3 +37,16 @@ extends Resource
 ## retune this geometry to fix an animation problem unless authoritative contact
 ## itself proves wrong. Method + trigger recorded at ROADMAP P28.
 @export var combat_radius: float = 0.45
+
+## CARRYING (Floor 4 Stage 2, 2026-10-16). A loose key is lifted by the primary attack press when
+## it is within `pickup_reach`, inside the aim cone of `pickup_cone_half_angle_degrees`, and not
+## under the Envoy's feet (`pickup_underfoot_radius`) -- SimWorld._resolve_interaction_target.
+## The cursor need not touch the key. Starting values borrow the sword's own swing (reach 2.0,
+## 60-degree half-angle, sword_burn_A.tres): "if you could hit it from here, you can pick it up".
+## The underfoot radius is the Envoy's body radius: a key that close has no direction.
+## CALIBRATION: the first values (reach 1.6, cursor within 0.8 of the key) were played 2026-10-16
+## and read as "overly precise cursor-on-key targeting"; these replace them, UNPLAYTESTED. Record
+## the observed feel and date here at the next mechanic playtest.
+@export var pickup_reach: float = 2.0
+@export var pickup_cone_half_angle_degrees: float = 60.0
+@export var pickup_underfoot_radius: float = 0.45

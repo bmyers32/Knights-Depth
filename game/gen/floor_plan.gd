@@ -44,6 +44,7 @@ var breakables: Array[BreakablePlan] = []
 var hit_switches: Array[HitSwitchPlan] = []
 var obstacles: Array[ObstaclePlan] = []
 var spike_pads: Array[SpikePadPlan] = []
+var carriables: Array[CarriablePlan] = []
 
 ## Where the Envoy arrives.
 var entry_point: Vector3 = Vector3.ZERO
@@ -452,6 +453,14 @@ func to_dict() -> Dictionary:
 			"damage_type": String(pad.damage_type),
 			"eligible_allegiances": pad.eligible_allegiances.map(func(a): return String(a)),
 		})
+	# ALWAYS SERIALIZED, EMPTY OR NOT (ruled 2026-10-16): the snapshot's shape must not depend on
+	# what a floor happens to contain, because the same plain data is what M3 hands a client.
+	var carriable_dicts: Array = []
+	for carriable in carriables:
+		carriable_dicts.append({
+			"carriable_id": carriable.carriable_id, "position": _point(carriable.position),
+			"starts_hidden": carriable.starts_hidden,
+		})
 	return {
 		"run_seed": run_seed, "floor_seed": floor_seed, "depth": depth,
 		"stratum_id": String(stratum_id), "place_label": place_label,
@@ -459,6 +468,7 @@ func to_dict() -> Dictionary:
 		"patches": patch_dicts, "connections": connection_dicts, "triggers": trigger_dicts,
 		"encounters": encounter_dicts, "breakables": breakable_dicts,
 		"hit_switches": switch_dicts, "obstacles": obstacle_dicts, "spike_pads": pad_dicts,
+		"carriables": carriable_dicts,
 		"entry_point": _point(entry_point), "end_marker": _point(end_marker),
 	}
 
@@ -502,6 +512,7 @@ func validate(body_radii: Dictionary = {}) -> void:
 	_reject_obstructed_controls()
 	_reject_high_durability_props()
 	_reject_props_off_floor()
+	_reject_unusable_receivers()
 
 
 ## A connection that does not name the patches it joins cannot be checked by anything above,
@@ -690,18 +701,47 @@ func _reject_props_off_floor() -> void:
 	for breakable in breakables:
 		var x: float = breakable.position.x
 		var z: float = breakable.position.z
-		var on_floor: bool = false
-		for patch in patches:
-			if WalkableBounds.contains(patch.rect, x, z):
-				on_floor = true
-		for connection in connections:
-			if WalkableBounds.contains(connection.aperture, x, z):
-				on_floor = true
-		if not on_floor:
+		if not _on_floor(x, z):
 			push_error(("FloorPlan: breakable %d stands at (%.1f, %.1f), which is on no patch and in no "
 				+ "aperture. A prop the player can target must stand on ground the player can reach -- "
 				+ "this is what a room moving out from under its own contents looks like.")
 				% [breakable.breakable_id, x, z])
+	# A KEY IS HELD TO THE SAME LAW, and more strictly: it must be liftable, so it may not stand
+	# inside permanent geometry either. Progression that needs it would otherwise be unwinnable.
+	for carriable in carriables:
+		var x: float = carriable.position.x
+		var z: float = carriable.position.z
+		if not _on_floor(x, z):
+			push_error("FloorPlan: carriable %d stands at (%.1f, %.1f), on no patch and in no aperture."
+				% [carriable.carriable_id, x, z])
+		for obstacle in obstacles:
+			if WalkableBounds.contains(obstacle.rect, x, z):
+				push_error("FloorPlan: carriable %d stands inside permanent obstacle %d and can never be lifted."
+					% [carriable.carriable_id, obstacle.obstacle_id])
+
+
+func _on_floor(x: float, z: float) -> bool:
+	for patch in patches:
+		if WalkableBounds.contains(patch.rect, x, z):
+			return true
+	for connection in connections:
+		if WalkableBounds.contains(connection.aperture, x, z):
+			return true
+	return false
+
+
+## A RECEIVER TAKES ONE DELIVERY AT A REGION YOU CAN STAND IN (2026-10-16). Delivery is decided by
+## the Envoy standing in the region, so a zero-area receiver could never be used; and filling is
+## recorded as the trigger having fired, so a receiver that could fire again would swallow a
+## second key while its gate was already open -- a key lost for nothing.
+func _reject_unusable_receivers() -> void:
+	for trigger in triggers:
+		if trigger.kind != FloorLayers.TRIGGER_CARRIABLE_INSERTED:
+			continue
+		if trigger.region.get_area() <= 0.0:
+			push_error("FloorPlan: receiver trigger %d has no region to stand in." % trigger.trigger_id)
+		if not trigger.once:
+			push_error("FloorPlan: receiver trigger %d is not `once`; a receiver accepts exactly one delivery." % trigger.trigger_id)
 
 
 ## EVERY ENVIRONMENTAL PROP BREAKS IN ONE HIT (ruled 2026-09-04).
