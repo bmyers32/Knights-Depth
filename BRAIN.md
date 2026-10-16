@@ -1162,3 +1162,20 @@ playtest validation.
    actually exercises each field. **Where else:** save files (M4), net snapshots (M3), any
    canonical form compared for equality.
 
+### An authored spawn must sit inside every range rule that can cancel its wake-up
+**Incident (M2, Floor 4 east room, 2026-10-16):** the room's trigger activated its roster
+correctly -- the encounter flag flipped, the enemies appeared, `_engage_on_activation` set them
+active -- yet both Watchers never fought. Each was authored 20+ units from the doorway, beyond its
+18-unit leash, which is measured from SPAWN; the leash dropped them to idle on the very next
+tick, and from the key bay they were outside detection. Every test that checked "the encounter
+activates" passed. The human first reported the room "felt good" (the Fangs carried it), then
+confirmed the Watchers never engaged. **Mechanism:** activation is one rule; leash and detection
+are other rules anchored elsewhere, evaluated every tick after it. A wake-up only lasts if the
+placement satisfies all of them for every point the player actually stands on the normal route.
+**Failure if ignored:** a room that is "active" on paper and silent in play -- invisible to flag
+tests, and easy to excuse because the rest of the room still fights. **Fix shape:** place content
+inside the envelope (here, within leash of the whole doorway AND the destination), and test
+ACQUISITION AND ATTACKS on the walked route, not the activation flag. Changing the global rule
+instead re-litigated a recorded ruling (2026-09-08) and was backed out. **Where else:** every
+ambush roster, wave spawns in large chambers, any future aggro/leash/LOS tuning -- re-check
+authored placements whenever a range rule moves.

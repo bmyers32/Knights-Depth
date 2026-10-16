@@ -5,94 +5,95 @@ Milestone: **2 — Procedural depths. IN PROGRESS.** Public M1 build: https://bm
 Shipped run (`arena.gd` itinerary `[1, 2, 3, 4]`): Floor 1 -> Floor 2 (308x150, Arena waves) -> Depth 3 Terminal
 (recovery plate) -> **Depth 4, the first Foundry floor** -> Expedition Complete. Floors are content: `AuthoredLayout`
 (.tres) -> `LayoutCompiler` -> `FloorPlan`; `DepthGenerator` picks the floor by DEPTH and the layout names its
-stratum (`AuthoredLayout.stratum_id`, default archive). Four goldens (depths 1-4), dated log in the recorder.
+stratum. Four goldens (depths 1-4), dated log in `tools/record_floor_plan_golden.gd`.
 
-## FOUNDRY FLOOR 4 — STAGE 1 DONE (`8f5cee4`). **HUMAN SPATIAL PASS 2026-10-15.**
-Layout `game/content/layouts/foundry_assembly.tres`; tests `tests/test_floor4.gd` (28). Topology follows
-`screenshots from human/map topology/Map reference 1.png` (gitignored, local only):
-raised landing + U + 3 stairs (elev 1.5 -> 0, PRESENTATION ONLY; sim is planar) -> lower access (optional Fang
-pair) -> HUB -> west loop (fight in bottom band; key at NW apex niche, revealed on clear; key opens lock W + a
-return door into the hub) / east room (Watchers, key in north bay behind cover; **optional loot room** off its
-east wall) -> two locks in series (W then E, vestibule between) -> write-sequence connector (the 3 pads that
-passed play 2026-10-13, unchanged) -> chamber (party plate, 3 waves) -> exit run.
-- Measured: west circuit 120.3 (target 115-130), east 67.7 out / 55.2 back.
-- **Keys are still hit-switch stand-ins.** Either order works because the locks are two closed connections.
-- **Loot room = 3 placeholder breakables that drop NOTHING.** No reward system exists (ROADMAP P39).
-- **Everything with a prop/control/fight stays at elevation 0** (test-enforced): FloorBuilder draws ordinary
-  breakables and obstacle wall faces at y=0 regardless of ground. Not fixed; P39.
-- Known: stairs read weakly; tracers/bare-ground aim sit at the Envoy's height on raised ground (code-read, not
-  captured); kited rosters rub walls on the way home (sim pursuit limit, not fixed).
-- Visual sparseness was ruled a PRESENTATION debt (P39), NOT a reason for more geometry, hazards or obstacles.
+## FOUNDRY FLOOR 4 — STAGE 2 DONE (`d5840e9`). **HUMAN MECHANIC PLAYTEST PASS 2026-10-16.**
+Layout `game/content/layouts/foundry_assembly.tres`; tests `tests/test_floor4.gd` (42), `tests/test_carriables.gd` (39).
+Stage 1 geometry (human spatial PASS 2026-10-15) is unchanged except: the west return shortcut connection was DELETED.
+- **Physical keys, one button.** The primary attack press resolves at most ONE action, decided in
+  `SimWorld._resolve_interaction_target` (pure; `interaction_focus()` is the same call, so the focus ring can't lie):
+  carrying + in an unfilled receiver -> insert · carrying elsewhere -> drop · empty-handed + key focused -> lift ·
+  else ordinary attack. No E, no `interact` Command.
+- **Focus = aim direction** (playtest revision): key within `pickup_reach` 2.0, inside a 60-deg half-angle cone,
+  straight path walkable; enemy under the cursor always wins; a key within `pickup_underfoot_radius` 0.45 is NEVER
+  focused (step off, aim back) — this prevents drop/lift cycling. Values in `envoy_stats.gd`, felt good in play.
+- **Carrying:** no attack, block or bump (lift lowers a held shield); weapon switch allowed; full speed. A damaging
+  hit (damage > 0) drops the key at the pre-knockback position; blocked/i-frame/zero hits and Burn ticks do not;
+  death from any cause releases it. No compensating i-frames or auto-retrieval.
+- **Gates in series:** Gate 1's receiver (`R_GATE_1`) in the hub, Gate 2's (`R_GATE_2`) in the vestibule behind
+  Gate 1. Either key fits either receiver; the first delivered always opens Gate 1. Only closing effect on the floor
+  is the party plate, beyond both gates — no gate can strand a key (test-proven).
+- **West:** key `K_WEST` waits visibly at the far east end of the top band (seen from the hub across the void). Its
+  FIRST lift (`T_WEST_LIFT`, kind `carriable_lifted`, once) wakes optional `E_WEST_RETURN` (2 Fang + Ooze) on the way
+  back; the only way home is the way in. The west ambush (planned as Stage 3) was BUILT AND PLAYTESTED here.
+- **East:** Watchers re-placed to (53,-50)/(50,-46) — inside their 18-unit leash of the whole doorway AND the key bay
+  (they used to be leashed off the tick after activation). Leash rule 2026-09-08 untouched. Human-confirmed.
+- Loot room = 3 placeholder breakables that drop NOTHING (P39). `reveal_carriable` / `starts_hidden` exist but no
+  floor uses them now (kept: tiny, mirrors `reveal_switch`).
 
-## Next action — Stage 2: physical keys. **NOT AUTHORIZED until the human confirms two things:**
-1. **The seven interaction defaults** (reviewer-supported, human-unconfirmed): (1) shield block allowed while
-   carrying, shield bump not; (2) no drop on damage; (3) E to insert; (4) either key fits either socket;
-   (5) pickup rejected during active/executing attacks; (6) weapon switch allowed; (7) no speed penalty.
-   Carrying disables attacking (`attack_rejected` reason "carrying").
-2. **Snapshot rebaseline:** `to_dict()` always serializes `carriables` (never conditionally omitted). Floors 1-3
-   goldens each gain exactly `\t"carriables": [],` between "breakables" and "connections" (d1 before line 22,
-   d2 before 549, d3 before 4). Explicit dated note. Diff already shown to the human.
-Proposed shape (review before building): restore a narrow `interact` Command; `CarriablePlan{carriable_id,
-position}`; reach as an Envoy content tunable; sockets are FloorTriggers with condition `carriable_inserted`
-(+ `carriable_lifted` for Stage 3); events carriable_lifted/dropped/inserted, interact_rejected. Attack gate
-at the top of `_apply_attack` (`sim_world.gd` ~1953) beside `combat_absent` — buffered presses, pending holds and
-the shield bump are SEPARATE paths and each needs the gate. `STATE_SCOPES` + `test_floor_scope` must cover it.
-**Recoverability is proven per floor by tests, NOT a global rule:** Floor 4 delivers on an open-only route.
-Prove: keys start reachable; drop/recover on both routes; inserted keys cannot be lost; death/R-reload consistent;
-no closed gate can strand a key. Then a human mechanic playtest.
-
-**Stage 3 (separate, unimplemented):** west key-lift ambush (finite, existing encounter activation, no spawner;
-test fairness; if no fair placement, propose the smallest arrival delay) + ONE localized west hazard. Then
-playtest the carrying return. **Stage 4:** evaluate optional discovery (only with a real payoff). **Stage 5:**
-full-floor verdict, then art (P39). Not authorized anywhere: turrets, throwing, chemistry, spawners, new enemy
-families, reward infrastructure, authoritative height, global halo, canon edits.
+## Next action — P41: timed-hazard pre-activation telegraph (human requirement). **Propose first, then build.**
+Do NOT start it before the human approves the proposal. Read ROADMAP **P41** (binding constraints). Smallest shape:
+FloorBuilder pad visuals read `SimWorld.spike_pad_ticks_until_active(pad_id)` each tick (`_step`, after the
+sim tick) and map ticks-remaining -> warning phase: safe / warning (lead ~45-60 ticks, provisional) / active
+(must equal the authoritative active state exactly). Pulse accelerates, bounded rate, contrast + pattern change,
+not colour alone. Lead + pulse bounds as named presentation constants (or content). No new sim state, Event or
+timer; no golden change; the 3-band connector warns per-band by its own phase. Tests in
+`test_presentation_contracts.gd` (phase mapping, active-coincides-with-sim, per-band independence).
+Then a human playtest of readability. **Only after that:** the deferred optional west-wing spike section.
+After that: Stage 4 (optional discovery, only with a real payoff) · Stage 5 full-floor verdict, then art (P39).
+Not authorized: turrets, throwing, spawners, new enemy families, reward infrastructure, authoritative height,
+new hazard families, canon edits, Foundry art pass.
 
 ## Accepted partials / flags
+- **M3 (P42):** the attack Command's `aim` LENGTH is now behavioural (aim point decides enemy-vs-key). Authoritative
+  input/replay must carry the full vector, never a normalized direction.
+- **Elevation (P40):** Floor 4's elevation is near-cosmetic by human observation; future floors name tier A/B/C
+  before designing height. Sim stays planar; no speculative height system. P39 holds the apparent-depth list.
 - Itinerary is an `@export` default on Arena; `_TERMINAL_DEPTH = 3` / `_FOUNDRY_DEPTH = 4` in `depth_generator.gd`.
-  Do NOT build a layout table/framework (ruled 2026-10-12; Foundry showed none is needed).
-- `SimWorld.spike_pad_ticks_until_active` is a read-only countdown; no presentation reads it yet.
+  Do NOT build a layout table/framework (ruled 2026-10-12).
 - Terminal room is bland greybox (debt). M3 flag: a floor change is a driver call, not an Event.
-- GAME-RULES §6.3 (Foundry's "one world rule") remains an OPEN M2 question; the Foundry is a themed stratum.
-- Two untracked briefing files at repo root (`KNIGHTS-DEPTH-EXPLORATION-*`) are the human's; never commit them.
+- GAME-RULES §6.3 (Foundry's "one world rule") remains an OPEN M2 question.
+- Two untracked files at repo root (`KNIGHTS-DEPTH-EXPLORATION-*`) are the human's; NEVER commit them.
 
 ## Open items / live fences
 - **NUMERIC FENCE (M1).** `close_frustration_ticks = 90` · Survey package · `engagement_delay_ticks = 10` · wand
   `flinch_capability = none` · all M1 HP/flinch values · `vulnerable_start_tick` FROZEN.
+- **LEASH RULE (2026-09-08) is law:** activation engages; the ordinary spawn-anchored leash may still end it. Fix
+  silent rosters by PLACEMENT inside the envelope (BRAIN), never by an "active rooms never disengage" exception.
 - **SEED HONESTY.** Seeds do NOT vary authored geometry; the plan says `authored_layout`, the HUD prints it.
-- **`interact` was retired at zero consumers** (`envoy.gd:83-85`); E is still bound in `project.godot`. Stage 2 is
-  its first real consumer: restore only the narrow surface needed.
 - **Enemies are immune to environmental hazards.** Sim state only via Commands. Tunables in content.
 - **Closable connections need DISJOINT patches; an aperture must overlap both.** Pursuit routes through named
-  apertures — any join an enemy chases through must be a named connection. Ledge vs wall on one span = error.
-- **Free-standing masses <= 3x3** (`tools/measure_block_pursuit.gd`: an Ooze pins on 4).
-- **AMBIENT TERRITORIES CONVEX** · **ALL_ACTIVE_ENVOYS_OCCUPY_REGION is ONE condition, two consumers** ·
-  `fits(point, radius)` against the UNION, never per-rect shrink · triggers use INCLUSIVE `contains`.
+  apertures. Ledge vs wall on one span = error. **Free-standing masses <= 3x3** (an Ooze pins on 4).
+- **AMBIENT TERRITORIES CONVEX** · `fits(point, radius)` against the UNION · triggers use INCLUSIVE `contains`.
 - **If progression requires a capability, the floor must guarantee access to it.**
 - **Still out (M2 gate):** rest-floor gate · elevator + next-floor preview · stratum-driven pools/weights ·
   depth-scaled defence · typed_damage_ramp · minimap · netcode spike · friend playtest · playtest gate · itch
-  build. **ROADMAP prune DUE at M2 close** (Index lacks a P37 row). Carried from M1: three §3 rules want a human edit · P14 · P16 · 5.10.
+  build. **ROADMAP prune DUE at M2 close** (Index lacks a P37 row). Carried from M1: three §3 rules want a human
+  edit · P14 · P16 · 5.10.
 
 ## Traps this repo has actually sprung
 - **GUT ignores `-gtest=<path>` and runs the WHOLE suite.** Use `-gselect=test_floor4`; check the reported count.
 - **A local itinerary change breaks the suite.** The human sets `[4]` to play Floor 4 directly; ~11 expedition
-  tests fail under it. Run the suite with `[1, 2, 3, 4]` and restore theirs; it must be `[1,2,3,4]` at commit.
-- **Re-run the `entities[]` audit before any displacement mechanic** (`grep -n "entities\[" game/sim/sim_world.gd`).
-- **A flat zero can be an IDLE enemy, not a stuck one.** Fixed window; confirm the mechanism fired.
+  tests fail under it. Run the suite with `[1, 2, 3, 4]`; it must be `[1,2,3,4]` at commit (re-check right before).
+- **Walk-to helpers stop short.** A lift test standing 0.3 short can land outside reach, or ON a dropped key
+  (underfoot = never focused): use `_beside(key_at)` in test_floor4.
+- **Bash heredocs choke on large inline Python** — write the script to the scratchpad and run `python -I <file>`.
+- **A flag test is not an engagement test** — assert acquisition/attacks on the walked route (BRAIN).
 - **`Rect2.has_point` is EXCLUSIVE on the far edge; `WalkableBounds.contains` is INCLUSIVE.**
 - **Drive the SHIPPED weapon the shipped way** (pressed/released), and **verify BOTH anchors of a splice**.
 - **Presentation is test-exempt, so it is the blind spot** — `test_presentation_contracts.gd`.
-- **Never re-record `ai_baseline_pre_p29.json` or the P17 Fang baseline.** A scanner never proven to fail is not a
-  scanner. A `-s` tool compiles before autoloads: `load()` anything touching ContentDB.
+- **Never re-record `ai_baseline_pre_p29.json` or the P17 Fang baseline.** A `-s` tool compiles before autoloads.
 - **Never round-trip source through PowerShell Get-Content/Set-Content** (UTF-8 corruption).
 - A Bash `cd` into a subfolder breaks the `scripts/guard.py` pre-edit hook (relative path) — cd back to root.
 
 ## Commands
-- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (930, ~60 s)
+- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (984, ~90 s)
 - One file: add `-gselect=test_floor4`. Headless sim CI: `-gselect=test_sim_world
   -gunit_test_name=test_ticks_1000_times_headless`. New `class_name`? `--headless --import` first.
 - Boot check: `--headless --quit-after 120`. Guard: `python scripts/guard.py --scan` (quote counts + RESULT).
 - Goldens: `-s tools/record_floor_plan_golden.gd` (all 4 depths; deliberate re-baseline only, dated note, then
   `git diff tests/fixtures` must show only the intended depth).
+- Mutation check pattern: scratchpad `mutate.py` (disable one guard, run its suite, restore, `cmp` the file).
 
 ## Concepts introduced (learning ledger)
 Sim tick vs frame · Command/Event plain-data boundary · service-locator autoload · seeded RNG streams · fixed
@@ -103,6 +104,7 @@ placement-refuses vs displacement-clamps · overlapping rects as connectivity ·
 body fit · edge-triggered occupancy · retiring vocabulary at zero consumers · Resource vs RefCounted · authored
 data vs compiled identity · layer-scoped key resolution · complement invariants · mutation-based coverage ·
 git index vs working tree · fail-closed vs fail-open · `core.hooksPath` · run state vs floor state ·
-resolve-after-batch · phase order inside a tick · standing rule vs one-shot effect · **presentation-only
-elevation over a planar sim** · **apertures as the pursuit graph** · **content follows the layout, not the depth
-table** · **schema rebaseline as a shown diff**.
+resolve-after-batch · phase order inside a tick · standing rule vs one-shot effect · presentation-only
+elevation over a planar sim · apertures as the pursuit graph · content follows the layout, not the depth
+table · schema rebaseline as a shown diff · **aim cone as soft lock-on** · **one query for press and indicator**
+· **mutation-proved guards** · **placement inside the leash envelope**.

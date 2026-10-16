@@ -47,6 +47,8 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P38 | Pre-expedition ready room | PROPOSED — **direction captured 2026-10-10, NOT BUILT** | Party staging space before a descent; distinct from the Commons and from in-expedition safe terminals. Entry must stay separable from floor loading |
 | P39 | Foundry presentation pass + Floor 4 loot-room payoff | PROPOSED — **recorded 2026-10-15, NOT BUILT** | Architectural character for the Foundry after Stage 1 spatial PASS; the east loot room holds placeholder breakables awaiting a reward system |
 | P40 | Elevation as a floor-design tool | DIRECTION — **recorded 2026-10-16, NOT BUILT** | Human observation: Floor 4's elevation is minimal and near-cosmetic. Future floors use height for hierarchy, reveals and depth, in three capability tiers; no quota, no speculative height sim |
+| P41 | Timed-hazard pre-activation telegraph | **NEXT SLICE — human requirement 2026-10-16, NOT BUILT** | Spike pads warn before they write: slow pulse accelerating to activation, derived from authoritative ticks; gates the deferred west-wing hazard |
+| P42 | M3 note: attack `aim` magnitude is behavioural | CONSTRAINT — **recorded 2026-10-16** | Since Floor 4 Stage 2 the sim reads the aim vector's LENGTH (cursor point), not just its direction. Authoritative input/replay must carry it unquantized |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4119,8 +4121,10 @@ breakables and obstacle wall faces at elevation 0 whatever the ground beneath th
 Floor 4 raises only its bare landing. Also open: the 0.375 stair risers read as one strip;
 tracers and bare-ground aim are drawn at the Envoy's own height on raised ground.
 
-**Gate:** art/juice budget follows GAME-RULES §1.5 -- after Stage 2 (physical keys) and Stage 3
-(west ambush + hazard) are playtested, not before.
+**Gate:** art/juice budget follows GAME-RULES §1.5. Stage 2 (physical keys AND the west key-lift
+return ambush, pulled forward from Stage 3) was human-playtested PASS 2026-10-16 (`d5840e9`).
+Still before art: the P41 hazard telegraph, then the deferred west hazard, then the full-floor
+verdict.
 
 ### P40 — Elevation as a floor-design tool
 **Status:** DIRECTION, recorded 2026-10-16 after the Floor 4 Stage 2 playtest. NOT BUILT. Binds
@@ -4154,6 +4158,34 @@ above, and P39's renderer debts).
 **Good early candidate:** an elevated walkway above non-walkable machinery (tier A/B -- one
 walkable layer, depth beneath it). **Deferred until authoritative height is justified:**
 overlapping combat-capable upper and lower levels (tier C).
+
+### P41 — Timed-hazard pre-activation telegraph
+**Status:** NEXT SLICE, human requirement recorded 2026-10-16. NOT BUILT. Must be implemented and
+playtested BEFORE the optional extra west-wing spike section is added.
+
+**Requirement:** periodic spike pads (and similar timed hazards later) show a visible warning
+before they activate: a slow pulse that accelerates as activation approaches. Safe, warning and
+active states must be distinguishable by more than colour alone (pulse rate, contrast, pattern),
+with a bounded rate -- no excessive strobing. Provisional lead ~45-60 ticks at 30 Hz, to playtest.
+
+**Binding constraints:**
+- DERIVED, PRESENTATION-ONLY: drive it from `SimWorld.spike_pad_ticks_until_active` (the existing
+  read-only countdown) each tick -- never an independent presentation clock that can drift.
+  No new authoritative hazard state, Event or timer.
+- The active visual must coincide exactly with the authoritative active state.
+- Each band of Floor 4's travelling write sequence warns on its own phase. Sequence, damage,
+  timing values and player-only eligibility are unchanged; no rebaseline for presentation.
+- Reuse the timing principle, not one universal look: later hazards may present differently.
+- Out: enemy-hazard rule changes, new hazard families, turrets, art pass.
+
+### P42 — M3 note: attack `aim` magnitude is behavioural
+**Status:** CONSTRAINT recorded 2026-10-16 (Floor 4 Stage 2, `d5840e9`).
+The `attack` Command's `aim` param has always been `cursor_point - envoy_position`, but until
+Stage 2 the sim used only its direction. Now its LENGTH matters too: the aim point
+(`position + aim`) decides "enemy under the cursor -> attack, never a key"
+(`SimWorld._resolve_interaction_target`). The Command SHAPE is unchanged. M3 consequence: any
+authoritative input path, compression, replay or re-simulation must carry the full vector --
+normalizing or quantizing aim to a direction would silently change which presses lift a key.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
