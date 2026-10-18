@@ -47,8 +47,10 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P38 | Pre-expedition ready room | PROPOSED — **direction captured 2026-10-10, NOT BUILT** | Party staging space before a descent; distinct from the Commons and from in-expedition safe terminals. Entry must stay separable from floor loading |
 | P39 | Foundry presentation pass + Floor 4 loot-room payoff | PROPOSED — **recorded 2026-10-15, NOT BUILT** | Architectural character for the Foundry after Stage 1 spatial PASS; the east loot room holds placeholder breakables awaiting a reward system |
 | P40 | Elevation as a floor-design tool | DIRECTION — **recorded 2026-10-16, NOT BUILT** | Human observation: Floor 4's elevation is minimal and near-cosmetic. Future floors use height for hierarchy, reveals and depth, in three capability tiers; no quota, no speculative height sim |
-| P41 | Timed-hazard pre-activation telegraph | **NEXT SLICE — human requirement 2026-10-16, NOT BUILT** | Spike pads warn before they write: slow pulse accelerating to activation, derived from authoritative ticks; gates the deferred west-wing hazard |
+| P41 | Timed-hazard pre-activation telegraph | **SHIPPED 2026-10-18 (`315ed5a`) — human gameplay PASS** | Spike pads warn before they write (50-tick lead, accelerating pulse, primed height), derived from the sim countdown; Floor 4 corridor re-authored as four alternating stepping stones |
 | P42 | M3 note: attack `aim` magnitude is behavioural | CONSTRAINT — **recorded 2026-10-16** | Since Floor 4 Stage 2 the sim reads the aim vector's LENGTH (cursor point), not just its direction. Authoritative input/replay must carry it unquantized |
+| P43 | East-room far Fang: lane-dependent engagement | OBSERVATION — **recorded 2026-10-18, accepted non-blocking** | After the doorway fix (`834940d`) the Fang at (56,-40) does not join a north-wall entry (wakes 19.6 u off, past its 18 u leash). Encounter-tuning note only |
+| P44 | Envoy takes spike damage every active tick | OBSERVATION — **recorded 2026-10-18, NOT RULED** | The Envoy has 0 hit i-frames, so a pad deals 10 per active tick (300 per 30-tick window vs 30 HP). Predates P41; needs a ruling, not a silent fix |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4160,8 +4162,16 @@ walkable layer, depth beneath it). **Deferred until authoritative height is just
 overlapping combat-capable upper and lower levels (tier C).
 
 ### P41 — Timed-hazard pre-activation telegraph
-**Status:** NEXT SLICE, human requirement recorded 2026-10-16. NOT BUILT. Must be implemented and
-playtested BEFORE the optional extra west-wing spike section is added.
+**Status:** SHIPPED 2026-10-18 (`315ed5a`), human gameplay PASS (traversal and warning
+readability). As built: `FloorBuilder.hazard_warning_look()` maps ticks-until-active to
+inactive/early/urgent/active/unknown; 50-tick lead; the pulse eases from a 40-tick period to an
+11-tick period over warning ticks 50..30, holds for the final 30, and peaks on the activation
+tick; the final 15 ticks also raise the pad to primed height. `Arena._project_hazards()` paints
+state(N+1) after each tick, so the active look is exactly the tick damage resolves under. The
+Floor 4 corridor was re-authored by human design to four contiguous 5-unit pads in two
+alternating groups (safe 130 / active 30) -- a deliberate golden re-record, superseding the
+"unchanged sequence" constraint below. The deferred west-wing spike section is now unblocked
+but still needs its own approval.
 
 **Requirement:** periodic spike pads (and similar timed hazards later) show a visible warning
 before they activate: a slow pulse that accelerates as activation approaches. Safe, warning and
@@ -4186,6 +4196,25 @@ Stage 2 the sim used only its direction. Now its LENGTH matters too: the aim poi
 (`SimWorld._resolve_interaction_target`). The Command SHAPE is unchanged. M3 consequence: any
 authoritative input path, compression, replay or re-simulation must carry the full vector --
 normalizing or quantizing aim to a direction would silently change which presses lift a key.
+
+### P43 — East-room far Fang: lane-dependent engagement
+**Status:** OBSERVATION recorded 2026-10-18; human-accepted as non-blocking. Not a Stage 2 or
+P41 failure. Do not move the Fang or touch the leash without a ruling.
+After `834940d` widened `T_EAST` to the room's whole west column, a north-wall (left) entry
+wakes the room at about (40,-51.4). The far Fang at (56,-40) is then 19.6 u away, past its 18 u
+spawn-anchored leash, and the key route never comes within its 10 u detection, so it sits that
+lane out. On the centre route it engages briefly and has leashed back by the time the player is
+in the bay (pre-existing). Both Watchers and the near Fang engage on every lane (test-proven).
+If the room ever feels thin from the north wall, the fix shape is PLACEMENT inside the envelope
+(BRAIN), never a leash exception.
+
+### P44 — Envoy takes spike damage every active tick
+**Status:** OBSERVATION recorded 2026-10-18 (found while proving P41 tick alignment). NOT RULED.
+The Envoy registers with 0 hit i-frames (`arena.gd`, `register_combatant(..., 0, ...)`), so a
+spike pad deals its 10 damage on every active tick: up to 300 over one 30-tick window against
+30 HP. In practice a pad that fires underfoot is lethal unless the player steps off at once.
+P41's warning makes that readable, and the corridor passed play under it, but whether it is
+intended (vs. a per-pad hit cooldown or i-frames) is a design ruling, not a silent fix.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

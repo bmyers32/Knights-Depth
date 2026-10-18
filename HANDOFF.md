@@ -7,40 +7,36 @@ Shipped run (`arena.gd` itinerary `[1, 2, 3, 4]`): Floor 1 -> Floor 2 (308x150, 
 (.tres) -> `LayoutCompiler` -> `FloorPlan`; `DepthGenerator` picks the floor by DEPTH and the layout names its
 stratum. Four goldens (depths 1-4), dated log in `tools/record_floor_plan_golden.gd`.
 
-## FOUNDRY FLOOR 4 — STAGE 2 DONE (`d5840e9`). **HUMAN MECHANIC PLAYTEST PASS 2026-10-16.**
-Layout `game/content/layouts/foundry_assembly.tres`; tests `tests/test_floor4.gd` (42), `tests/test_carriables.gd` (39).
-Stage 1 geometry (human spatial PASS 2026-10-15) is unchanged except: the west return shortcut connection was DELETED.
-- **Physical keys, one button.** The primary attack press resolves at most ONE action, decided in
-  `SimWorld._resolve_interaction_target` (pure; `interaction_focus()` is the same call, so the focus ring can't lie):
-  carrying + in an unfilled receiver -> insert · carrying elsewhere -> drop · empty-handed + key focused -> lift ·
-  else ordinary attack. No E, no `interact` Command.
-- **Focus = aim direction** (playtest revision): key within `pickup_reach` 2.0, inside a 60-deg half-angle cone,
-  straight path walkable; enemy under the cursor always wins; a key within `pickup_underfoot_radius` 0.45 is NEVER
-  focused (step off, aim back) — this prevents drop/lift cycling. Values in `envoy_stats.gd`, felt good in play.
-- **Carrying:** no attack, block or bump (lift lowers a held shield); weapon switch allowed; full speed. A damaging
-  hit (damage > 0) drops the key at the pre-knockback position; blocked/i-frame/zero hits and Burn ticks do not;
-  death from any cause releases it. No compensating i-frames or auto-retrieval.
-- **Gates in series:** Gate 1's receiver (`R_GATE_1`) in the hub, Gate 2's (`R_GATE_2`) in the vestibule behind
-  Gate 1. Either key fits either receiver; the first delivered always opens Gate 1. Only closing effect on the floor
-  is the party plate, beyond both gates — no gate can strand a key (test-proven).
-- **West:** key `K_WEST` waits visibly at the far east end of the top band (seen from the hub across the void). Its
-  FIRST lift (`T_WEST_LIFT`, kind `carriable_lifted`, once) wakes optional `E_WEST_RETURN` (2 Fang + Ooze) on the way
-  back; the only way home is the way in. The west ambush (planned as Stage 3) was BUILT AND PLAYTESTED here.
-- **East:** Watchers re-placed to (53,-50)/(50,-46) — inside their 18-unit leash of the whole doorway AND the key bay
-  (they used to be leashed off the tick after activation). Leash rule 2026-09-08 untouched. Human-confirmed.
-- Loot room = 3 placeholder breakables that drop NOTHING (P39). `reveal_carriable` / `starts_hidden` exist but no
-  floor uses them now (kept: tiny, mirrors `reveal_switch`).
+## FOUNDRY FLOOR 4 — STAGE 2 (`d5840e9`) + P41 (`315ed5a`) + EAST DOORWAY FIX (`834940d`). **ALL HUMAN PASS.**
+Layout `game/content/layouts/foundry_assembly.tres`; tests `tests/test_floor4.gd` (48), `tests/test_carriables.gd`
+(39), P41 contracts in `tests/test_presentation_contracts.gd`.
+- **Physical keys, one button.** Primary attack press resolves at most ONE action in
+  `SimWorld._resolve_interaction_target` (pure; `interaction_focus()` is the same call): carrying + in an unfilled
+  receiver -> insert · carrying elsewhere -> drop · empty-handed + key focused -> lift · else attack.
+- **Focus = aim direction:** key within `pickup_reach` 2.0, 60-deg half-angle cone, walkable line; enemy under the
+  cursor wins; a key within `pickup_underfoot_radius` 0.45 is never focused. Values in `envoy_stats.gd`.
+- **Carrying:** no attack/block/bump; weapon switch allowed; full speed. A damaging hit drops the key at the
+  pre-knockback position; death releases it. Gates in series (`R_GATE_1` hub, `R_GATE_2` vestibule); either key fits
+  either receiver; no gate can strand a key.
+- **West:** `K_WEST` at the top band's east end; its first lift wakes `E_WEST_RETURN` on the way back.
+- **East:** Watchers at (53,-50)/(50,-46), inside leash of doorway + bay. `T_EAST` is now `Rect2(40,-52,6,20)`, the
+  room's whole west column — the old doorway-width rect let a wall-hugger reach the key with the room asleep.
+  Left/centre/right lanes test-proven. Far Fang (56,-40) sits out a north-wall entry (ROADMAP **P43**, accepted).
+- **P41 spike-pad warning (presentation only).** `FloorBuilder.hazard_warning_look(ticks)` -> inactive / early /
+  urgent / active / unknown; lead 50, primed height for the last 15, pulse 40-tick period easing to 11 over ticks
+  50..30 then held 30, peak on activation. `Arena._project_hazards()` paints after every `_step` and at floor load
+  from `sim.spike_pad_ticks_until_active` = state(N+1), exactly the tick damage resolves under. The
+  `hazard_phase_changed` event no longer paints. Unknown pad -> `push_error`. All constants in floor_builder.gd.
+- **North corridor:** four contiguous 5-unit pads x 18/23/28/33, groups {0,2}/{1,3}, safe 130 / active 30 /
+  offsets 130/50/130/50: the pad ahead retracts as the pad underfoot starts warning. Envoy 0 hit i-frames -> a pad
+  deals 10 per active tick (ROADMAP **P44**, not ruled).
+- Loot room = 3 placeholder breakables that drop NOTHING (P39). `reveal_carriable` / `starts_hidden` unused, kept.
 
-## Next action — P41: timed-hazard pre-activation telegraph (human requirement). **Propose first, then build.**
-Do NOT start it before the human approves the proposal. Read ROADMAP **P41** (binding constraints). Smallest shape:
-FloorBuilder pad visuals read `SimWorld.spike_pad_ticks_until_active(pad_id)` each tick (`_step`, after the
-sim tick) and map ticks-remaining -> warning phase: safe / warning (lead ~45-60 ticks, provisional) / active
-(must equal the authoritative active state exactly). Pulse accelerates, bounded rate, contrast + pattern change,
-not colour alone. Lead + pulse bounds as named presentation constants (or content). No new sim state, Event or
-timer; no golden change; the 3-band connector warns per-band by its own phase. Tests in
-`test_presentation_contracts.gd` (phase mapping, active-coincides-with-sim, per-band independence).
-Then a human playtest of readability. **Only after that:** the deferred optional west-wing spike section.
+## Next action — the deferred optional west-wing spike section. **Propose first, then build.**
+P41 unblocked it; it still needs human approval of a proposal before any code. Reuse P41's timing principle and
+the stepping-stone relation (pad k+1 retracts when pad k starts warning: stagger = warning + active ticks).
 After that: Stage 4 (optional discovery, only with a real payoff) · Stage 5 full-floor verdict, then art (P39).
+Rulings waiting (no code until ruled): P44 hazard damage per tick · P43 far Fang (accepted as is).
 Not authorized: turrets, throwing, spawners, new enemy families, reward infrastructure, authoritative height,
 new hazard families, canon edits, Foundry art pass.
 
@@ -87,7 +83,7 @@ new hazard families, canon edits, Foundry art pass.
 - A Bash `cd` into a subfolder breaks the `scripts/guard.py` pre-edit hook (relative path) — cd back to root.
 
 ## Commands
-- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (984, ~90 s)
+- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (997, ~90 s)
 - One file: add `-gselect=test_floor4`. Headless sim CI: `-gselect=test_sim_world
   -gunit_test_name=test_ticks_1000_times_headless`. New `class_name`? `--headless --import` first.
 - Boot check: `--headless --quit-after 120`. Guard: `python scripts/guard.py --scan` (quote counts + RESULT).
@@ -106,5 +102,6 @@ data vs compiled identity · layer-scoped key resolution · complement invariant
 git index vs working tree · fail-closed vs fail-open · `core.hooksPath` · run state vs floor state ·
 resolve-after-batch · phase order inside a tick · standing rule vs one-shot effect · presentation-only
 elevation over a planar sim · apertures as the pursuit graph · content follows the layout, not the depth
-table · schema rebaseline as a shown diff · **aim cone as soft lock-on** · **one query for press and indicator**
-· **mutation-proved guards** · **placement inside the leash envelope**.
+table · schema rebaseline as a shown diff · aim cone as soft lock-on · one query for press and indicator
+· mutation-proved guards · placement inside the leash envelope · **triggers as cuts, not doorways** · **paint state(N+1), not the
+resolved tick** · **integrated pulse phase anchored at activation**.

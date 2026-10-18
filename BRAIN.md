@@ -1179,3 +1179,31 @@ ACQUISITION AND ATTACKS on the walked route, not the activation flag. Changing t
 instead re-litigated a recorded ruling (2026-09-08) and was backed out. **Where else:** every
 ambush roster, wave spawns in large chambers, any future aggro/leash/LOS tuning -- re-check
 authored placements whenever a range rule moves.
+
+### A region trigger must cut the space, not span the doorway
+**Incident (M2, Floor 4 east room, 2026-10-17):** `T_EAST` covered the doorway's width exactly,
+and every walked test entered through the middle of it. The room behind the doorway is wider than
+the doorway, so a player hugging the wall turned into the room's edge strip and walked round the
+trigger to the key with the encounter still dormant. Found only by a human taking the "wrong" line.
+**Mechanism:** a trigger guarantees "every entry wakes it" only if it is a CUT -- every walkable
+path from outside to inside crosses it. A rect sized to the aperture is a cut only when the inside
+is no wider than the aperture at the trigger's depth.
+**Failure if ignored:** an encounter, ambush or seal that the intended route fires and an edge
+route skips -- invisible to centre-line tests.
+**Fix shape:** span the inside's full cross-section at a depth where only the room is walkable,
+and test entry along both walls and the centre, asserting it never fires early and never lets the
+player past it unfired. **Where else:** every `region_entered` trigger, party plates that gate
+progression, future confinement seals and M3 server-side zone checks.
+
+### Paint the state the next input meets, not the tick just resolved
+**Incident (M2, P41, 2026-10-17):** spike pads were painted from `hazard_phase_changed`, which
+reports the tick that just resolved. Because `SimWorld.tick()` resolves hazards for tick N and
+then increments `tick_count`, the event-driven look lagged the state the player's next input
+would meet by one tick -- the pad looked safe on a frame whose input would be hurt.
+**Mechanism:** a presentation of "what happens if I act now" must read the sim AFTER the tick
+(state N+1), not replay the event for N. Events say what happened; queries say what will.
+**Failure if ignored:** a telegraph that is honest about the past and one tick wrong about the
+present; at 30 Hz invisible in a glance, decisive at a tight edge.
+**Fix shape:** project hazard looks from the read-only query after each step and at load, and
+test "display before tick k == authoritative state resolved on tick k" on BOTH edges.
+**Where else:** windup telegraphs, gate open/closed visuals, M3 client prediction of timed hazards.
