@@ -1533,10 +1533,10 @@
 			"kind": "region_entered",
 			"once": true,
 			"region": {
-				"d": 12.0,
+				"d": 20.0,
 				"w": 6.0,
 				"x": 40.0,
-				"z": -46.0
+				"z": -52.0
 			},
 			"renders_as_plate": false,
 			"source_id": -1,

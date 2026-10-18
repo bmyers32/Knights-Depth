@@ -626,7 +626,7 @@ effects = Array[Dictionary]([{
 script = ExtResource("4_trig")
 key = &"T_EAST"
 trigger_id = 2
-region = Rect2(40, -46, 6, 12)
+region = Rect2(40, -52, 6, 20)
 effects = Array[Dictionary]([{
 "kind": &"activate_encounter",
 "target_key": &"E_EAST"

@@ -103,6 +103,11 @@ extends SceneTree
 ##               160), offsets 130/50/130/50. Pad 3 is new. Connector patch, doorways, damage and
 ##               player-only eligibility unchanged; nothing else on the floor moved. Depths 1-3
 ##               byte-identical.
+##   2026-10-17  DEPTH 4 RE-RECORDED, same day, for the east doorway bypass (human-found defect):
+##               T_EAST's region (40,-46,6,12) -> (40,-52,6,20), the east room's whole west
+##               column, so a wall-hugging entry can no longer reach the key with the room
+##               asleep. One trigger region changed; roster, positions and leash untouched.
+##               Depths 1-3 byte-identical.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the

@@ -1082,6 +1082,110 @@ func test_the_east_room_gives_up_when_the_player_retreats_to_the_hub() -> void:
 		assert_eq(String(arena.sim._ai_state.get(actor_id, "")), "idle", "actor %d is still chasing across the floor" % actor_id)
 
 
+## THE DOORWAY WAKES THE ROOM FROM ANY LANE (defect found in human play, 2026-10-17). T_EAST
+## used to span only the doorway's own width (z -46..-34), but the room opens wider than its
+## doorway: a player hugging the north wall turned up the room's west column (x 38..40) and
+## crossed into the room north of the trigger, reaching the key with the room still asleep. The
+## threshold is now the room's whole west column, so no path into the room goes round it.
+func test_the_east_threshold_spans_the_room_it_guards() -> void:
+	var threshold: Rect2 = Rect2()
+	for trigger: FloorTrigger in plan.triggers:
+		if trigger.trigger_id == _id(&"T_EAST"):
+			threshold = trigger.region
+	var room: Rect2 = _patch(&"P_EAST_ROOM")
+	assert_lte(threshold.position.y, room.position.y, "the threshold reaches the room's north wall")
+	assert_gte(threshold.end.y, room.end.y, "the threshold reaches the room's south wall")
+	# Cut where the room alone is walkable, past the overlap with the corridor: crossing it is
+	# entering the room, and standing in the corridor never is.
+	assert_gte(threshold.position.x, _patch(&"P_EAST_JOG").end.x, "the threshold starts past the corridor")
+	assert_lt(threshold.position.x, _patch(&"P_EAST_ROOM_CROSS").position.x, "and before the room widens")
+
+
+## Left wall, centre, right wall: each a route a player could take from the corridor to the key.
+const EAST_LANES: Dictionary = {
+	"left wall": [Vector3(36, 0, -45.4), Vector3(38.8, 0, -45.4), Vector3(38.8, 0, -51.4), Vector3(47, 0, -51.4), Vector3(47, 0, -55.5)],
+	"centre": [Vector3(38.8, 0, -42), Vector3(47, 0, -50), Vector3(47, 0, -55.5)],
+	"right wall": [Vector3(36, 0, -38.6), Vector3(38.8, 0, -38.6), Vector3(38.8, 0, -32.6), Vector3(53, 0, -33), Vector3(53, 0, -53), Vector3(47, 0, -55.5)],
+}
+
+
+func test_every_doorway_lane_wakes_the_east_room_before_the_key() -> void:
+	for lane: String in EAST_LANES:
+		var arena: Node3D = _boot()
+		_reach_the_hub(arena)
+		_walk(arena, EAST_OUT.slice(0, 3), "%s: down the corridor" % lane)
+		var roster: Array = arena.sim._encounter_roster[_id(&"E_EAST")].duplicate()
+		var bodies: Array = arena.sim.entities.keys()
+		var route: Array[Vector3] = []
+		route.assign(EAST_LANES[lane])
+		route.append(EAST_KEY_STAND)
+		var woke_at: Vector3 = Vector3.INF
+		var deepest_asleep: float = -INF
+		var arrived_at: Dictionary = {}
+		var engaged: Dictionary = {}
+		for waypoint: Vector3 in route:
+			for i in 1500:
+				var at: Vector3 = arena.sim.entities[arena.envoy.actor_id]
+				if Vector2(waypoint.x - at.x, waypoint.z - at.z).length() < 0.3:
+					break
+				arena._step([Command.new(arena.sim.tick_count, arena.envoy.actor_id, "move", {"direction": Vector3(waypoint.x - at.x, 0, waypoint.z - at.z).normalized()})] as Array[Command], DT)
+				at = arena.sim.entities[arena.envoy.actor_id]
+				if _state(arena, &"E_EAST") == "dormant":
+					deepest_asleep = maxf(deepest_asleep, at.x)
+				elif woke_at == Vector3.INF:
+					woke_at = at
+					for actor_id: int in roster:
+						arrived_at[actor_id] = arena.sim.entities[actor_id]
+				for actor_id: int in roster:
+					if String(arena.sim._ai_state.get(actor_id, "")) == "active":
+						engaged[actor_id] = true
+		assert_eq(_state(arena, &"E_EAST"), "active", "%s: the room woke on the way to the key" % lane)
+		# A tick's step is 0.13 units: asleep, the Envoy never got past the threshold's edge.
+		assert_lt(deepest_asleep, 40.2, "%s: walked into the room past x=%.2f with it asleep" % [lane, deepest_asleep])
+		assert_gte(woke_at.x, 40.0, "%s: woke early, at %s, still outside the room" % [lane, woke_at])
+		for actor_id: int in arrived_at:
+			assert_gte(_flat(woke_at, arrived_at[actor_id]), 6.0, "%s: actor %d arrived on top of the Envoy" % [lane, actor_id])
+		# The room's ranged pressure and a Fang reach every lane. The far Fang (56, -40) is NOT
+		# asserted: from the north wall it wakes 19.6 units off, past its 18-unit leash, and the key
+		# route never comes within its detection -- the accepted placement and leash, unchanged.
+		var fangs_engaged: int = 0
+		for actor_id: int in roster:
+			if arena.sim._families.get(actor_id, &"") == &"watcher":
+				assert_true(engaged.has(actor_id), "%s: Watcher %d never joined the fight" % [lane, actor_id])
+			else:
+				fangs_engaged += int(engaged.has(actor_id))
+		assert_gt(fangs_engaged, 0, "%s: no Fang joined the fight" % lane)
+		assert_eq(arena.sim._encounter_roster[_id(&"E_EAST")], roster, "%s: the roster changed" % lane)
+		assert_eq(arena.sim.entities.keys(), bodies, "%s: bodies were added or removed" % lane)
+		_lift(arena, &"K_EAST")
+		assert_eq(_carried(arena), _id(&"K_EAST"), "%s: the key is in reach at the end of the lane" % lane)
+
+
+## Waking is once: out of the room to the hub (the leash drops the chase, 2026-09-08) and back in
+## by another lane brings nobody new.
+func test_retreat_and_re_entry_wake_nobody_twice() -> void:
+	var arena: Node3D = _boot()
+	_reach_the_hub(arena)
+	_walk(arena, EAST_OUT.slice(0, 3), "down the corridor")
+	var route: Array[Vector3] = []
+	route.assign(EAST_LANES["centre"].slice(0, 2))
+	_walk(arena, route, "in by the centre")
+	assert_eq(_state(arena, &"E_EAST"), "active")
+	var roster: Array = arena.sim._encounter_roster[_id(&"E_EAST")].duplicate()
+	var bodies: Array = arena.sim.entities.keys()
+	_walk(arena, EAST_HOME, "retreating")
+	_idle(arena, 60)
+	route.assign(EAST_OUT.slice(0, 3))
+	route.append_array(EAST_LANES["left wall"].slice(0, 4))
+	_walk(arena, route, "back in along the left wall")
+	assert_eq(_state(arena, &"E_EAST"), "active", "still the same fight")
+	assert_eq(arena.sim._encounter_roster[_id(&"E_EAST")], roster, "the roster changed on re-entry")
+	assert_eq(arena.sim.entities.keys(), bodies, "re-entry added or removed bodies")
+	for actor_id: int in roster:
+		assert_false(arena.sim._combat_absent.has(actor_id) and not arena.sim._burrow.has(actor_id),
+			"actor %d went back to waiting" % actor_id)
+
+
 func _count_shots(arena: Node3D, watchers: Array, shots: Dictionary, seen: Dictionary) -> void:
 	for projectile_id: int in arena.sim._projectiles:
 		if seen.has(projectile_id):
