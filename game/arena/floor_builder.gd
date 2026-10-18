@@ -59,6 +59,33 @@ const _OBSTACLE_COLOR: Color = Color(0.30, 0.31, 0.35)
 ## because the decision it asks for is a movement decision made at distance.
 const _HAZARD_SAFE_COLOR: Color = Color(0.42, 0.33, 0.30)
 const _HAZARD_ACTIVE_COLOR: Color = Color(0.90, 0.35, 0.22)
+## P41 PRE-ACTIVATION WARNING. Provisional playtest values (human-approved 2026-10-17), not law.
+## The lead is Floor 4's HOP WINDOW: its stepping-stone corridor retracts the pad ahead on the
+## very tick the pad underfoot starts warning, so the warning IS the "go" signal and its length
+## is the time to step across. 50, not the first 40: measured with ordinary movement, getting off
+## a 5-unit pad from its centre takes 19 ticks + a 20-tick reaction margin, which left 40 one tick
+## of slack. The corridor's offsets are authored against this number (foundry_assembly.tres).
+const _HAZARD_WARN_LEAD_TICKS: int = 50
+const _HAZARD_URGENT_TICKS: int = 15
+## Pulse PERIOD in ticks: ~0.75 Hz at onset, accelerating to ~2.7 Hz over the first 20 warning
+## ticks, then HELD for the last PLATEAU ticks -- several clearly perceptible rapid pulses before
+## the spikes, not a brief spike of speed at the end (human playtests 2026-10-17). The plateau is
+## a pulse-rate window only; the primed HEIGHT keeps its own URGENT window. Smooth cosine, never
+## hard on/off; the fast end is NOT a claimed photosensitivity-safe limit -- if it reads harsh,
+## lower the amplitude or rate before anything else.
+const _HAZARD_PULSE_SLOW_TICKS: float = 40.0
+const _HAZARD_PULSE_FAST_TICKS: float = 11.0
+const _HAZARD_PULSE_PLATEAU_TICKS: int = 30
+## Moderate luminance swing toward a pale tint -- deliberately not the active hue, so a warning
+## can never be mistaken for a pad that is already writing.
+const _HAZARD_WARN_COLOR: Color = Color(0.70, 0.60, 0.52)
+const _HAZARD_EARLY_AMPLITUDE: float = 0.3
+const _HAZARD_URGENT_AMPLITUDE: float = 0.6
+const _HAZARD_WARN_GLOW: float = 0.3
+const _HAZARD_ACTIVE_GLOW: float = 0.8
+## SHAPE carries the phase, so it reads without colour: flat -> primed -> spikes out.
+const _HAZARD_PRIMED_HEIGHT: float = 0.24
+const _HAZARD_ACTIVE_HEIGHT: float = 0.45
 ## Deliberately close to the wall colour but lighter: same material family, clearly not a wall.
 const _LIP_COLOR: Color = Color(0.34, 0.35, 0.39)
 const _MARKER_COLOR: Color = Color(0.88, 0.80, 0.42)
@@ -87,6 +114,7 @@ const _PLATE_MINOR_THICKNESS: float = 0.06
 var _gates: Dictionary = {}          # connection_id -> barrier mesh
 var _switches: Dictionary = {}       # switch_id -> hit-switch mesh
 var _hazards: Dictionary = {}        # pad_id -> spike-pad mesh
+var _hazard_ground: Dictionary = {}  # pad_id -> ground y the pad stands on
 var _gate_barriers: Dictionary = {}  # connection_id -> the sim's authoritative barrier line
 var _plates: Dictionary = {}         # trigger_id -> plate mesh
 var _breakables: Dictionary = {}     # breakable_id -> mesh
@@ -168,6 +196,7 @@ func clear_floor() -> void:
 	_gates.clear()
 	_switches.clear()
 	_hazards.clear()
+	_hazard_ground.clear()
 	_plates.clear()
 	_breakables.clear()
 	_carriables.clear()
@@ -388,6 +417,11 @@ func _build_spike_pad(pad: SpikePadPlan) -> void:
 		centre + Vector3(0.0, elevation_at(centre) + _PLATE_THICKNESS * 0.5, 0.0),
 		_HAZARD_SAFE_COLOR)
 	_hazards[pad.pad_id] = mesh
+	_hazard_ground[pad.pad_id] = elevation_at(centre)
+
+
+func hazard_pad_ids() -> Array:
+	return _hazards.keys()
 
 
 ## THE SWITCH MUST LOOK DIFFERENT AFTER IT IS USED (ruled 2026-09-04). The human hit one and
@@ -402,15 +436,63 @@ func set_switch_state(switch_id: int, activated: bool) -> void:
 	material.emission_energy_multiplier = 1.1 if activated else 0.6
 
 
-## Mirrors the sim's authoritative phase. Presentation never decides when spikes are out.
-func set_hazard_active(pad_id: int, active: bool) -> void:
+## THE WARNING IS A PURE FUNCTION OF THE SIM'S COUNTDOWN (P41): no presentation clock, so it
+## cannot drift from the damage, and render frame rate cannot change it. `cycles` is the pulse
+## phase, measured BACKWARDS from activation: the integral of the pulse frequency, which is
+## 1/FAST throughout the plateau and, before it, rises from 1/SLOW at the lead along a smoothstep
+## (so both rate and acceleration are continuous where the ramp meets the plateau). Anchoring the
+## integral at activation puts a brightness peak exactly on the activation edge, so the last
+## pulse flows into the steady active look.
+## -1 (a pad the sim does not know) answers `unknown` with the dormant look; the CALLER reports it.
+static func hazard_warning_look(ticks_until_active: int) -> Dictionary:
+	var r: int = ticks_until_active
+	if r < 0:
+		return {"phase": &"unknown", "pulse": 0.0, "cycles": 0.0, "strength": 0.0, "tint": 0.0, "height": _PLATE_THICKNESS}
+	if r == 0:
+		return {"phase": &"active", "pulse": 1.0, "cycles": 0.0, "strength": 0.0, "tint": 0.0, "height": _HAZARD_ACTIVE_HEIGHT}
+	if r > _HAZARD_WARN_LEAD_TICKS:
+		return {"phase": &"inactive", "pulse": 0.0, "cycles": 0.0, "strength": 0.0, "tint": 0.0, "height": _PLATE_THICKNESS}
+	var fast: float = 1.0 / _HAZARD_PULSE_FAST_TICKS
+	var slow: float = 1.0 / _HAZARD_PULSE_SLOW_TICKS
+	var urgent: bool = r <= _HAZARD_URGENT_TICKS
+	var cycles: float = fast * mini(r, _HAZARD_PULSE_PLATEAU_TICKS)
+	if r > _HAZARD_PULSE_PLATEAU_TICKS:
+		# Closed-form integral of slow + (fast - slow) * smoothstep(u), u = (LEAD - s) / span, over
+		# s in [PLATEAU, r]. The smoothstep 3u^2 - 2u^3 integrates to u^3 - u^4 / 2 (1/2 at u = 1).
+		var span: float = float(_HAZARD_WARN_LEAD_TICKS - _HAZARD_PULSE_PLATEAU_TICKS)
+		var u: float = float(_HAZARD_WARN_LEAD_TICKS - r) / span
+		cycles += slow * (r - _HAZARD_PULSE_PLATEAU_TICKS) + (fast - slow) * span * (0.5 - (u * u * u - u * u * u * u * 0.5))
+	var pulse: float = 0.5 + 0.5 * cos(TAU * cycles)
+	var amplitude: float = _HAZARD_URGENT_AMPLITUDE if urgent else _HAZARD_EARLY_AMPLITUDE
+	return {
+		"phase": &"urgent" if urgent else &"early", "pulse": pulse, "cycles": cycles,
+		"strength": amplitude, "tint": amplitude * pulse,
+		"height": _HAZARD_PRIMED_HEIGHT if urgent else _PLATE_THICKNESS,
+	}
+
+
+## Projects the sim's countdown onto ONE pad. Each pad owns its own material (_add_box makes a
+## fresh one per mesh), so neighbouring bands can show different phases at once.
+func show_hazard_warning(pad_id: int, ticks_until_active: int) -> void:
 	if not _hazards.has(pad_id):
 		return
-	var material: StandardMaterial3D = _hazards[pad_id].material_override
-	material.albedo_color = _HAZARD_ACTIVE_COLOR if active else _HAZARD_SAFE_COLOR
-	material.emission_enabled = active
-	material.emission = _HAZARD_ACTIVE_COLOR
-	material.emission_energy_multiplier = 0.8 if active else 0.0
+	var look: Dictionary = hazard_warning_look(ticks_until_active)
+	var mesh: MeshInstance3D = _hazards[pad_id]
+	var height: float = look["height"]
+	mesh.scale.y = height / _PLATE_THICKNESS
+	mesh.position.y = float(_hazard_ground[pad_id]) + height * 0.5
+	var material: StandardMaterial3D = mesh.material_override
+	if look["phase"] == &"active":
+		material.albedo_color = _HAZARD_ACTIVE_COLOR
+		material.emission_enabled = true
+		material.emission = _HAZARD_ACTIVE_COLOR
+		material.emission_energy_multiplier = _HAZARD_ACTIVE_GLOW
+		return
+	var tint: float = look["tint"]
+	material.albedo_color = _HAZARD_SAFE_COLOR.lerp(_HAZARD_WARN_COLOR, tint)
+	material.emission_enabled = tint > 0.0
+	material.emission = _HAZARD_WARN_COLOR
+	material.emission_energy_multiplier = _HAZARD_WARN_GLOW * tint
 
 
 ## Drawn from the SAME rect that excludes bodies and stops shots. If this mesh and that rect

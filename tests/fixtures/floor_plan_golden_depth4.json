@@ -1420,14 +1420,14 @@
 				"player"
 			],
 			"pad_id": 0,
-			"phase_offset_ticks": 210,
+			"phase_offset_ticks": 130,
 			"rect": {
 				"d": 8.0,
-				"w": 6.0,
-				"x": 19.0,
+				"w": 5.0,
+				"x": 18.0,
 				"z": -78.0
 			},
-			"safe_ticks": 210
+			"safe_ticks": 130
 		},
 		{
 			"active_ticks": 30,
@@ -1437,14 +1437,14 @@
 				"player"
 			],
 			"pad_id": 1,
-			"phase_offset_ticks": 170,
+			"phase_offset_ticks": 50,
 			"rect": {
 				"d": 8.0,
-				"w": 6.0,
-				"x": 25.0,
+				"w": 5.0,
+				"x": 23.0,
 				"z": -78.0
 			},
-			"safe_ticks": 210
+			"safe_ticks": 130
 		},
 		{
 			"active_ticks": 30,
@@ -1457,11 +1457,28 @@
 			"phase_offset_ticks": 130,
 			"rect": {
 				"d": 8.0,
-				"w": 6.0,
-				"x": 31.0,
+				"w": 5.0,
+				"x": 28.0,
 				"z": -78.0
 			},
-			"safe_ticks": 210
+			"safe_ticks": 130
+		},
+		{
+			"active_ticks": 30,
+			"damage": 10.0,
+			"damage_type": "force",
+			"eligible_allegiances": [
+				"player"
+			],
+			"pad_id": 3,
+			"phase_offset_ticks": 50,
+			"rect": {
+				"d": 8.0,
+				"w": 5.0,
+				"x": 33.0,
+				"z": -78.0
+			},
+			"safe_ticks": 130
 		}
 	],
 	"stratum_id": "foundry",

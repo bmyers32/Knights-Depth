@@ -67,9 +67,10 @@ func _starts_at(pad: SpikePadPlan) -> int:
 	return posmod(pad.safe_ticks - pad.phase_offset_ticks, pad.safe_ticks + pad.active_ticks)
 
 
-func _sequence() -> Array:
+## The pads in the direction of travel (west to east).
+func _by_position() -> Array:
 	var pads: Array = plan.spike_pads.duplicate()
-	pads.sort_custom(func(a: SpikePadPlan, b: SpikePadPlan) -> bool: return _starts_at(a) < _starts_at(b))
+	pads.sort_custom(func(a: SpikePadPlan, b: SpikePadPlan) -> bool: return a.rect.position.x < b.rect.position.x)
 	return pads
 
 
@@ -232,21 +233,21 @@ func test_the_east_loot_room_is_optional() -> void:
 	assert_eq(finds, 3, "the loot room holds the first greybox's three breakables")
 
 
-# --- 3: THE WRITE SEQUENCE, PRESERVED ---------------------------------------------------------
+# --- 3: THE STEPPING-STONE CORRIDOR ---------------------------------------------------------
 
-## The causeway that passed human play on 2026-10-13, pinned value for value so that moving it
-## cannot quietly change it.
-func test_the_sequence_is_the_one_that_passed_play() -> void:
-	var pads: Array = _sequence()
-	assert_eq(pads.size(), 3)
+## THE STEPPING-STONE CORRIDOR (human design, 2026-10-17; replaced the 2026-10-13 three-band
+## travelling write). Four contiguous 5-wide pads in two alternating groups. Pinned value for
+## value so that moving it cannot quietly change it -- these are playtest values, not law.
+func test_the_corridor_is_the_approved_stepping_stone_layout() -> void:
+	var pads: Array = _by_position()
+	assert_eq(pads.size(), 4)
 	for i in pads.size():
 		var pad: SpikePadPlan = pads[i]
-		assert_eq(pad.rect.size, Vector2(6.0, 8.0), "band %d" % i)
-		assert_eq([pad.safe_ticks, pad.active_ticks, pad.damage], [210, 30, 10.0], "band %d" % i)
-		assert_eq(_starts_at(pad), 40 * i, "band %d fires 40 ticks after the one before it" % i)
+		assert_eq(pad.rect.size, Vector2(5.0, 8.0), "pad %d" % i)
+		assert_eq([pad.safe_ticks, pad.active_ticks, pad.damage], [130, 30, 10.0], "pad %d" % i)
+		assert_eq(_starts_at(pad), 0 if i % 2 == 0 else 80, "pad %d is in the wrong group" % i)
 		if i > 0:
-			assert_almost_eq(pad.rect.position.x - pads[i - 1].rect.position.x, 6.0, 0.001,
-				"band %d is the next one along, in the direction of travel" % i)
+			assert_almost_eq(pad.rect.position.x, pads[i - 1].rect.end.x, 0.001, "pad %d is contiguous with the one before" % i)
 			assert_eq(pad.rect.position.y, pads[0].rect.position.y)
 
 
@@ -263,32 +264,192 @@ func test_the_bands_span_the_connector_and_leave_an_apron_at_each_end() -> void:
 			assert_false(pad.rect.intersects(connection.aperture), "doorway %d opens onto pad %d" % [connection.connection_id, pad.pad_id])
 
 
-## ONE BAND AT A TIME, measured in a real sim over a whole cycle rather than read off the offsets.
-func test_only_one_band_writes_at_a_time_and_every_band_writes() -> void:
+## THE RULE THE CORRIDOR IS BUILT ON, read from the AUTHORITATIVE countdown in a real sim over
+## three cycles, never from the table: the pad ahead retracts on the very tick the pad underfoot
+## starts warning (the warning IS the "go"), groups alternate, each pad writes for exactly its
+## active ticks per cycle, and two neighbours never write at once.
+func test_the_pad_ahead_retracts_as_the_pad_underfoot_starts_warning() -> void:
+	var lead: int = FloorBuilder._HAZARD_WARN_LEAD_TICKS
 	var sim := SimWorld.new()
 	sim.load_floor(plan.make_bounds(), plan.entry_point)
 	sim.register_patches(plan.patch_rects())
-	for pad: SpikePadPlan in plan.spike_pads:
+	var ids: Array = []
+	for pad: SpikePadPlan in _by_position():
 		sim.register_spike_pad(pad.pad_id, pad.rect, pad.safe_ticks, pad.active_ticks, pad.phase_offset_ticks, pad.damage, pad.damage_type)
-	var ever_active: Dictionary = {}
-	for tick in plan.spike_pads[0].safe_ticks + plan.spike_pads[0].active_ticks:
-		var writing: int = 0
-		for pad: SpikePadPlan in plan.spike_pads:
-			if sim.spike_pad_ticks_until_active(pad.pad_id) == 0:
-				writing += 1
-				ever_active[pad.pad_id] = true
-		assert_lte(writing, 1, "%d bands writing together at tick %d" % [writing, tick])
+		ids.append(pad.pad_id)
+	var cycle: int = plan.spike_pads[0].safe_ticks + plan.spike_pads[0].active_ticks
+	var previous: Array = []
+	var active_ticks: Dictionary = {}
+	var go_signals: int = 0
+	for tick in cycle * 3:
+		var now: Array = []
+		for pad_id: int in ids:
+			now.append(sim.spike_pad_ticks_until_active(pad_id))
+		assert_eq(now[0], now[2], "tick %d: pads 1 and 3 are one group" % tick)
+		assert_eq(now[1], now[3], "tick %d: pads 2 and 4 are one group" % tick)
+		for i in 4:
+			if now[i] == 0:
+				active_ticks[i] = int(active_ticks.get(i, 0)) + 1
+				if i < 3:
+					assert_ne(now[i + 1], 0, "tick %d: neighbours %d and %d write together" % [tick, i, i + 1])
+		if not previous.is_empty():
+			for i in 3:
+				var retracted: bool = previous[i + 1] == 0 and now[i + 1] > 0
+				var warns: bool = now[i] == lead and previous[i] == lead + 1
+				assert_eq(retracted, warns, "tick %d: pad %d retracting and pad %d starting to warn must coincide" % [tick, i + 1, i])
+				go_signals += int(warns)
+		previous = now
 		sim.tick([] as Array[Command], DT)
-	assert_eq(ever_active.size(), plan.spike_pads.size())
+	assert_eq(go_signals, 3 * 3, "every pad but the last gave a go signal once per cycle")
+	for i in 4:
+		assert_eq(active_ticks[i], 3 * plan.spike_pads[0].active_ticks, "pad %d writes exactly its active ticks per cycle" % i)
 
 
-## THE FRONT OUTRUNS A WALKING ENVOY, so following the write is always safe.
-func test_the_write_front_outruns_a_walking_envoy() -> void:
-	var envoy: Resource = ContentDB.get_resource(&"envoy", &"default")
-	var pads: Array = _sequence()
-	var step_ticks: int = _starts_at(pads[1]) - _starts_at(pads[0])
-	assert_gt(pads[0].rect.size.x / (envoy.move_speed * DT), float(step_ticks))
-	assert_gte(step_ticks, pads[0].active_ticks, "a band finishes writing before the next begins")
+## SHARED EDGES BELONG TO BOTH PADS (WalkableBounds.contains is inclusive): an Envoy standing
+## exactly on the line is hurt by whichever side writes -- the step must clear the line.
+func test_a_shared_edge_is_on_both_pads() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = arena.envoy.actor_id
+	var pads: Array = _by_position()
+	var line: Vector3 = Vector3(pads[1].rect.position.x, 0.0, pads[1].rect.get_center().y)
+	assert_true(WalkableBounds.contains(pads[0].rect, line.x, line.z) and WalkableBounds.contains(pads[1].rect, line.x, line.z))
+	_await_query(arena, pads[1].pad_id, 1)
+	assert_gt(arena.sim.spike_pad_ticks_until_active(pads[0].pad_id), 0, "pad 1 is safe while pad 2 writes")
+	arena.sim.entities[envoy_id] = line
+	var before: float = arena.sim.health_of(envoy_id)
+	_idle(arena, 2)
+	assert_lt(arena.sim.health_of(envoy_id), before, "the line counts as the writing pad")
+
+
+## DAMAGE RESOLVES BEFORE MOVEMENT within a tick, and the display agrees: once the pad LOOKS
+## active (query 0 after a step), a step off it in the next tick is too late; a step taken while
+## it still showed one tick of warning is in time.
+func test_damage_resolves_before_movement_and_the_last_warning_tick_is_in_time() -> void:
+	var pad: SpikePadPlan = _by_position()[0]
+	var edge: Vector3 = Vector3(pad.rect.end.x - 0.05, 0.0, pad.rect.get_center().y)
+	for late: bool in [true, false]:
+		var arena: Node3D = _boot()
+		var envoy_id: int = arena.envoy.actor_id
+		_await_query(arena, pad.pad_id, 0 if late else 1)
+		arena.sim.entities[envoy_id] = edge
+		var before: float = arena.sim.health_of(envoy_id)
+		arena._step([Command.new(arena.sim.tick_count, envoy_id, "move", {"direction": Vector3(1, 0, 0)})] as Array[Command], DT)
+		assert_gt(arena.sim.entities[envoy_id].x, pad.rect.end.x, "the step did leave the pad")
+		_idle(arena, 1)
+		if late:
+			assert_lt(arena.sim.health_of(envoy_id), before, "stepped off as it showed active: the hit already landed")
+		else:
+			assert_eq(arena.sim.health_of(envoy_id), before, "stepped off on the last warning tick: safe")
+
+
+# --- the crossing, walked: a player who goes on the signal after a human reaction delay ------
+
+const _REACTION_TICKS: int = 20  # ~0.67 s to notice and decide: a working assumption, not data
+const _SIGNAL_BUDGET_TICKS: int = 400
+
+
+## Steps until the pad's authoritative countdown reads `value` (at most two cycles).
+func _await_query(arena: Node3D, pad_id: int, value: int) -> void:
+	for i in _SIGNAL_BUDGET_TICKS:
+		if arena.sim.spike_pad_ticks_until_active(pad_id) == value:
+			return
+		arena._step([] as Array[Command], DT)
+	fail_test("pad %d never reached countdown %d" % [pad_id, value])
+
+
+## Waits for a signal (a callable over the sim), then the reaction delay, then walks along the
+## corridor to `x`. Returns false if the signal never came. Health is checked at every stage.
+func _on_signal_walk_to(arena: Node3D, signal_seen: Callable, x: float, health: float, label: String) -> bool:
+	var envoy_id: int = arena.envoy.actor_id
+	var waited: int = 0
+	while not signal_seen.call():
+		arena._step([] as Array[Command], DT)
+		waited += 1
+		if waited > _SIGNAL_BUDGET_TICKS:
+			return false
+	assert_eq(arena.sim.health_of(envoy_id), health, "%s: hurt while waiting" % label)
+	_idle(arena, _REACTION_TICKS)
+	assert_eq(arena.sim.health_of(envoy_id), health, "%s: hurt during the reaction delay" % label)
+	for i in _SIGNAL_BUDGET_TICKS:
+		var dx: float = x - arena.sim.entities[envoy_id].x
+		if absf(dx) < 0.07:
+			break
+		arena._step([Command.new(arena.sim.tick_count, envoy_id, "move", {"direction": Vector3(signf(dx), 0, 0)})] as Array[Command], DT)
+	assert_eq(arena.sim.health_of(envoy_id), health, "%s: hurt while stepping" % label)
+	return true
+
+
+## The edge a player sees: the pad was writing on the last tick and is dark now.
+func _retracts(arena: Node3D, pad_id: int) -> Callable:
+	var state: Dictionary = {"was": arena.sim.spike_pad_ticks_until_active(pad_id)}
+	return func() -> bool:
+		var now: int = arena.sim.spike_pad_ticks_until_active(pad_id)
+		var edge: bool = state["was"] == 0 and now > 0
+		state["was"] = now
+		return edge
+
+
+func _warns(arena: Node3D, pad_id: int) -> Callable:
+	return func() -> bool: return arena.sim.spike_pad_ticks_until_active(pad_id) == FloorBuilder._HAZARD_WARN_LEAD_TICKS
+
+
+## Where a player waits on a pad: just short of its front edge, clear of the shared line.
+func _front(pad: SpikePadPlan) -> float:
+	return pad.rect.end.x - 0.5
+
+
+## Where a player waits to start: at the apron's edge, just short of pad 1. (Measured: from 4 u
+## further back, reaction + walk overran pad 1's 80-tick safe stretch and missed its first "go".)
+func _onto_the_west_apron(arena: Node3D) -> void:
+	var first: SpikePadPlan = _by_position()[0]
+	arena.sim.entities[arena.envoy.actor_id] = Vector3(first.rect.position.x - 0.5, 0.0, first.rect.get_center().y)
+
+
+func _east_apron_x() -> float:
+	return (_by_position()[3].rect.end.x + _patch(&"P_CONNECTOR").end.x) * 0.5
+
+
+## THE WHOLE CROSSING, as a player does it: from the west apron, onto pad 1 when it goes dark,
+## then forward each time the pad underfoot starts warning, off pad 4 onto the east apron --
+## each move only after the reaction delay, ordinary walking speed, and not one point of damage.
+func test_a_player_crosses_on_the_signal_without_damage() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = arena.envoy.actor_id
+	var pads: Array = _by_position()
+	_onto_the_west_apron(arena)
+	var health: float = arena.sim.health_of(envoy_id)
+	assert_true(_on_signal_walk_to(arena, _retracts(arena, pads[0].pad_id), _front(pads[0]), health, "onto pad 1"))
+	for i in range(1, 4):
+		assert_true(_on_signal_walk_to(arena, _warns(arena, pads[i - 1].pad_id), _front(pads[i]), health, "onto pad %d" % (i + 1)))
+	assert_true(_on_signal_walk_to(arena, _warns(arena, pads[3].pad_id), _east_apron_x(), health, "onto the east apron"))
+	assert_gt(arena.sim.entities[envoy_id].x, pads[3].rect.end.x, "reached the east apron")
+	_idle(arena, 200)
+	assert_eq(arena.sim.health_of(envoy_id), health, "the apron is safe ground")
+
+
+## A MISSED BEAT IS RECOVERABLE. From the apron, letting pad 1's opening pass just means waiting
+## for the next. On a pad, when your pad warns BOTH neighbours have just gone dark (they are one
+## group), so a player who will not go forward can step BACK and pick the rhythm up again --
+## from the pad's centre or back half. Measured limit: retreating from the FRONT edge crosses the
+## whole pad backwards (20 + 34 ticks > the 50-tick window) and is hit; forward is the way out there.
+func test_a_missed_beat_can_be_recovered() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = arena.envoy.actor_id
+	var pads: Array = _by_position()
+	_onto_the_west_apron(arena)
+	var health: float = arena.sim.health_of(envoy_id)
+	# Let one whole opening go by from the apron.
+	_await_query(arena, pads[0].pad_id, 0)
+	_idle(arena, pads[0].active_ticks + 10)
+	assert_true(_on_signal_walk_to(arena, _retracts(arena, pads[0].pad_id), _front(pads[0]), health, "onto pad 1, one cycle late"))
+	assert_true(_on_signal_walk_to(arena, _warns(arena, pads[0].pad_id), pads[1].rect.get_center().x, health, "onto the middle of pad 2"))
+	# Pad 2 warns: refuse to go forward and retreat to pad 1 instead.
+	assert_true(_on_signal_walk_to(arena, _warns(arena, pads[1].pad_id), pads[0].rect.get_center().x, health, "back to pad 1"))
+	assert_true(_on_signal_walk_to(arena, _warns(arena, pads[0].pad_id), _front(pads[1]), health, "forward again to pad 2"))
+	for i in range(2, 4):
+		assert_true(_on_signal_walk_to(arena, _warns(arena, pads[i - 1].pad_id), _front(pads[i]), health, "onto pad %d" % (i + 1)))
+	assert_true(_on_signal_walk_to(arena, _warns(arena, pads[3].pad_id), _east_apron_x(), health, "onto the east apron"))
+	assert_eq(arena.sim.health_of(envoy_id), health)
 
 
 # --- 4: THE TWO-KEY GATE, AS DATA -------------------------------------------------------------

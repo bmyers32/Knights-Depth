@@ -97,6 +97,12 @@ extends SceneTree
 ##               inside their 18-unit leash of the whole doorway and of the key bay, so activation
 ##               is no longer undone on the next tick. Three numbers changed; nothing else.
 ##               The leash rule (2026-09-08) is untouched. Depths 1-3 byte-identical.
+##   2026-10-17  DEPTH 4 RE-RECORDED for the P41 stepping-stone corridor (human-approved design and
+##               rulings): the three 6-wide travelling-write bands became FOUR contiguous 5-wide
+##               pads at x 18/23/28/33 in two alternating groups -- safe 130, active 30 (cycle
+##               160), offsets 130/50/130/50. Pad 3 is new. Connector patch, doorways, damage and
+##               player-only eligibility unchanged; nothing else on the floor moved. Depths 1-3
+##               byte-identical.
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the

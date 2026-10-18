@@ -371,6 +371,8 @@ func test_floor_builder_exposes_the_methods_the_arena_driver_calls() -> void:
 		assert_true(exposed.has(required), "arena.gd calls FloorBuilder.%s() on every floor load" % required)
 	for required in ["set_carriable_visible", "place_carriable", "seat_carriable", "show_interaction_focus"]:
 		assert_true(exposed.has(required), "arena.gd calls FloorBuilder.%s() for carrying (Floor 4 Stage 2)" % required)
+	for required in ["hazard_pad_ids", "show_hazard_warning", "hazard_warning_look"]:
+		assert_true(exposed.has(required), "arena.gd calls FloorBuilder.%s() every tick for hazard warnings (P41)" % required)
 
 
 ## CARRYING, PROJECTED, on the floor that has keys. Drives every carrying event and the focus
@@ -423,3 +425,231 @@ func test_the_built_floor_matches_the_generated_plan() -> void:
 		# Ownership is what makes confinement possible; an unowned actor would silently fall
 		# back to the whole floor and be free to roam.
 		assert_true(arena.sim._actor_encounter.has(actor_id), "actor %d was never bound to a site" % actor_id)
+
+
+# --- P41: SPIKE-PAD PRE-ACTIVATION WARNING -----------------------------------------------------
+# The look is presentation, but WHEN it says "active" is a fairness contract with the damage, so
+# these drive the real Arena and read the real meshes -- not only the pure curve.
+
+func _hazard_arena(itinerary: Array[int]) -> Node3D:
+	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+	arena.itinerary = itinerary
+	add_child_autofree(arena)
+	return arena
+
+
+## What the pad's MESH says, read back from its actual height and material.
+func _displayed_active(arena: Node3D, pad_id: int) -> bool:
+	var mesh: MeshInstance3D = arena._floor_builder._hazards[pad_id]
+	var height: float = mesh.scale.y * FloorBuilder._PLATE_THICKNESS
+	return is_equal_approx(height, FloorBuilder._HAZARD_ACTIVE_HEIGHT) \
+		and mesh.material_override.albedo_color.is_equal_approx(FloorBuilder._HAZARD_ACTIVE_COLOR)
+
+
+func _assert_mesh_matches_query(arena: Node3D, pad_id: int, context: String) -> void:
+	var look: Dictionary = FloorBuilder.hazard_warning_look(arena.sim.spike_pad_ticks_until_active(pad_id))
+	var mesh: MeshInstance3D = arena._floor_builder._hazards[pad_id]
+	var material: StandardMaterial3D = mesh.material_override
+	assert_almost_eq(mesh.scale.y * FloorBuilder._PLATE_THICKNESS, float(look["height"]), 0.0001,
+		"%s: pad %d height" % [context, pad_id])
+	var expected: Color = FloorBuilder._HAZARD_ACTIVE_COLOR if look["phase"] == &"active" \
+		else FloorBuilder._HAZARD_SAFE_COLOR.lerp(FloorBuilder._HAZARD_WARN_COLOR, float(look["tint"]))
+	assert_true(material.albedo_color.is_equal_approx(expected), "%s: pad %d colour" % [context, pad_id])
+
+
+func _warning(phase: StringName) -> bool:
+	return phase == &"early" or phase == &"urgent"
+
+
+func test_warning_phases_onset_and_expiry() -> void:
+	var lead: int = FloorBuilder._HAZARD_WARN_LEAD_TICKS
+	var urgent: int = FloorBuilder._HAZARD_URGENT_TICKS
+	var cases: Dictionary = {-1: &"unknown", lead + 1: &"inactive", lead: &"early", urgent + 1: &"early",
+		urgent: &"urgent", 1: &"urgent", 0: &"active"}
+	for r: int in cases:
+		assert_eq(FloorBuilder.hazard_warning_look(r)["phase"], cases[r], "r = %d" % r)
+	assert_eq(FloorBuilder.hazard_warning_look(-1)["height"], FloorBuilder.hazard_warning_look(lead + 1)["height"],
+		"an unknown pad falls back to the dormant shape (the driver reports it)")
+	# Shape carries the phase without colour: flat -> primed -> spikes out.
+	var flat: float = FloorBuilder.hazard_warning_look(lead)["height"]
+	var primed: float = FloorBuilder.hazard_warning_look(urgent)["height"]
+	var spikes_out: float = FloorBuilder.hazard_warning_look(0)["height"]
+	assert_lt(flat, primed)
+	assert_lt(primed, spikes_out)
+
+
+## The pulse is a pure function of the countdown, accelerates toward activation, never exceeds
+## the fast rate, and peaks exactly on the activation edge.
+func test_warning_pulse_accelerates_and_is_anchored_to_activation() -> void:
+	var lead: int = FloorBuilder._HAZARD_WARN_LEAD_TICKS
+	var fastest: float = 1.0 / FloorBuilder._HAZARD_PULSE_FAST_TICKS
+	var previous_advance: float = -1.0
+	var previous_strength: float = -1.0
+	for r in range(lead, 0, -1):
+		var look: Dictionary = FloorBuilder.hazard_warning_look(r)
+		assert_eq(look, FloorBuilder.hazard_warning_look(r), "same countdown, same look (r = %d)" % r)
+		assert_between(float(look["pulse"]), 0.0, 1.0)
+		assert_between(float(look["tint"]), 0.0, FloorBuilder._HAZARD_URGENT_AMPLITUDE)
+		# Phase advanced over the tick from r to r-1 (r = 1 steps onto the activation edge, phase 0).
+		var later: float = 0.0 if r == 1 else float(FloorBuilder.hazard_warning_look(r - 1)["cycles"])
+		var advance: float = float(look["cycles"]) - later
+		assert_lte(advance, fastest + 0.0001, "r = %d pulses faster than the bound" % r)
+		assert_gte(advance, previous_advance - 0.0001, "r = %d: the pulse slowed while closing in" % r)
+		previous_advance = advance
+		assert_gte(float(look["strength"]), previous_strength, "r = %d: the warning weakened while closing in" % r)
+		previous_strength = float(look["strength"])
+	# The integral anchored at activation: zero phase -> a brightness peak on the edge itself.
+	var one: Dictionary = FloorBuilder.hazard_warning_look(1)
+	assert_almost_eq(float(one["cycles"]), fastest, 0.0001)
+	assert_gt(float(one["pulse"]), 0.75, "the last warning tick is near a peak, flowing into the steady active look")
+	# THE GRADIENT THE HUMAN ASKED FOR (2026-10-17): slow at onset, full speed reached with the
+	# plateau still ahead and HELD for all of it -- several rapid pulses, not a final flicker.
+	var plateau: int = FloorBuilder._HAZARD_PULSE_PLATEAU_TICKS
+	var slowest: float = 1.0 / FloorBuilder._HAZARD_PULSE_SLOW_TICKS
+	var _advance_at := func(r: int) -> float:
+		return float(FloorBuilder.hazard_warning_look(r)["cycles"]) - float(FloorBuilder.hazard_warning_look(r - 1)["cycles"]) if r > 1 \
+			else float(FloorBuilder.hazard_warning_look(1)["cycles"])
+	assert_gte(plateau, 30, "the rapid rate lasts about a second")
+	assert_gt(plateau, FloorBuilder._HAZARD_URGENT_TICKS, "it starts before the pad is primed")
+	for r in range(plateau, 0, -1):
+		assert_almost_eq(_advance_at.call(r), fastest, 0.0001, "plateau r = %d is not at full speed" % r)
+	assert_gt(float(FloorBuilder.hazard_warning_look(plateau)["cycles"]), 2.5, "the plateau holds several full rapid pulses")
+	assert_almost_eq(_advance_at.call(lead), slowest, 0.002, "the onset is the slow pulse")
+	assert_gt(fastest / _advance_at.call(lead), 3.0, "the rapid pulses are distinctly faster than the first")
+	# Smooth at the joint: the ramp's last tick is already within a whisker of full speed.
+	assert_lt(fastest - _advance_at.call(plateau + 1), 0.002, "the ramp meets the plateau without a jump")
+	for r: int in [0, lead + 1, -1]:
+		assert_eq(float(FloorBuilder.hazard_warning_look(r)["tint"]), 0.0, "r = %d does not pulse" % r)
+
+
+## SAFEGUARD B, at both edges. The look shown BEFORE tick N must be the hazard state tick N
+## resolves under (the pad's own was_active after N), and every HP loss on the pad must land on a
+## tick that was displayed active. i-frames mean not every active tick hurts, so damage is checked
+## one way only; the authoritative phase is checked both ways on every tick.
+func test_displayed_state_is_the_state_the_next_tick_resolves() -> void:
+	var arena: Node3D = _hazard_arena([4] as Array[int])
+	var envoy_id: int = arena.envoy.actor_id
+	var first: SpikePadPlan = null
+	for pad: SpikePadPlan in DepthGenerator.generate(arena.run_seed, 4).spike_pads:
+		if pad.pad_id == 0:
+			first = pad
+	arena.sim.entities[envoy_id] = Vector3(first.rect.get_center().x, 0.0, first.rect.get_center().y)
+	var cycle: int = first.safe_ticks + first.active_ticks
+	var on_edges: int = 0
+	var off_edges: int = 0
+	var hits: int = 0
+	var was_shown: Dictionary = {}
+	for step in cycle * 2 + 5:
+		var shown: Dictionary = {}
+		for pad_id: int in arena._floor_builder.hazard_pad_ids():
+			shown[pad_id] = _displayed_active(arena, pad_id)
+		var health_before: float = arena.sim.health_of(envoy_id)
+		arena._step([] as Array[Command], 1.0 / 30.0)
+		for pad_id: int in shown:
+			assert_eq(bool(arena.sim._spike_pads[pad_id]["was_active"]), shown[pad_id],
+				"step %d pad %d: displayed %s but the tick resolved the opposite" % [step, pad_id, shown[pad_id]])
+			if was_shown.has(pad_id) and was_shown[pad_id] != shown[pad_id]:
+				if shown[pad_id]:
+					on_edges += 1
+				else:
+					off_edges += 1
+			_assert_mesh_matches_query(arena, pad_id, "after step %d" % step)
+		was_shown = shown
+		if arena.sim.health_of(envoy_id) < health_before:
+			hits += 1
+			assert_true(shown[0], "step %d: HP lost on band 0 while it was displayed safe" % step)
+	assert_gte(on_edges, 6, "every band crossed its activation edge at least twice")
+	assert_gte(off_edges, 6, "and its deactivation edge")
+	assert_gt(hits, 0, "sanity: standing on band 0 through its writes does hurt")
+
+
+## THE STEPPING-STONE READ (human design, 2026-10-17), as the PLAYER SEES IT: the meshes of the
+## shipped corridor, every tick for two cycles. Pads alternate in two groups ({0,2} and {1,3}),
+## every pad's mesh follows its own countdown, the pad directly ahead of a warning pad is never
+## lit while that pad warns (it has just gone dark: the "go"), and neighbours genuinely show
+## different states at once (no shared material).
+func test_floor_four_stepping_stones_show_the_go_signal() -> void:
+	var arena: Node3D = _hazard_arena([4] as Array[int])
+	var builder: FloorBuilder = arena._floor_builder
+	var ids: Array = builder.hazard_pad_ids()
+	ids.sort()
+	assert_eq(ids, [0, 1, 2, 3])
+	var materials: Dictionary = {}
+	for pad_id: int in ids:
+		materials[builder._hazards[pad_id].material_override.get_instance_id()] = true
+	assert_eq(materials.size(), ids.size(), "every pad owns its material")
+	var go_signals: int = 0
+	var mixed_ticks: int = 0
+	for step in 321:
+		var phases: Array = []
+		var colours: Dictionary = {}
+		for pad_id: int in ids:
+			phases.append(FloorBuilder.hazard_warning_look(arena.sim.spike_pad_ticks_until_active(pad_id))["phase"])
+			_assert_mesh_matches_query(arena, pad_id, "step %d" % step)
+			colours[builder._hazards[pad_id].material_override.albedo_color] = true
+		assert_eq(phases[0], phases[2], "step %d: pads 0 and 2 share a phase" % step)
+		assert_eq(phases[1], phases[3], "step %d: pads 1 and 3 share a phase" % step)
+		for i in 3:
+			if _warning(phases[i]):
+				assert_eq(phases[i + 1], &"inactive", "step %d: pad %d warns but the pad ahead is %s" % [step, i, phases[i + 1]])
+				go_signals += 1
+		if colours.size() > 1:
+			mixed_ticks += 1
+		arena._step([] as Array[Command], 1.0 / 30.0)
+	assert_gt(go_signals, 0)
+	assert_gt(mixed_ticks, 0, "neighbouring pads were seen in different states at the same moment")
+
+
+## Floor 2's pads (offsets 0 and 92) follow their own countdowns too.
+func test_floor_two_pads_follow_their_own_countdowns() -> void:
+	var arena: Node3D = _hazard_arena([2] as Array[int])
+	var ids: Array = arena._floor_builder.hazard_pad_ids()
+	assert_eq(ids.size(), 6)
+	var disagreed: bool = false
+	for step in 186:
+		var phases: Dictionary = {}
+		for pad_id: int in ids:
+			_assert_mesh_matches_query(arena, pad_id, "floor 2 step %d" % step)
+			phases[FloorBuilder.hazard_warning_look(arena.sim.spike_pad_ticks_until_active(pad_id))["phase"]] = true
+		disagreed = disagreed or phases.size() > 1
+		arena._step([] as Array[Command], 1.0 / 30.0)
+	assert_true(disagreed, "the two offsets were seen in different phases")
+
+
+## SAFEGUARD C. Drawn pads, registered pads and planned pads are one set -- on first load, after a
+## real descent, and in a fresh arena (what restart's scene reload builds) -- and every look is
+## already the query's before the first tick.
+func _assert_hazards_correspond(arena: Node3D, context: String) -> void:
+	var plan: FloorPlan = DepthGenerator.generate(arena.run_seed, arena.expedition.current_depth())
+	var planned: Array = []
+	for pad: SpikePadPlan in plan.spike_pads:
+		planned.append(pad.pad_id)
+	var drawn: Array = arena._floor_builder.hazard_pad_ids()
+	var registered: Array = arena.sim._spike_pads.keys()
+	planned.sort()
+	drawn.sort()
+	registered.sort()
+	assert_eq(drawn, planned, "%s: drawn pads" % context)
+	assert_eq(registered, planned, "%s: registered pads" % context)
+	for pad_id: int in drawn:
+		assert_gte(arena.sim.spike_pad_ticks_until_active(pad_id), 0, "%s: pad %d is unknown to the sim" % [context, pad_id])
+		_assert_mesh_matches_query(arena, pad_id, context)
+
+
+func test_hazard_pads_correspond_after_load_descent_and_reload() -> void:
+	_assert_hazards_correspond(_hazard_arena([4] as Array[int]), "load")
+	var descending: Node3D = _hazard_arena([3, 4] as Array[int])
+	assert_eq(descending._floor_builder.hazard_pad_ids().size(), 0, "the Terminal has no pads")
+	descending._report_events([Event.new(descending.sim.tick_count, "floor_complete", {})] as Array[Event])
+	descending._resolve_floor_complete()
+	assert_eq(descending.expedition.current_depth(), 4)
+	_assert_hazards_correspond(descending, "descent")
+	_assert_hazards_correspond(_hazard_arena([4] as Array[int]), "reload")
+	assert_push_error_count(0, "no drawn pad was unknown")
+
+
+func test_a_drawn_pad_the_sim_does_not_know_is_reported() -> void:
+	var arena: Node3D = _hazard_arena([4] as Array[int])
+	arena.sim._spike_pads.erase(0)
+	arena._project_hazards()
+	assert_push_error("spike pad 0 is drawn but the sim has no such pad")

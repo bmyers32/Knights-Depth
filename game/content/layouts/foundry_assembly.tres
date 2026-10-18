@@ -882,10 +882,10 @@ position = Vector3(71, 0, -32)
 script = ExtResource("6_pad")
 key = &"PAD_SEQ_0"
 pad_id = 0
-rect = Rect2(19, -78, 6, 8)
-safe_ticks = 210
+rect = Rect2(18, -78, 5, 8)
+safe_ticks = 130
 active_ticks = 30
-phase_offset_ticks = 210
+phase_offset_ticks = 130
 damage = 10.0
 
 
@@ -893,10 +893,10 @@ damage = 10.0
 script = ExtResource("6_pad")
 key = &"PAD_SEQ_1"
 pad_id = 1
-rect = Rect2(25, -78, 6, 8)
-safe_ticks = 210
+rect = Rect2(23, -78, 5, 8)
+safe_ticks = 130
 active_ticks = 30
-phase_offset_ticks = 170
+phase_offset_ticks = 50
 damage = 10.0
 
 
@@ -904,10 +904,21 @@ damage = 10.0
 script = ExtResource("6_pad")
 key = &"PAD_SEQ_2"
 pad_id = 2
-rect = Rect2(31, -78, 6, 8)
-safe_ticks = 210
+rect = Rect2(28, -78, 5, 8)
+safe_ticks = 130
 active_ticks = 30
 phase_offset_ticks = 130
+damage = 10.0
+
+
+[sub_resource type="Resource" id="Resource_pad_seq_3"]
+script = ExtResource("6_pad")
+key = &"PAD_SEQ_3"
+pad_id = 3
+rect = Rect2(33, -78, 5, 8)
+safe_ticks = 130
+active_ticks = 30
+phase_offset_ticks = 50
 damage = 10.0
 
 
@@ -921,7 +932,7 @@ triggers = Array[ExtResource("4_trig")]([SubResource("Resource_t_west"), SubReso
 encounters = Array[ExtResource("5_enc")]([SubResource("Resource_e_access"), SubResource("Resource_e_west"), SubResource("Resource_e_east"), SubResource("Resource_e_west_return"), SubResource("Resource_e_wave_1"), SubResource("Resource_e_wave_2"), SubResource("Resource_e_wave_3")])
 breakables = Array[ExtResource("9_breakable")]([SubResource("Resource_b_access_a"), SubResource("Resource_b_access_b"), SubResource("Resource_b_access_c"), SubResource("Resource_b_west_a"), SubResource("Resource_b_west_b"), SubResource("Resource_b_pocket_a"), SubResource("Resource_b_pocket_b"), SubResource("Resource_b_pocket_c")])
 obstacles = Array[ExtResource("8_obstacle")]([SubResource("Resource_o_hub_node"), SubResource("Resource_o_east_key_cover"), SubResource("Resource_o_east_cover_a"), SubResource("Resource_o_east_cover_b"), SubResource("Resource_o_chamber_core"), SubResource("Resource_o_chamber_nw"), SubResource("Resource_o_chamber_ne"), SubResource("Resource_o_chamber_sw"), SubResource("Resource_o_chamber_se")])
-spike_pads = Array[ExtResource("6_pad")]([SubResource("Resource_pad_seq_0"), SubResource("Resource_pad_seq_1"), SubResource("Resource_pad_seq_2")])
+spike_pads = Array[ExtResource("6_pad")]([SubResource("Resource_pad_seq_0"), SubResource("Resource_pad_seq_1"), SubResource("Resource_pad_seq_2"), SubResource("Resource_pad_seq_3")])
 carriables = Array[ExtResource("7_carriable")]([SubResource("Resource_k_west"), SubResource("Resource_k_east")])
 entry_point = Vector3(-50, 0, 0)
 end_marker = Vector3(74, 0, -144)

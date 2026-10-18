@@ -331,6 +331,9 @@ func _load_floor() -> FloorPlan:
 					"color": action.telegraph_color,
 					"hit_radius": action.projectile_hit_radius,
 				}
+	# Drawn before the first tick, so a pad that is mid-warning on arrival never shows a frame
+	# of the wrong phase.
+	_project_hazards()
 	_update_seed_label(plan)
 	return plan
 
@@ -463,6 +466,7 @@ func _step(commands: Array[Command], delta: float) -> void:
 		actor.sync_from_sim(_grounded(sim.entities.get(actor_id, actor.position)))
 	_report_events(events)
 	_project_carrying()
+	_project_hazards()
 	_resolve_floor_complete()
 	_advance_windup_cues()
 	if debug_show_attack_state:
@@ -500,6 +504,18 @@ func _project_carrying() -> void:
 		focus = sim.interaction_focus(envoy.actor_id, envoy.current_aim())
 	_floor_builder.show_interaction_focus(String(focus.get("kind", "")),
 		int(focus.get("carriable_id", -1)), int(focus.get("trigger_id", -1)))
+
+
+## HAZARDS, PROJECTED (P41). After sim.tick() resolved tick N, tick_count is N+1, so the query
+## answers for the tick the NEXT input resolves under: the pad looks active on exactly the frames
+## whose input will meet an active pad. A drawn pad the sim does not know is a registration bug,
+## and it is reported, never painted over as an ordinary dormant pad.
+func _project_hazards() -> void:
+	for pad_id: int in _floor_builder.hazard_pad_ids():
+		var ticks_until_active: int = sim.spike_pad_ticks_until_active(pad_id)
+		if ticks_until_active < 0:
+			push_error("spike pad %d is drawn but the sim has no such pad" % pad_id)
+		_floor_builder.show_hazard_warning(pad_id, ticks_until_active)
 
 
 ## Acts on a floor completion AFTER its whole event batch has been reported. The Expedition
@@ -798,10 +814,10 @@ func _report_events(events: Array[Event]) -> void:
 					_enemies[submerged_id].clear_telegraph()
 				_windup_cues.erase(submerged_id)
 			"hazard_phase_changed":
-				# Presentation PROJECTS the phase; it never owns it. The sim decided this on the
-				# tick, and an animation that disagreed would be lying about where it is safe
-				# to stand.
-				_floor_builder.set_hazard_active(int(event.payload.get("pad_id", -1)), bool(event.payload.get("active", false)))
+				# Deliberately NOT painted from here (P41): this reports the tick that just
+				# resolved, one tick stale for a player about to act. _project_hazards() is the
+				# single painter; the event stays for any other consumer.
+				pass
 			"switch_activated":
 				# A switch is a picture of a rule too: presentation reports the activation and
 				# never decides what it did. The door it opened arrives as its own
