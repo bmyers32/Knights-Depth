@@ -1037,3 +1037,80 @@ func _id(key: StringName) -> int:
 
 func _region(key: StringName) -> Rect2:
 	return L.region_for(key)
+
+
+# --- P44: the shared post-hit window on Floor 2's own pads ----------------------------------------
+
+func _spike_events(events: Array[Event]) -> Array[int]:
+	var ticks: Array[int] = []
+	for event in events:
+		if event.kind == "hit" and int(event.payload.get("target_id", -1)) == player 				and event.payload.get("source", &"") == SimWorld.SOURCE_ENVIRONMENT:
+			ticks.append(event.tick)
+	return ticks
+
+
+func _enemy_hit_landed(events: Array[Event]) -> bool:
+	for event in events:
+		if event.kind == "hit" and int(event.payload.get("target_id", -1)) == player and not event.payload.has("source"):
+			return true
+	return false
+
+
+## Every Floor 2 pad, at its own size and timing, in the real Arena: spike hits never come closer
+## together than the shared window, and uninterrupted contact lands exactly once per
+## activation. Between pads the Envoy waits off the spikes long enough for every window to lapse.
+func test_every_floor2_pad_hits_at_most_once_per_window() -> void:
+	var window: int = int(sim._iframe_ticks_on_hit[player])
+	var arrival: Vector3 = sim.entities[player]
+	assert_eq(plan.spike_pads.size(), 6, "sanity: the hall lane and the arena cross")
+	for pad: SpikePadPlan in plan.spike_pads:
+		sim.entities[player] = arrival
+		for i in window + 1:
+			sim.tick([] as Array[Command], DT)
+		var centre := Vector3(pad.rect.get_center().x, 0.0, pad.rect.get_center().y)
+		sim.entities[player] = centre
+		var events: Array[Event] = []
+		var activation_starts: int = 0
+		var was_active: bool = false
+		var stayed: bool = true
+		for i in 2 * (pad.safe_ticks + pad.active_ticks):
+			var active: bool = sim.spike_pad_ticks_until_active(pad.pad_id) == 0
+			if active and not was_active:
+				activation_starts += 1
+			was_active = active
+			events.append_array(sim.tick([] as Array[Command], DT))
+			if sim.entities[player] != centre:
+				stayed = false
+		var hits: Array[int] = _spike_events(events)
+		assert_gt(hits.size(), 0, "pad %d wrote while the Envoy stood on it" % pad.pad_id)
+		for i in range(1, hits.size()):
+			assert_gte(hits[i] - hits[i - 1], window, "pad %d: no two spike hits inside one window" % pad.pad_id)
+		if stayed and not _enemy_hit_landed(events):
+			assert_eq(hits.size(), activation_starts, "pad %d: one hit per activation" % pad.pad_id)
+
+
+## A GENERAL WINDOW COVERS THE NEXT PAD TOO (a consequence, not a hazard rule): hurt on one pad, the Envoy walks onto the next pad of the
+## same unbroken lane while it is still live, and takes no further spike damage.
+func test_a_hurt_envoy_can_continue_across_the_hall_lane() -> void:
+	var lane: Array = []
+	for pad: SpikePadPlan in plan.spike_pads:
+		if _patch(_id(&"P_SPIKE_HALL")).intersects(pad.rect):
+			lane.append(pad)
+	assert_gte(lane.size(), 2, "sanity: the lane has more than one pad")
+	var first: SpikePadPlan = lane[0]
+	var next: SpikePadPlan = lane[1]
+	for i in first.safe_ticks + first.active_ticks:
+		if sim.spike_pad_ticks_until_active(first.pad_id) == 0:
+			break
+		sim.tick([] as Array[Command], DT)
+	sim.entities[player] = Vector3(first.rect.get_center().x, 0.0, first.rect.get_center().y)
+	assert_eq(_spike_events(sim.tick([] as Array[Command], DT)).size(), 1, "sanity: the first pad hurt")
+	sim.entities[player] = Vector3(next.rect.get_center().x, 0.0, next.rect.get_center().y)
+	var live: int = 0
+	var events: Array[Event] = []
+	for i in first.active_ticks - 1:
+		if sim.spike_pad_ticks_until_active(next.pad_id) == 0:
+			live += 1
+		events.append_array(sim.tick([] as Array[Command], DT))
+	assert_gt(live, 0, "sanity: the next pad was live underfoot")
+	assert_eq(_spike_events(events), [] as Array[int], "the first pad's window covers the whole lane")

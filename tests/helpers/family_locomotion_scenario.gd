@@ -45,6 +45,8 @@ static func build(sim: SimWorld, family_key: StringName) -> void:
 
 	var envoy_stats: EnvoyStats = ContentDB.get_resource(&"envoy", &"default")
 	sim.add_entity(PLAYER_ID, Vector3.ZERO, envoy_stats.move_speed)
+	# i-frames stay 0 ON PURPOSE, not envoy_stats.iframe_ticks_on_hit: this recording predates P44
+	# (2026-10-18) and must not move. The one deliberate divergence from arena.gd.
 	sim.register_combatant(PLAYER_ID, envoy_stats.max_health, envoy_stats.family, 0, envoy_stats.combat_radius, &"player")
 
 	ContentRegistrar.register_enemy_body(sim, ENEMY_ID, family_key, SPAWN)

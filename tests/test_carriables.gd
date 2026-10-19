@@ -420,6 +420,22 @@ func test_an_absorbed_hit_does_not_drop_the_key() -> void:
 	assert_eq(sim.carried_by(PLAYER), KEY)
 
 
+## P44: with the SHIPPED window, a carrier standing in spikes drops the key on the first damaging
+## contact only -- the absorbed contacts after it are not hits, so they release nothing.
+func test_spikes_drop_a_carried_key_once_not_every_contact() -> void:
+	var envoy: EnvoyStats = ContentDB.get_resource(&"envoy", &"default")
+	sim.register_combatant(PLAYER, 100.0, &"envoy", envoy.iframe_ticks_on_hit, 0.45, &"player")
+	_lift()
+	sim.register_spike_pad(9, Rect2(-2.0, -2.0, 4.0, 4.0), 1, 10000, 0, 10.0, &"force")
+	var events: Array[Event] = []
+	for i in 30:
+		events.append_array(_tick())
+	var releases: Array = _kinds(events).filter(func(kind: String) -> bool: return kind.begins_with("carriable_"))
+	assert_eq(releases, ["carriable_dropped"], "one release transition across the whole contact")
+	assert_gt(_kinds(events).count("attack_absorbed"), 0, "sanity: later contacts were absorbed")
+	assert_eq(sim.carried_by(PLAYER), -1)
+
+
 func test_a_zero_damage_hit_does_not_drop_the_key() -> void:
 	sim.register_weapon(BITE, 0.0, &"force", 4.0, 60.0, 0.0)
 	_lift()

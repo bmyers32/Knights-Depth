@@ -37,6 +37,22 @@ extends Resource
 ## retune this geometry to fix an animation problem unless authoritative contact
 ## itself proves wrong. Method + trigger recorded at ROADMAP P28.
 @export var combat_radius: float = 0.45
+## POST-HIT INVULNERABILITY (P44, ruled 2026-10-18) -- the SAME shared health-hit window enemies
+## carry (FangStats.iframe_ticks_on_hit), deliberately GLOBAL: any unblocked, non-lethal HP hit --
+## an enemy blow, a projectile or a spike pad -- starts it, and every ordinary hit from any source
+## inside it is absorbed. Absorbed and blocked hits never restart it. No per-pad timer, no
+## source-specific immunity (a 15 + 90 hazard-only split was proposed and REJECTED the same day).
+## It was a literal 0 in the driver until then, so a spike pad dealt 10 on every active tick.
+## 90 ticks = 3 s at 30 Hz: an intentional global survivability change. It is LONGER than every
+## shipped enemy action's fire_interval_ticks (fang_bite 24 .. ooze_slam 55), so one enemy's own
+## follow-up blows inside the window are absorbed too -- the opposite of the enemy-side cadence
+## rule in FangStats, and accepted as such.
+## CALIBRATION: HUMAN-ACCEPTED 2026-10-18 as the current baseline, not a permanent balance lock.
+## Observed: a Floor 2 pad hit left time to step off before another hit; standing still and
+## letting a Floor 2 crowd attack, the Envoy died after five damaging hits over ~16 s, with blows
+## absorbed during the window -- "acceptable for the current development stage". Retune only on
+## new gameplay evidence; no compensating enemy damage/cadence/hazard-timing changes (ROADMAP P44).
+@export var iframe_ticks_on_hit: int = 90
 
 ## CARRYING (Floor 4 Stage 2, 2026-10-16). A loose key is lifted by the primary attack press when
 ## it is within `pickup_reach`, inside the aim cone of `pickup_cone_half_angle_degrees`, and not

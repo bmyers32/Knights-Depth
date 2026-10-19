@@ -1252,3 +1252,98 @@ func test_standing_in_a_band_when_it_writes_costs_health() -> void:
 	var before: float = arena.sim.health_of(envoy_id)
 	_idle(arena, plan.spike_pads[0].safe_ticks + plan.spike_pads[0].active_ticks)
 	assert_lt(arena.sim.health_of(envoy_id), before)
+
+
+# --- P44: the shipped post-hit window, through the real driver ----------------------------------
+
+## The DRIVER registers the Envoy with its content window. The literal 0 it used to pass is exactly
+## the defect P44 found; this is the test that fails if it comes back.
+func test_the_driver_registers_the_envoy_with_its_content_window() -> void:
+	var arena: Node3D = _boot()
+	var stats: EnvoyStats = ContentDB.get_resource(&"envoy", &"default")
+	assert_eq(stats.iframe_ticks_on_hit, 90, "sanity: the ruled provisional shared window")
+	assert_eq(int(arena.sim._iframe_ticks_on_hit[arena.envoy.actor_id]), stats.iframe_ticks_on_hit)
+
+
+## Health, position and tick for every _step -- what the player sees, read back from the sim.
+func _pad_trace(arena: Node3D, commands_at: Callable, ticks: int) -> Array:
+	var envoy_id: int = arena.envoy.actor_id
+	var trace: Array = []
+	for i in ticks:
+		var commands: Array[Command] = commands_at.call(arena.sim.tick_count, envoy_id)
+		arena._step(commands, DT)
+		trace.append([arena.sim.tick_count, arena.sim.health_of(envoy_id), arena.sim.entities[envoy_id]])
+	return trace
+
+
+## A real Arena on a real pad for two cycles. Knockback or drift could carry the Envoy off it, so
+## the hard law is spacing (no two spike hits inside the window) and size (each is one pad
+## hit); exactly one per activation is required only if contact was actually uninterrupted.
+func test_a_real_arena_pad_hits_at_most_once_per_window() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = arena.envoy.actor_id
+	var pad: SpikePadPlan = plan.spike_pads[0]
+	var window: int = int(arena.sim._iframe_ticks_on_hit[envoy_id])
+	arena.sim.entities[envoy_id] = _centre(pad.rect)
+	var start: Vector3 = arena.sim.entities[envoy_id]
+	var trace: Array = _pad_trace(arena, func(_t: int, _id: int) -> Array[Command]: return [] as Array[Command],
+		2 * (pad.safe_ticks + pad.active_ticks))
+	var drops: Array[int] = []
+	var stayed: bool = true
+	var last_health: float = 100000.0  # _boot's survivability override
+	for row in trace:
+		if row[1] < last_health:
+			assert_almost_eq(last_health - row[1], pad.damage, 0.001, "each HP hit is one pad hit")
+			drops.append(row[0])
+		last_health = row[1]
+		if row[2] != start:
+			stayed = false
+	assert_gt(drops.size(), 0, "the pad wrote while the Envoy stood on it")
+	for i in range(1, drops.size()):
+		assert_gte(drops[i] - drops[i - 1], window, "no two spike hits inside one window")
+	if stayed:
+		assert_eq(drops.size(), 2, "uninterrupted contact through two activations: one hit each")
+
+
+## A GENERAL WINDOW COVERS THE NEXT PAD TOO (a consequence, not a hazard rule): hurt by one pad, the Envoy stands on the other
+## pad of the same write group -- active at the same moment -- and takes nothing more.
+func test_a_hurt_envoy_can_cross_another_active_corridor_pad() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = arena.envoy.actor_id
+	var pads: Array = plan.spike_pads.duplicate()
+	pads.sort_custom(func(a: SpikePadPlan, b: SpikePadPlan) -> bool: return a.rect.position.x < b.rect.position.x)
+	var first: SpikePadPlan = pads[0]
+	var partner: SpikePadPlan = pads[2]
+	assert_eq(first.phase_offset_ticks, partner.phase_offset_ticks, "sanity: pads 1 and 3 write together")
+	# Wait for the write at the arrival point, off every pad, so nothing opens a window early.
+	for i in 400:
+		if arena.sim.spike_pad_ticks_until_active(first.pad_id) == 0:
+			break
+		arena._step([] as Array[Command], DT)
+	arena.sim.entities[envoy_id] = _centre(first.rect)
+	var before: float = arena.sim.health_of(envoy_id)
+	arena._step([] as Array[Command], DT)
+	assert_almost_eq(before - arena.sim.health_of(envoy_id), first.damage, 0.001, "sanity: the first pad hurt")
+	arena.sim.entities[envoy_id] = _centre(partner.rect)
+	var hurt: float = arena.sim.health_of(envoy_id)
+	var stood_on_live_spikes: int = 0
+	for i in first.active_ticks - 1:
+		if arena.sim.spike_pad_ticks_until_active(partner.pad_id) == 0:
+			stood_on_live_spikes += 1
+		arena._step([] as Array[Command], DT)
+	assert_gt(stood_on_live_spikes, 0, "sanity: the partner pad was live underfoot")
+	assert_eq(arena.sim.health_of(envoy_id), hurt, "the window the first pad opened covers every pad")
+
+
+## Same scripted input, two fresh Arenas: the same trace, tick for tick.
+func test_a_scripted_pad_crossing_replays_identically() -> void:
+	var script: Callable = func(t: int, id: int) -> Array[Command]:
+		if t >= 120 and t < 150:
+			return [Command.new(t, id, "move", {"direction": Vector3(1, 0, 0)})] as Array[Command]
+		return [] as Array[Command]
+	var traces: Array = []
+	for run in 2:
+		var arena: Node3D = _boot()
+		arena.sim.entities[arena.envoy.actor_id] = _centre(plan.spike_pads[0].rect)
+		traces.append(_pad_trace(arena, script, 2 * (plan.spike_pads[0].safe_ticks + plan.spike_pads[0].active_ticks)))
+	assert_eq(traces[0], traces[1])

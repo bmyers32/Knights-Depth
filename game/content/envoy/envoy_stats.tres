@@ -4,3 +4,4 @@
 
 [resource]
 script = ExtResource("1_stats")
+iframe_ticks_on_hit = 90

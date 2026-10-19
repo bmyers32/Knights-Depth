@@ -182,7 +182,7 @@ func begin_expedition() -> void:
 	# The body radius rides along because placement legality is body-aware (ruled): it is the
 	# same stats.combat_radius registered as the combatant body on the next line.
 	sim.add_entity(envoy.actor_id, envoy.position, envoy.stats.move_speed, Vector3(0.0, 0.0, -1.0), envoy.stats.combat_radius)
-	sim.register_combatant(envoy.actor_id, envoy.stats.max_health, envoy.stats.family, 0, envoy.stats.combat_radius, &"player")
+	sim.register_combatant(envoy.actor_id, envoy.stats.max_health, envoy.stats.family, envoy.stats.iframe_ticks_on_hit, envoy.stats.combat_radius, &"player")
 	sim.register_carrier(envoy.actor_id, envoy.stats.pickup_reach, envoy.stats.pickup_cone_half_angle_degrees, envoy.stats.pickup_underfoot_radius)
 	# The ONE actor that survives a floor transition. Everything else on a floor belongs to
 	# that floor (SimWorld.STATE_SCOPES).

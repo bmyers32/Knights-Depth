@@ -50,7 +50,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P41 | Timed-hazard pre-activation telegraph | **SHIPPED 2026-10-18 (`315ed5a`) — human gameplay PASS** | Spike pads warn before they write (50-tick lead, accelerating pulse, primed height), derived from the sim countdown; Floor 4 corridor re-authored as four alternating stepping stones |
 | P42 | M3 note: attack `aim` magnitude is behavioural | CONSTRAINT — **recorded 2026-10-16** | Since Floor 4 Stage 2 the sim reads the aim vector's LENGTH (cursor point), not just its direction. Authoritative input/replay must carry it unquantized |
 | P43 | East-room far Fang: lane-dependent engagement | OBSERVATION — **recorded 2026-10-18, accepted non-blocking** | After the doorway fix (`834940d`) the Fang at (56,-40) does not join a north-wall entry (wakes 19.6 u off, past its 18 u leash). Encounter-tuning note only |
-| P44 | Envoy takes spike damage every active tick | OBSERVATION — **recorded 2026-10-18, NOT RULED** | The Envoy has 0 hit i-frames, so a pad deals 10 per active tick (300 per 30-tick window vs 30 HP). Predates P41; needs a ruling, not a silent fix |
+| P44 | Envoy takes spike damage every active tick | RULED + BUILT 2026-10-18 — **playtest pending, NOT COMMITTED** | ONE shared window `EnvoyStats.iframe_ticks_on_hit = 90` (provisional) for every HP hit, any source. Hazard-only split REJECTED |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4215,6 +4215,34 @@ spike pad deals its 10 damage on every active tick: up to 300 over one 30-tick w
 30 HP. In practice a pad that fires underfoot is lethal unless the player steps off at once.
 P41's warning makes that readable, and the corridor passed play under it, but whether it is
 intended (vs. a per-pad hit cooldown or i-frames) is a design ruling, not a silent fix.
+
+**RULED 2026-10-18 (human):** a spike hit uses the SAME post-hit invulnerability as any health hit;
+no spike-specific cooldown or per-activation immunity. Diagnosis: the sim already gated hazards
+through the shared i-frame check (`_resolve_hit_on_target`); the Envoy simply registered with a
+literal 0 and `EnvoyStats` had no field. **BUILT (uncommitted):** `iframe_ticks_on_hit = 15`
+authored in `envoy_stats.tres`, read by `arena.gd`. 15 is the smallest window that makes a full
+30-tick activation survivable from 30 HP (2 hits, 20 damage). Wider effect: enemy blows landing
+within 15 ticks of each other now count once. Tests: `tests/test_envoy_iframes.gd`, plus driver
+wiring + real-arena + replay in `test_floor4.gd`, one-drop carry in `test_carriables.gd`.
+**PROVISIONAL, not a balance lock.** Gates: Floor 4 spike crossing + a crowded Floor 2 fight. If
+combat turns too forgiving, bring evidence and alternatives before retuning. Open, not changed: a
+held shield on an active pad still pays every tick (block grants no i-frames, the existing law).
+
+**CORRECTED RULING 2026-10-18 (human, same day).** A 15 general + 90 hazard-only split was built
+and REJECTED: no source-specific protection. The ONE shared `iframe_ticks_on_hit` is set to a
+provisional **90** (3 s) -- an intentional global survivability change. If it proves too forgiving,
+recommend a different SHARED value; never substitute a source-specific fix.
+**Measured 2026-10-18 (headless, Envoy standing still = worst case; real play moves/blocks/attacks):**
+- Floor 2 crowds (3-enemy E_WAVE_1 / E_WORKS, all forced active), damage per 10 s and time to lose
+  30 HP: N=0 72/91 dmg, 6.2/3.7 s · N=15 57/78, 8.2/5.7 s · N=30 42/46, 8.2/6.9 s · N=45 27/34,
+  10.9/9.3 s · N=60 21/26, 13.0/11.7 s · **N=90 15/19, 17.8/15.7 s**. At 90, three enemies land
+  ~1 hit per 3 s: a crowd hurts about as much as one enemy can.
+- Floor 4 corridor walked straight through ignoring timing, every start phase (0% clean at any N):
+  hits mean/worst N=0 28/36 · 15 2.6/4 · 20-25 2.1-2.3/3 · **30-60 1.7/2** · 90 1.2/2. 30 is the
+  smallest window whose worst blind crossing (20 dmg) is survivable from full HP.
+- Recommendation for the human: 90 flattens crowd pressure; ~30 keeps the corridor survivable with
+  ~2x the crowd damage of 90. Note 30 > fang_bite's 24-tick interval (single-Fang follow-ups can be
+  absorbed). Playtest decides.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
