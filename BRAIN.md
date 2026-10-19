@@ -1207,3 +1207,19 @@ present; at 30 Hz invisible in a glance, decisive at a tight edge.
 **Fix shape:** project hazard looks from the read-only query after each step and at load, and
 test "display before tick k == authoritative state resolved on tick k" on BOTH edges.
 **Where else:** windup telegraphs, gate open/closed visuals, M3 client prediction of timed hazards.
+
+### Sweep the shared knob before splitting it by source
+**Incident (M2, P44, 2026-10-18):** a spike pad hit every active tick because the Envoy's shared
+post-hit window was 0. Worried that one global value would either leave spikes lethal or soften
+crowds, a 15 general + 90 hazard-only split was proposed and built. The human rejected it: no
+source-specific protection. The fix that shipped was ONE shared value, chosen from a headless sweep
+(N = 0..90: crowd damage per 10 s and blind-corridor hits mean/worst) and then playtested.
+**Mechanism:** a source-specific split creates a second rule every future hazard, enemy and netcode
+path must honour, and hides the real trade-off inside two numbers. A sweep of the single knob shows
+the trade-off directly (here: 30 was the smallest corridor-survivable value; 90 flattened crowds)
+and lets the human choose a point on one curve.
+**Failure if ignored:** a parallel rule (per-source timers, per-pad immunity) that is rebuilt or torn
+out after review, and balance arguments made from intuition rather than a measured curve.
+**Fix shape:** before proposing a split, measure the shared tunable across a range against each
+consumer's worst case, report the table, recommend a value; split only if no single value works.
+**Where else:** knockback, status durations, enemy leash, any tunable read by several sources.

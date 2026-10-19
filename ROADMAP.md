@@ -50,7 +50,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P41 | Timed-hazard pre-activation telegraph | **SHIPPED 2026-10-18 (`315ed5a`) — human gameplay PASS** | Spike pads warn before they write (50-tick lead, accelerating pulse, primed height), derived from the sim countdown; Floor 4 corridor re-authored as four alternating stepping stones |
 | P42 | M3 note: attack `aim` magnitude is behavioural | CONSTRAINT — **recorded 2026-10-16** | Since Floor 4 Stage 2 the sim reads the aim vector's LENGTH (cursor point), not just its direction. Authoritative input/replay must carry it unquantized |
 | P43 | East-room far Fang: lane-dependent engagement | OBSERVATION — **recorded 2026-10-18, accepted non-blocking** | After the doorway fix (`834940d`) the Fang at (56,-40) does not join a north-wall entry (wakes 19.6 u off, past its 18 u leash). Encounter-tuning note only |
-| P44 | Envoy takes spike damage every active tick | RULED + BUILT 2026-10-18 — **playtest pending, NOT COMMITTED** | ONE shared window `EnvoyStats.iframe_ticks_on_hit = 90` (provisional) for every HP hit, any source. Hazard-only split REJECTED |
+| P44 | Envoy takes spike damage every active tick | SHIPPED — **HUMAN-ACCEPTED 2026-10-18** (`a27686b`) | ONE shared window `EnvoyStats.iframe_ticks_on_hit = 90` for every HP hit, any source: the accepted current baseline, not a lock. Hazard-only split REJECTED |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4243,6 +4243,15 @@ recommend a different SHARED value; never substitute a source-specific fix.
 - Recommendation for the human: 90 flattens crowd pressure; ~30 keeps the corridor survivable with
   ~2x the crowd damage of 90. Note 30 > fang_bite's 24-tick interval (single-Fang follow-ups can be
   absorbed). Playtest decides.
+
+**HUMAN-ACCEPTED 2026-10-18 at 90 — COMPLETE (`a27686b`).** Playtest: a Floor 2 pad hit left time to
+step off before a second hit (the original P44 problem is resolved); standing still and letting a
+Floor 2 crowd attack, the Envoy died after five damaging hits over ~16 s with blows absorbed inside
+the window -- "acceptable for the current development stage". No further active-combat playtest was
+required at this gate. 90 is the **accepted current baseline, not a permanent balance constraint**:
+revisit only on new gameplay evidence. No compensating changes to enemy damage, attack cadence,
+aggression or hazard timing. Shield, Burn DoT, death and key-drop behaviour unchanged. The held-shield-
+on-an-active-pad drain (block grants no i-frames) remains the existing law, not reopened.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

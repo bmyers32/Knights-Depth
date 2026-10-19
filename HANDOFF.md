@@ -1,5 +1,5 @@
 # HANDOFF
-Milestone: **2 — Procedural depths. IN PROGRESS.** Public M1 build: https://bmyers32.itch.io/knight-depths
+Milestone: **2 — Procedural depths. IN PROGRESS (NOT complete).** Public M1 build: https://bmyers32.itch.io/knight-depths
 
 ## Where things stand
 Shipped run (`arena.gd` itinerary `[1, 2, 3, 4]`): Floor 1 -> Floor 2 (308x150, Arena waves) -> Depth 3 Terminal
@@ -7,73 +7,80 @@ Shipped run (`arena.gd` itinerary `[1, 2, 3, 4]`): Floor 1 -> Floor 2 (308x150, 
 (.tres) -> `LayoutCompiler` -> `FloorPlan`; `DepthGenerator` picks the floor by DEPTH and the layout names its
 stratum. Four goldens (depths 1-4), dated log in `tools/record_floor_plan_golden.gd`.
 
-## FOUNDRY FLOOR 4 — STAGE 2 (`d5840e9`) + P41 (`315ed5a`) + EAST DOORWAY FIX (`834940d`). **ALL HUMAN PASS.**
-Layout `game/content/layouts/foundry_assembly.tres`; tests `tests/test_floor4.gd` (48), `tests/test_carriables.gd`
-(39), P41 contracts in `tests/test_presentation_contracts.gd`.
-- **Physical keys, one button.** Primary attack press resolves at most ONE action in
-  `SimWorld._resolve_interaction_target` (pure; `interaction_focus()` is the same call): carrying + in an unfilled
-  receiver -> insert · carrying elsewhere -> drop · empty-handed + key focused -> lift · else attack.
-- **Focus = aim direction:** key within `pickup_reach` 2.0, 60-deg half-angle cone, walkable line; enemy under the
-  cursor wins; a key within `pickup_underfoot_radius` 0.45 is never focused. Values in `envoy_stats.gd`.
-- **Carrying:** no attack/block/bump; weapon switch allowed; full speed. A damaging hit drops the key at the
-  pre-knockback position; death releases it. Gates in series (`R_GATE_1` hub, `R_GATE_2` vestibule); either key fits
-  either receiver; no gate can strand a key.
-- **West:** `K_WEST` at the top band's east end; its first lift wakes `E_WEST_RETURN` on the way back.
-- **East:** Watchers at (53,-50)/(50,-46), inside leash of doorway + bay. `T_EAST` is now `Rect2(40,-52,6,20)`, the
-  room's whole west column — the old doorway-width rect let a wall-hugger reach the key with the room asleep.
-  Left/centre/right lanes test-proven. Far Fang (56,-40) sits out a north-wall entry (ROADMAP **P43**, accepted).
-- **P41 spike-pad warning (presentation only).** `FloorBuilder.hazard_warning_look(ticks)` -> inactive / early /
-  urgent / active / unknown; lead 50, primed height for the last 15, pulse 40-tick period easing to 11 over ticks
-  50..30 then held 30, peak on activation. `Arena._project_hazards()` paints after every `_step` and at floor load
-  from `sim.spike_pad_ticks_until_active` = state(N+1), exactly the tick damage resolves under. The
-  `hazard_phase_changed` event no longer paints. Unknown pad -> `push_error`. All constants in floor_builder.gd.
-- **North corridor:** four contiguous 5-unit pads x 18/23/28/33, groups {0,2}/{1,3}, safe 130 / active 30 /
-  offsets 130/50/130/50: the pad ahead retracts as the pad underfoot starts warning. Envoy 0 hit i-frames -> a pad
-  deals 10 per active tick (ROADMAP **P44**, not ruled).
-- Loot room = 3 placeholder breakables that drop NOTHING (P39). `reveal_carriable` / `starts_hidden` unused, kept.
+## P44 — SHIPPED `a27686b`, HUMAN-ACCEPTED 2026-10-18
+- ONE shared post-hit window for the Envoy: `EnvoyStats.iframe_ticks_on_hit = 90` (3 s), authored in
+  `envoy_stats.tres`, read by `arena.gd` `register_combatant`. Any damaging hit (enemy, projectile, spike) starts
+  it; absorbed/blocked hits never restart it. **Sim untouched** — `_resolve_hit_on_target` already gated hazards;
+  the driver passed a literal 0.
+- **90 is the accepted current baseline, NOT a balance lock.** Retune only on new gameplay evidence, and only as a
+  different SHARED value. No per-pad timers, source-specific immunity or compensating enemy/hazard tuning.
+- Measured sweep (N=0..90, crowd dmg/10 s + blind-corridor hits) lives in ROADMAP P44; 30 was the alternative.
+- Tests: `tests/test_envoy_iframes.gd` (16), P44 sections in `test_floor4.gd` / `test_floor2.gd`, one-drop carry in
+  `test_carriables.gd`. Mutations (driver literal 0; resource 15) both caught.
+- The two AI-baseline helpers keep i-frames 0 ON PURPOSE (recordings predate P44; never re-record).
 
-## Next action — the deferred optional west-wing spike section. **Propose first, then build.**
-P41 unblocked it; it still needs human approval of a proposal before any code. Reuse P41's timing principle and
-the stepping-stone relation (pad k+1 retracts when pad k starts warning: stagger = warning + active ticks).
-After that: Stage 4 (optional discovery, only with a real payoff) · Stage 5 full-floor verdict, then art (P39).
-Rulings waiting (no code until ruled): P44 hazard damage per tick · P43 far Fang (accepted as is).
-Not authorized: turrets, throwing, spawners, new enemy families, reward infrastructure, authoritative height,
-new hazard families, canon edits, Foundry art pass.
+## FOUNDRY FLOOR 4 — Stage 2 (`d5840e9`) + P41 (`315ed5a`) + east doorway (`834940d`) + P44. ALL HUMAN PASS.
+Layout `game/content/layouts/foundry_assembly.tres`; tests `test_floor4.gd` (52), `test_carriables.gd` (40),
+P41 contracts in `test_presentation_contracts.gd`.
+- **Physical keys, one button.** Primary press resolves ONE action in `SimWorld._resolve_interaction_target`:
+  carrying + unfilled receiver -> insert · carrying elsewhere -> drop · empty-handed + key focused -> lift · attack.
+- **Focus = aim:** reach 2.0, 60-deg cone, walkable line; enemy under cursor wins; underfoot (0.45) never focused.
+- **Carrying:** no attack/block/bump; full speed. A damaging hit drops the key (once per window now); death releases.
+- **West:** `K_WEST` lift wakes `E_WEST_RETURN`. **East:** `T_EAST = Rect2(40,-52,6,20)`; far Fang = P43 (accepted).
+- **P41 warning** (presentation only): `FloorBuilder.hazard_warning_look`, painted from state(N+1) after each step.
+- **North corridor:** four 5-unit pads x 18/23/28/33, groups {0,2}/{1,3}, safe 130 / active 30. A blind walk
+  costs 1-2 hits at 90 (never 0); a timed crossing is clean.
+- Loot room = 3 placeholder breakables that drop NOTHING (P39).
+
+## Next action — the complete Floor 4 gameplay verdict (Stage 5). **Human playtest, no code.**
+Play the full floor start to finish at itinerary `[1,2,3,4]` (or `[4]` locally — revert before commit): both
+keys, both gates, west return ambush, east room from each lane, the north corridor, loot room, completion.
+Record KEEP/CHANGE per area. Readiness guidance already accepted (2026-10-18):
+- West-wing spike section: **DEFER** (stacks punishment on key carrying, no new decision; P39 sparseness ruling).
+- North corridor: **KEEP**. P43 far Fang: **KEEP as ruled**. Stage 4 optional discovery: **DEFER** (no payoff infra).
+**Then: M2 expedition design review (planning only).** Prepare the design comparison the human asked for:
+authored floors vs procedural segments vs hybrid, against §5's "procedural depths / >=8 segments" item. Do NOT
+edit GAME-RULES or silently replace the procedural requirement — any change goes through §7 deliberately.
+Candidate next build slice after that ruling: "Expedition frame" (Terminal elevator auto-descend, next-floor
+preview, Emergency Recall run-end + title). It needs its OWN plan and a ruling on floor-transition authority
+(M3 flag: a floor change is a driver call, not an Event) before any code.
+Not authorized: west hazards, new hazard families, generator work, elevator, title, art pass, canon edits,
+turrets, throwing, spawners, new enemy families, reward infrastructure, authoritative height.
 
 ## Accepted partials / flags
-- **M3 (P42):** the attack Command's `aim` LENGTH is now behavioural (aim point decides enemy-vs-key). Authoritative
-  input/replay must carry the full vector, never a normalized direction.
-- **Elevation (P40):** Floor 4's elevation is near-cosmetic by human observation; future floors name tier A/B/C
-  before designing height. Sim stays planar; no speculative height system. P39 holds the apparent-depth list.
+- **M3 (P42):** the attack Command's `aim` LENGTH is behavioural. Authoritative input must carry the full vector.
+- **Elevation (P40)** planned, not started: Floor 4 height is near-cosmetic; sim stays planar. **P39** Foundry
+  presentation planned, not started. Preserve both as planned work.
 - Itinerary is an `@export` default on Arena; `_TERMINAL_DEPTH = 3` / `_FOUNDRY_DEPTH = 4` in `depth_generator.gd`.
   Do NOT build a layout table/framework (ruled 2026-10-12).
-- Terminal room is bland greybox (debt). M3 flag: a floor change is a driver call, not an Event.
-- GAME-RULES §6.3 (Foundry's "one world rule") remains an OPEN M2 question.
+- Terminal room is bland greybox (debt). GAME-RULES §6.3 (Foundry's "one world rule") is an OPEN M2 question.
+- i-frames show nothing on screen (console print only). If that reads unfair in play -> ROADMAP, not inline.
+- A held shield on an active pad drains every tick (block grants no i-frames) — existing law, not reopened.
 - Two untracked files at repo root (`KNIGHTS-DEPTH-EXPLORATION-*`) are the human's; NEVER commit them.
 
 ## Open items / live fences
 - **NUMERIC FENCE (M1).** `close_frustration_ticks = 90` · Survey package · `engagement_delay_ticks = 10` · wand
-  `flinch_capability = none` · all M1 HP/flinch values · `vulnerable_start_tick` FROZEN.
-- **LEASH RULE (2026-09-08) is law:** activation engages; the ordinary spawn-anchored leash may still end it. Fix
-  silent rosters by PLACEMENT inside the envelope (BRAIN), never by an "active rooms never disengage" exception.
+  `flinch_capability = none` · all M1 HP/flinch values · `vulnerable_start_tick` FROZEN. P44's 90 = accepted baseline.
+- **LEASH RULE (2026-09-08) is law:** activation engages; the spawn-anchored leash may still end it. Fix silent
+  rosters by PLACEMENT inside the envelope (BRAIN), never an "active rooms never disengage" exception.
 - **SEED HONESTY.** Seeds do NOT vary authored geometry; the plan says `authored_layout`, the HUD prints it.
 - **Enemies are immune to environmental hazards.** Sim state only via Commands. Tunables in content.
-- **Closable connections need DISJOINT patches; an aperture must overlap both.** Pursuit routes through named
-  apertures. Ledge vs wall on one span = error. **Free-standing masses <= 3x3** (an Ooze pins on 4).
-- **AMBIENT TERRITORIES CONVEX** · `fits(point, radius)` against the UNION · triggers use INCLUSIVE `contains`.
+- **Closable connections need DISJOINT patches; an aperture must overlap both.** Ledge vs wall on one span = error.
+  **Free-standing masses <= 3x3** (an Ooze pins on 4). **AMBIENT TERRITORIES CONVEX** · triggers INCLUSIVE.
 - **If progression requires a capability, the floor must guarantee access to it.**
-- **Still out (M2 gate):** rest-floor gate · elevator + next-floor preview · stratum-driven pools/weights ·
-  depth-scaled defence · typed_damage_ramp · minimap · netcode spike · friend playtest · playtest gate · itch
-  build. **ROADMAP prune DUE at M2 close** (Index lacks a P37 row). Carried from M1: three §3 rules want a human
-  edit · P14 · P16 · 5.10.
+- **Still out (M2 gate):** 3-5 floors per stratum (Archive 2, Foundry 1) · >=8 segments / procedural question ·
+  elevator + next-floor preview · stratum-driven pools/weights · depth-scaled defence · typed_damage_ramp · minimap
+  · title + Emergency Recall run-end · netcode spike · friend playtest · playtest gate · itch build.
+  **ROADMAP prune DUE at M2 close** (Index lacks a P37 row). Carried from M1: three §3 rules want a human edit ·
+  P14 · P16 · 5.10.
 
 ## Traps this repo has actually sprung
 - **GUT ignores `-gtest=<path>` and runs the WHOLE suite.** Use `-gselect=test_floor4`; check the reported count.
-- **A local itinerary change breaks the suite.** The human sets `[4]` to play Floor 4 directly; ~11 expedition
-  tests fail under it. Run the suite with `[1, 2, 3, 4]`; it must be `[1,2,3,4]` at commit (re-check right before).
-- **Walk-to helpers stop short.** A lift test standing 0.3 short can land outside reach, or ON a dropped key
-  (underfoot = never focused): use `_beside(key_at)` in test_floor4.
-- **Bash heredocs choke on large inline Python** — write the script to the scratchpad and run `python -I <file>`.
+- **A local itinerary change breaks the suite.** Run the suite with `[1, 2, 3, 4]`; it must be that at commit.
+- **Measure the shared knob before splitting it by source** (BRAIN) — the 15+90 P44 split was built and rejected.
+- **Position a cross-source test OFF the pad** — at long windows the pad re-activates and lands first.
+- **Walk-to helpers stop short** — use `_beside(key_at)` in test_floor4.
+- **Bash heredocs choke on large inline Python** — write to the scratchpad and run `python -I <file>`.
 - **A flag test is not an engagement test** — assert acquisition/attacks on the walked route (BRAIN).
 - **`Rect2.has_point` is EXCLUSIVE on the far edge; `WalkableBounds.contains` is INCLUSIVE.**
 - **Drive the SHIPPED weapon the shipped way** (pressed/released), and **verify BOTH anchors of a splice**.
@@ -81,15 +88,15 @@ new hazard families, canon edits, Foundry art pass.
 - **Never re-record `ai_baseline_pre_p29.json` or the P17 Fang baseline.** A `-s` tool compiles before autoloads.
 - **Never round-trip source through PowerShell Get-Content/Set-Content** (UTF-8 corruption).
 - A Bash `cd` into a subfolder breaks the `scripts/guard.py` pre-edit hook (relative path) — cd back to root.
+- GDScript: a local named `log` shadows a built-in — pick another name.
 
 ## Commands
-- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (997, ~90 s)
+- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1020, ~112 s)
 - One file: add `-gselect=test_floor4`. Headless sim CI: `-gselect=test_sim_world
   -gunit_test_name=test_ticks_1000_times_headless`. New `class_name`? `--headless --import` first.
-- Boot check: `--headless --quit-after 120`. Guard: `python scripts/guard.py --scan` (quote counts + RESULT).
-- Goldens: `-s tools/record_floor_plan_golden.gd` (all 4 depths; deliberate re-baseline only, dated note, then
-  `git diff tests/fixtures` must show only the intended depth).
-- Mutation check pattern: scratchpad `mutate.py` (disable one guard, run its suite, restore, `cmp` the file).
+- Boot check: `--headless --path . --quit-after 90`. Guard: `python scripts/guard.py --scan` (RESULT line).
+- Goldens: `-s tools/record_floor_plan_golden.gd` (deliberate re-baseline only, dated note; `git diff tests/fixtures`).
+- Mutation check: back up to scratchpad, mutate one line, run its suite, restore, `fc /b` the file.
 
 ## Concepts introduced (learning ledger)
 Sim tick vs frame · Command/Event plain-data boundary · service-locator autoload · seeded RNG streams · fixed
@@ -103,5 +110,6 @@ git index vs working tree · fail-closed vs fail-open · `core.hooksPath` · run
 resolve-after-batch · phase order inside a tick · standing rule vs one-shot effect · presentation-only
 elevation over a planar sim · apertures as the pursuit graph · content follows the layout, not the depth
 table · schema rebaseline as a shown diff · aim cone as soft lock-on · one query for press and indicator
-· mutation-proved guards · placement inside the leash envelope · **triggers as cuts, not doorways** · **paint state(N+1), not the
-resolved tick** · **integrated pulse phase anchored at activation**.
+· mutation-proved guards · placement inside the leash envelope · triggers as cuts, not doorways · paint state(N+1),
+not the resolved tick · integrated pulse phase anchored at activation · **post-hit invulnerability (i-frames) as one
+shared window** · **parameter sweep before a rule split**.
