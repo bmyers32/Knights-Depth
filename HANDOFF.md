@@ -7,50 +7,51 @@ Shipped run (`arena.gd` itinerary `[1, 2, 3, 4]`): Floor 1 -> Floor 2 (308x150, 
 (.tres) -> `LayoutCompiler` -> `FloorPlan`; `DepthGenerator` picks the floor by DEPTH and the layout names its
 stratum. Four goldens (depths 1-4), dated log in `tools/record_floor_plan_golden.gd`.
 
-## P44 — SHIPPED `a27686b`, HUMAN-ACCEPTED 2026-10-18
-- ONE shared post-hit window for the Envoy: `EnvoyStats.iframe_ticks_on_hit = 90` (3 s), authored in
-  `envoy_stats.tres`, read by `arena.gd` `register_combatant`. Any damaging hit (enemy, projectile, spike) starts
-  it; absorbed/blocked hits never restart it. **Sim untouched** — `_resolve_hit_on_target` already gated hazards;
-  the driver passed a literal 0.
-- **90 is the accepted current baseline, NOT a balance lock.** Retune only on new gameplay evidence, and only as a
-  different SHARED value. No per-pad timers, source-specific immunity or compensating enemy/hazard tuning.
-- Measured sweep (N=0..90, crowd dmg/10 s + blind-corridor hits) lives in ROADMAP P44; 30 was the alternative.
-- Tests: `tests/test_envoy_iframes.gd` (16), P44 sections in `test_floor4.gd` / `test_floor2.gd`, one-drop carry in
-  `test_carriables.gd`. Mutations (driver literal 0; resource 15) both caught.
-- The two AI-baseline helpers keep i-frames 0 ON PURPOSE (recordings predate P44; never re-record).
+## EXPEDITION SLICE 1 — SHIPPED `df302bb`, HUMAN PASS 2026-10-19/20 (gameplay + presentation)
+- **Descent authority:** `game/sim/expedition.gd` phase machine (exploring -> descending -> complete) owns a
+  45-tick ride (`arena.descent_ticks`, PROVISIONAL). During it the SimWorld is NOT ticked and Commands are dropped.
+  FAILURE WINS ordering kept. Final floor: immediate completion (no ride).
+- **Cached plan = the promise:** `arena._next_plan` is generated at floor install; the console preview reads it and
+  the descent installs THAT object (`assert_same` tested). Never regenerate it elsewhere.
+- **Exit pad = progression** (4 emissive corner posts; old gold pillar + overhead text REMOVED).
+- **Exit console = optional info**, authored per layout (`exit_console` in AuthoredLayout -> FloorPlan; non-solid,
+  off every trigger, beside the pad). Read with the PRIMARY ATTACK via `SimWorld._resolve_interaction_target`:
+  enemy targeted -> attack · carrying -> insert/drop · loose key focused -> lift · console focused -> inspect ·
+  else attack. Inspect clears attack input (no swing/charge/fire from that press) and emits ONE Event
+  `exit_console_inspected`; the panel's open state is presentation-only. E stays unbound.
+  Dismiss: attack again · Esc (`ui_cancel`) · walk out of reach (`exit_console_within_reach`, cone ignored).
+  Final floor's console says "Extraction / Emergency Recall".
+- **Transmission:** `game/arena/transmission_field.gd` (column + rings + glow shell). Envoy hidden past
+  `vanish_progress` (never scaled), screen fades (`game/ui/descent_overlay.gd`), plan installs, Envoy reappears at
+  the entry with a fading shell. Visuals reset on arrival, restart, new expedition, reload and final completion.
+- Panel: `game/ui/exit_console_panel.gd`. Tests: `test_exit_console.gd` (13, bare sim), `test_expedition_flow.gd`,
+  `test_expedition.gd`. 11/11 mutants caught (descent timing/plan identity/press consumption/panel/visibility).
+- Known flags (accepted): panel does not pause combat; floor is still built synchronously under the black screen
+  (-> ROADMAP **P45**, planned, not built); no FloorPlan validator for console placement (arena test covers ships).
 
-## FOUNDRY FLOOR 4 — Stage 2 (`d5840e9`) + P41 (`315ed5a`) + east doorway (`834940d`) + P44. ALL HUMAN PASS.
-Layout `game/content/layouts/foundry_assembly.tres`; tests `test_floor4.gd` (52), `test_carriables.gd` (40),
-P41 contracts in `test_presentation_contracts.gd`.
-- **Physical keys, one button.** Primary press resolves ONE action in `SimWorld._resolve_interaction_target`:
-  carrying + unfilled receiver -> insert · carrying elsewhere -> drop · empty-handed + key focused -> lift · attack.
-- **Focus = aim:** reach 2.0, 60-deg cone, walkable line; enemy under cursor wins; underfoot (0.45) never focused.
-- **Carrying:** no attack/block/bump; full speed. A damaging hit drops the key (once per window now); death releases.
-- **West:** `K_WEST` lift wakes `E_WEST_RETURN`. **East:** `T_EAST = Rect2(40,-52,6,20)`; far Fang = P43 (accepted).
-- **P41 warning** (presentation only): `FloorBuilder.hazard_warning_look`, painted from state(N+1) after each step.
-- **North corridor:** four 5-unit pads x 18/23/28/33, groups {0,2}/{1,3}, safe 130 / active 30. A blind walk
-  costs 1-2 hits at 90 (never 0); a timed crossing is clean.
-- Loot room = 3 placeholder breakables that drop NOTHING (P39).
+## Floor 4 + P44 — ALL HUMAN PASS
+- **Floor 4 gameplay + spatial design: HUMAN PASS (2026-10-18).** Layout `foundry_assembly.tres`; tests
+  `test_floor4.gd`, `test_carriables.gd`, P41 contracts in `test_presentation_contracts.gd`.
+- Physical keys, one button; focus = aim (reach 2.0, 60-deg cone, walkable line, underfoot 0.45 never focused).
+- North corridor: four 5-unit pads, groups {0,2}/{1,3}, safe 130 / active 30 (P41 warning, presentation only).
+- **P44:** ONE shared `EnvoyStats.iframe_ticks_on_hit = 90`, accepted baseline, NOT a lock. Retune only as a
+  different SHARED value, on evidence. The two AI-baseline helpers keep i-frames 0 ON PURPOSE.
+- **DEFERRED (not required):** west-wing spike section · optional discovery Stage 4. P43 far Fang: KEEP as ruled.
+- **Preserved as planned work, not started:** P39 Foundry presentation + loot-room payoff · P40 elevation.
 
-## Next action — the complete Floor 4 gameplay verdict (Stage 5). **Human playtest, no code.**
-Play the full floor start to finish at itinerary `[1,2,3,4]` (or `[4]` locally — revert before commit): both
-keys, both gates, west return ambush, east room from each lane, the north corridor, loot room, completion.
-Record KEEP/CHANGE per area. Readiness guidance already accepted (2026-10-18):
-- West-wing spike section: **DEFER** (stacks punishment on key carrying, no new decision; P39 sparseness ruling).
-- North corridor: **KEEP**. P43 far Fang: **KEEP as ruled**. Stage 4 optional discovery: **DEFER** (no payoff infra).
-**Then: M2 expedition design review (planning only).** Prepare the design comparison the human asked for:
-authored floors vs procedural segments vs hybrid, against §5's "procedural depths / >=8 segments" item. Do NOT
-edit GAME-RULES or silently replace the procedural requirement — any change goes through §7 deliberately.
-Candidate next build slice after that ruling: "Expedition frame" (Terminal elevator auto-descend, next-floor
-preview, Emergency Recall run-end + title). It needs its OWN plan and a ruling on floor-transition authority
-(M3 flag: a floor change is a driver call, not an Event) before any code.
-Not authorized: west hazards, new hazard families, generator work, elevator, title, art pass, canon edits,
-turrets, throwing, spawners, new enemy families, reward infrastructure, authoritative height.
+## Next action — Expedition Slice 2: Emergency Recall + run-end flow. **Plan first, no code.**
+Run /kickoff-style planning: prose walkthrough + files, then WAIT for approval. Scope candidates to propose:
+the final-floor exit (and/or a recall input) leads into an extraction sequence reusing the transmission field;
+a run-end screen framed as Emergency Recall (WORLD-CANON), covering both extraction and death; restart into a
+fresh expedition. Questions to raise: does death share the Recall framing; where restart lands (straight into
+Floor 1 vs a title — title/run-start is the slice AFTER this); what the run-end screen reports (depth, time?)
+without inventing a reward layer. Floor transitions stay a driver call, not an Event (M3 flag).
+**Not authorized:** loot screen, continue/extract choice UI, party boarding, rewards, multiplayer sync, generic
+UI framework, title screen, west hazards, new hazard/enemy families, generator work, art pass, canon edits.
 
 ## Accepted partials / flags
 - **M3 (P42):** the attack Command's `aim` LENGTH is behavioural. Authoritative input must carry the full vector.
-- **Elevation (P40)** planned, not started: Floor 4 height is near-cosmetic; sim stays planar. **P39** Foundry
-  presentation planned, not started. Preserve both as planned work.
+- **M3:** descent readiness (P45) must never let a client stall authoritative state; server decides floor change.
 - Itinerary is an `@export` default on Arena; `_TERMINAL_DEPTH = 3` / `_FOUNDRY_DEPTH = 4` in `depth_generator.gd`.
   Do NOT build a layout table/framework (ruled 2026-10-12).
 - Terminal room is bland greybox (debt). GAME-RULES §6.3 (Foundry's "one world rule") is an OPEN M2 question.
@@ -68,35 +69,38 @@ turrets, throwing, spawners, new enemy families, reward infrastructure, authorit
 - **Closable connections need DISJOINT patches; an aperture must overlap both.** Ledge vs wall on one span = error.
   **Free-standing masses <= 3x3** (an Ooze pins on 4). **AMBIENT TERRITORIES CONVEX** · triggers INCLUSIVE.
 - **If progression requires a capability, the floor must guarantee access to it.**
-- **Still out (M2 gate):** 3-5 floors per stratum (Archive 2, Foundry 1) · >=8 segments / procedural question ·
-  elevator + next-floor preview · stratum-driven pools/weights · depth-scaled defence · typed_damage_ramp · minimap
-  · title + Emergency Recall run-end · netcode spike · friend playtest · playtest gate · itch build.
-  **ROADMAP prune DUE at M2 close** (Index lacks a P37 row). Carried from M1: three §3 rules want a human edit ·
-  P14 · P16 · 5.10.
+- **Still out (M2 gate):** 3-5 floors per stratum (Archive 2, Foundry 1) · >=8 segments / procedural question
+  (authored vs procedural vs hybrid design review still owed; any change via GAME-RULES §7) · stratum-driven
+  pools/weights · depth-scaled defence · typed_damage_ramp · minimap · title + Emergency Recall run-end ·
+  netcode spike · friend playtest · playtest gate · itch build. (Elevator auto-descend + next-floor preview:
+  delivered by Slice 1, pending the full gate.) **ROADMAP prune DUE at M2 close** (Index lacks a P37 row).
+  Carried from M1: three §3 rules want a human edit · P14 · P16 · 5.10.
 
 ## Traps this repo has actually sprung
 - **GUT ignores `-gtest=<path>` and runs the WHOLE suite.** Use `-gselect=test_floor4`; check the reported count.
 - **A local itinerary change breaks the suite.** Run the suite with `[1, 2, 3, 4]`; it must be that at commit.
+- **Bound every predicate-wait loop in a test** (BRAIN) — an unbounded `while` hung a mutation run ~2.5 h.
+- **New `class_name` -> `--headless --import`** or scripts fail with "Could not find type".
+- **Material floats are float32** — track a bool for presentation state, never compare read-back energies.
 - **Measure the shared knob before splitting it by source** (BRAIN) — the 15+90 P44 split was built and rejected.
 - **Position a cross-source test OFF the pad** — at long windows the pad re-activates and lands first.
 - **Walk-to helpers stop short** — use `_beside(key_at)` in test_floor4.
 - **Bash heredocs choke on large inline Python** — write to the scratchpad and run `python -I <file>`.
-- **A flag test is not an engagement test** — assert acquisition/attacks on the walked route (BRAIN).
 - **`Rect2.has_point` is EXCLUSIVE on the far edge; `WalkableBounds.contains` is INCLUSIVE.**
 - **Drive the SHIPPED weapon the shipped way** (pressed/released), and **verify BOTH anchors of a splice**.
 - **Presentation is test-exempt, so it is the blind spot** — `test_presentation_contracts.gd`.
 - **Never re-record `ai_baseline_pre_p29.json` or the P17 Fang baseline.** A `-s` tool compiles before autoloads.
 - **Never round-trip source through PowerShell Get-Content/Set-Content** (UTF-8 corruption).
 - A Bash `cd` into a subfolder breaks the `scripts/guard.py` pre-edit hook (relative path) — cd back to root.
-- GDScript: a local named `log` shadows a built-in — pick another name.
 
 ## Commands
-- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1020, ~112 s)
+- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1059, ~2 min)
 - One file: add `-gselect=test_floor4`. Headless sim CI: `-gselect=test_sim_world
   -gunit_test_name=test_ticks_1000_times_headless`. New `class_name`? `--headless --import` first.
-- Boot check: `--headless --path . --quit-after 90`. Guard: `python scripts/guard.py --scan` (RESULT line).
+- Boot check: `--headless --path . --quit-after 300`. Guard: `python -I scripts/guard.py --scan` (RESULT line).
 - Goldens: `-s tools/record_floor_plan_golden.gd` (deliberate re-baseline only, dated note; `git diff tests/fixtures`).
-- Mutation check: back up to scratchpad, mutate one line, run its suite, restore, `fc /b` the file.
+- Mutation check: scratchpad script backs up, mutates one anchor, runs `-gselect`, restores + byte-compares;
+  give each run a `timeout`.
 
 ## Concepts introduced (learning ledger)
 Sim tick vs frame · Command/Event plain-data boundary · service-locator autoload · seeded RNG streams · fixed
@@ -111,5 +115,6 @@ resolve-after-batch · phase order inside a tick · standing rule vs one-shot ef
 elevation over a planar sim · apertures as the pursuit graph · content follows the layout, not the depth
 table · schema rebaseline as a shown diff · aim cone as soft lock-on · one query for press and indicator
 · mutation-proved guards · placement inside the leash envelope · triggers as cuts, not doorways · paint state(N+1),
-not the resolved tick · integrated pulse phase anchored at activation · **post-hit invulnerability (i-frames) as one
-shared window** · **parameter sweep before a rule split**.
+not the resolved tick · integrated pulse phase anchored at activation · post-hit invulnerability (i-frames) as one
+shared window · parameter sweep before a rule split · **phase machine owning a frozen-sim transition** ·
+**cached plan as a promise (identity, not equality)** · **contextual press arbitration** · **bounded test loops**.

@@ -51,6 +51,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P42 | M3 note: attack `aim` magnitude is behavioural | CONSTRAINT — **recorded 2026-10-16** | Since Floor 4 Stage 2 the sim reads the aim vector's LENGTH (cursor point), not just its direction. Authoritative input/replay must carry it unquantized |
 | P43 | East-room far Fang: lane-dependent engagement | OBSERVATION — **recorded 2026-10-18, accepted non-blocking** | After the doorway fix (`834940d`) the Fang at (56,-40) does not join a north-wall entry (wakes 19.6 u off, past its 18 u leash). Encounter-tuning note only |
 | P44 | Envoy takes spike damage every active tick | SHIPPED — **HUMAN-ACCEPTED 2026-10-18** (`a27686b`) | ONE shared window `EnvoyStats.iframe_ticks_on_hit = 90` for every HP hit, any source: the accepted current baseline, not a lock. Hazard-only split REJECTED |
+| P45 | Descent asset preloading + loading readiness | PLANNED — **recorded 2026-10-20, NOT BUILT** | The 45-tick transmission is a MINIMUM presentation duration; future async floor/asset loading hides behind it and holds arrival until ready |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4252,6 +4253,21 @@ required at this gate. 90 is the **accepted current baseline, not a permanent ba
 revisit only on new gameplay evidence. No compensating changes to enemy damage, attack cadence,
 aggression or hazard timing. Shield, Burn DoT, death and key-drop behaviour unchanged. The held-shield-
 on-an-active-pad drain (block grants no i-frames) remains the existing law, not reopened.
+
+### P45 — Descent asset preloading + loading readiness
+**Status:** PLANNED — recorded 2026-10-20 at M2 expedition Slice 1 closeout (`df302bb`). NOT BUILT.
+**Deepens:** the Expedition descent phase (Slice 1) -- no new system.
+**Today:** the next FloorPlan is generated and cached at floor install; at the end of the 45-tick
+descent the arena builds the new floor synchronously while the screen is fully faded. Nothing
+streams, nothing waits.
+**Requirement (human, 2026-10-19):** treat the 45-tick transmission as a MINIMUM presentation
+duration, not a fixed one. When floors/assets grow enough to need it, preload the next floor's
+scenes and resources in the background during the ride, and hold rematerialization until BOTH the
+minimum duration has elapsed AND loading reports ready. The player never sees a hitch or a pop-in.
+**Constraints:** the descent timing stays the Expedition's (sim) and the installed plan stays the
+cached `_next_plan`; readiness is a presentation/driver fact and must never let a client stall or
+desync authoritative state (M3: the server decides when the floor changes; clients may hold their
+arrival visual locally). No async loading until a measured hitch exists.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

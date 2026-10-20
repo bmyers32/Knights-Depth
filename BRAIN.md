@@ -1223,3 +1223,18 @@ out after review, and balance arguments made from intuition rather than a measur
 **Fix shape:** before proposing a split, measure the shared tunable across a range against each
 consumer's worst case, report the table, recommend a value; split only if no single value works.
 **Where else:** knockback, status durations, enemy leash, any tunable read by several sources.
+
+### Bound every test loop that waits on the code under test
+**Incident (M2, expedition Slice 1, 2026-10-19):** a test walked the Envoy away from the exit
+console with `while sim.exit_console_within_reach(...)`. Against the real code it ended in a few
+steps. The mutation "reach check always true" turned it into an infinite loop: the mutation run sat
+at full CPU for ~2.5 hours and reported nothing. Capped at 20 steps, the same mutant failed 2 tests.
+**Mechanism:** a loop whose exit condition is the behaviour being tested only terminates if that
+behaviour is correct -- exactly the assumption a test (and a mutant) exists to break. A hang is not
+a failure: runners have no per-test timeout, so it reads as "slow" until someone looks.
+**Failure if ignored:** a regression or mutant stalls the whole suite/CI instead of failing one
+named test; time is lost diagnosing "why is this running so long"; mutation scores read as 0.
+**Fix shape:** every predicate-wait loop in a test gets a fixed iteration cap and then asserts the
+condition; mutation/CI drivers also get a per-run `timeout`.
+**Where else:** wait-for-tick helpers, walk-until-arrived drivers, poll-until-event loops, any
+`while` over sim state in tests or tools.
