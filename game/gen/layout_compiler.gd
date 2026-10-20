@@ -147,6 +147,7 @@ static func compile(layout: AuthoredLayout, plan: FloorPlan) -> void:
 	plan.place_label = layout.place_label
 	plan.entry_point = layout.entry_point
 	plan.end_marker = layout.end_marker
+	plan.exit_console = layout.exit_console
 
 
 ## Effects reach the FloorPlan as {kind, target_id} exactly as before -- numeric, because that is

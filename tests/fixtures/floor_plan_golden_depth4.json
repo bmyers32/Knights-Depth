@@ -769,6 +769,11 @@
 		"y": 0.0,
 		"z": 0.0
 	},
+	"exit_console": {
+		"x": 74.0,
+		"y": 0.0,
+		"z": -138.5
+	},
 	"floor_seed": 1263247943567427387,
 	"hit_switches": [],
 	"obstacles": [

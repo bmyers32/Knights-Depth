@@ -1037,3 +1037,4 @@ obstacles = Array[ExtResource("5_b1iri")]([SubResource("Resource_v48i8"), SubRes
 spike_pads = Array[ExtResource("8_chukl")]([SubResource("Resource_f0nbk"), SubResource("Resource_g0v2b"), SubResource("Resource_r7668"), SubResource("Resource_6sfp7"), SubResource("Resource_hpq4t"), SubResource("Resource_cn3sd")])
 entry_point = Vector3(-48, 0, -7)
 end_marker = Vector3(242, 0, -134)
+exit_console = Vector3(242, 0, -128.5)

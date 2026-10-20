@@ -88,7 +88,19 @@ const _HAZARD_PRIMED_HEIGHT: float = 0.24
 const _HAZARD_ACTIVE_HEIGHT: float = 0.45
 ## Deliberately close to the wall colour but lighter: same material family, clearly not a wall.
 const _LIP_COLOR: Color = Color(0.34, 0.35, 0.39)
-const _MARKER_COLOR: Color = Color(0.88, 0.80, 0.42)
+## The exit installation: a pale, cool light on dark stone -- Lattice infrastructure, unlike the
+## warm plate it frames.
+const _CONSOLE_COLOR: Color = Color(0.20, 0.22, 0.25)
+const _CONSOLE_SCREEN_COLOR: Color = Color(0.62, 0.86, 0.90)
+const _CONSOLE_STAND_SIZE: Vector3 = Vector3(0.6, 1.0, 0.45)
+const _CONSOLE_SCREEN_SIZE: Vector3 = Vector3(0.8, 0.06, 0.55)
+const _CONSOLE_SCREEN_TILT_DEGREES: float = 35.0
+## A console's screen: dim at rest, bright when the next attack press would read it.
+const _CONSOLE_IDLE_GLOW: float = 0.35
+const _CONSOLE_FOCUS_GLOW: float = 1.4
+const _PAD_POST_SIZE: Vector3 = Vector3(0.22, 0.5, 0.22)
+## The focus ring drawn round the console's foot, wider than a key's.
+const _CONSOLE_FOCUS_RING_SCALE: float = 1.6
 const _BREAKABLE_COLOR: Color = Color(0.52, 0.40, 0.24)
 ## A COMMITMENT plate (the party's, the exit's): bold, warm, unmistakable.
 const _PLATE_COLOR: Color = Color(0.92, 0.62, 0.24)
@@ -122,6 +134,10 @@ var _carriables: Dictionary = {}     # carriable_id -> key mesh
 var _receivers: Dictionary = {}      # trigger_id -> socket mesh
 var _receiver_centres: Dictionary = {}  # trigger_id -> world centre, where a delivered key sits
 var _focus_ring: MeshInstance3D = null
+var _exit_pad_centre: Vector3 = Vector3.ZERO
+var _exit_console: Node3D = null
+var _exit_console_screen: MeshInstance3D = null
+var _exit_console_focused: bool = false
 ## rect -> elevation, so an actor's transform can be lifted onto raised ground.
 var _elevation_rects: Array = []
 
@@ -168,7 +184,8 @@ func build(plan: FloorPlan, first_actor_id: int, gate_barriers: Dictionary = {})
 			# anything else is a local control, so it is quiet. No new data, no new mechanic.
 			var commitment: bool = trigger.kind == FloorLayers.TRIGGER_GROUP_OCCUPANCY
 			_build_plate(trigger.trigger_id, trigger.region, trigger.starts_enabled, commitment)
-	_build_end_marker(plan.end_marker)
+	_build_exit_pads(plan)
+	_build_exit_console(plan)
 
 	var spawned: Array[Dictionary] = []
 	var next_actor_id: int = first_actor_id
@@ -203,6 +220,10 @@ func clear_floor() -> void:
 	_receivers.clear()
 	_receiver_centres.clear()
 	_focus_ring = null
+	_exit_pad_centre = Vector3.ZERO
+	_exit_console = null
+	_exit_console_screen = null
+	_exit_console_focused = false
 	_elevation_rects.clear()
 	for child in get_children():
 		remove_child(child)
@@ -266,11 +287,18 @@ func seat_carriable(carriable_id: int, trigger_id: int) -> void:
 ## SimWorld.interaction_focus). A ring under a key that would be lifted; a brighter socket where
 ## the carried key would be delivered; nothing otherwise. Never computes eligibility itself.
 func show_interaction_focus(kind: String, carriable_id: int, trigger_id: int) -> void:
+	var inspecting: bool = kind == "inspect" and _exit_console != null
 	if _focus_ring != null:
-		_focus_ring.visible = kind == "lift" and _carriables.has(carriable_id)
-		if _focus_ring.visible:
+		_focus_ring.visible = (kind == "lift" and _carriables.has(carriable_id)) or inspecting
+		_focus_ring.scale = Vector3.ONE * (_CONSOLE_FOCUS_RING_SCALE if inspecting else 1.0)
+		if inspecting:
+			_focus_ring.position = _exit_console.position + Vector3(0.0, 0.03, 0.0)
+		elif _focus_ring.visible:
 			var at: Vector3 = _carriables[carriable_id].position
 			_focus_ring.position = Vector3(at.x, at.y - _KEY_SIZE.y * 0.5 + 0.03, at.z)
+	_exit_console_focused = inspecting
+	if _exit_console_screen != null:
+		_exit_console_screen.material_override.emission_energy_multiplier = _CONSOLE_FOCUS_GLOW if inspecting else _CONSOLE_IDLE_GLOW
 	for receiver_id: int in _receivers:
 		var material: StandardMaterial3D = _receivers[receiver_id].material_override
 		if material.albedo_color == _RECEIVER_FILLED_COLOR:
@@ -603,13 +631,62 @@ func _build_plate(trigger_id: int, region: Rect2, visible_now: bool, commitment:
 	_plates[trigger_id] = plate
 
 
-## The terminal marker (ruled): a deterministic visual endpoint whose only job is to make the
-## grammar's end visible. Not an elevator, no transition logic, no run-end UI.
-func _build_end_marker(position: Vector3) -> void:
-	var pillar := _add_box(Vector3(1.6, 3.2, 1.6), position + Vector3(0.0, elevation_at(position) + 1.6, 0.0), _MARKER_COLOR)
-	pillar.material_override.emission_enabled = true
-	pillar.material_override.emission = _MARKER_COLOR
-	pillar.material_override.emission_energy_multiplier = 0.7
+## THE EXIT IS A TRANSMISSION PAD, on every floor (one exit dialect, P35): whichever plate completes
+## the floor gets a low frame of corner emitters -- installed infrastructure, not a monument. Found
+## from the AUTHORED EFFECT, not a new flag: a plate that completes the floor is an exit by
+## definition. (The tall end-marker pillar it replaces dominated the room, ruled 2026-10-19; the
+## plan still carries end_marker as the grammar's endpoint, and it is the pad's centre.)
+func _build_exit_pads(plan: FloorPlan) -> void:
+	for trigger in plan.triggers:
+		if not _plates.has(trigger.trigger_id):
+			continue
+		for effect: Dictionary in trigger.effects:
+			if effect.get("kind", &"") != FloorLayers.EFFECT_COMPLETE_FLOOR:
+				continue
+			var region: Rect2 = trigger.region
+			var centre := Vector3(region.get_center().x, 0.0, region.get_center().y)
+			_exit_pad_centre = centre + Vector3(0.0, elevation_at(centre), 0.0)
+			for corner: Vector2 in [region.position, Vector2(region.end.x, region.position.y), region.end, Vector2(region.position.x, region.end.y)]:
+				var at := Vector3(corner.x, 0.0, corner.y)
+				var post := _add_box(_PAD_POST_SIZE, at + Vector3(0.0, elevation_at(at) + _PAD_POST_SIZE.y * 0.5, 0.0), _CONSOLE_SCREEN_COLOR)
+				post.material_override.emission_enabled = true
+				post.material_override.emission = _CONSOLE_SCREEN_COLOR
+				post.material_override.emission_energy_multiplier = 0.6
+
+
+## The grounded centre of the exit pad, where the transmission field stands.
+func exit_pad_centre() -> Vector3:
+	return _exit_pad_centre
+
+
+## THE EXIT CONSOLE: a small lectern with a lit, slanted screen, turned to face the pad it serves
+## so it reads as part of the same installation. It has no collision (greybox, ruled 2026-10-19):
+## it changes no navigation, and the sim knows it only as a point to aim at.
+func _build_exit_console(plan: FloorPlan) -> void:
+	var at: Vector3 = plan.exit_console
+	var ground: float = elevation_at(at)
+	_exit_console = Node3D.new()
+	_exit_console.position = Vector3(at.x, ground, at.z)
+	add_child(_exit_console)
+	var facing := Vector3(_exit_pad_centre.x - at.x, 0.0, _exit_pad_centre.z - at.z)
+	if facing.length_squared() > 0.0001:
+		_exit_console.rotation.y = atan2(-facing.x, -facing.z)
+	var stand := _add_box(_CONSOLE_STAND_SIZE, Vector3(0.0, _CONSOLE_STAND_SIZE.y * 0.5, 0.0), _CONSOLE_COLOR)
+	stand.reparent(_exit_console, false)
+	_exit_console_screen = _add_box(_CONSOLE_SCREEN_SIZE, Vector3(0.0, _CONSOLE_STAND_SIZE.y + 0.06, -0.04), _CONSOLE_SCREEN_COLOR)
+	_exit_console_screen.reparent(_exit_console, false)
+	_exit_console_screen.rotation.x = deg_to_rad(_CONSOLE_SCREEN_TILT_DEGREES)
+	_exit_console_screen.material_override.emission_enabled = true
+	_exit_console_screen.material_override.emission = _CONSOLE_SCREEN_COLOR
+	_exit_console_screen.material_override.emission_energy_multiplier = _CONSOLE_IDLE_GLOW
+
+
+func exit_console_node() -> Node3D:
+	return _exit_console
+
+
+func exit_console_focused() -> bool:
+	return _exit_console_focused
 
 
 func _add_box(size: Vector3, centre: Vector3, color: Color) -> MeshInstance3D:

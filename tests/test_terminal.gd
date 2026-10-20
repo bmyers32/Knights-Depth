@@ -357,9 +357,13 @@ func _health(arena: Node3D) -> float:
 	return arena.sim.health_of(arena.envoy.actor_id)
 
 
+## Completes the floor AND rides the lift down: a descent is a fixed-tick window now, and these
+## tests are about what is on the far side of it.
 func _complete_the_floor(arena: Node3D) -> void:
 	arena._report_events([Event.new(arena.sim.tick_count, "floor_complete", {})] as Array[Event])
 	arena._resolve_floor_complete()
+	for i in arena.descent_ticks:
+		arena._step([] as Array[Command], DT)
 
 
 func test_a_terminal_visit_restores_once_and_lets_the_party_leave() -> void:

@@ -293,6 +293,10 @@ var _hit_switches: Dictionary = {}
 var _carriables: Dictionary = {}
 ## actor_id -> carriable_id: the inverse of a carriable's carrier. At most one per Envoy.
 var _carrying: Dictionary = {}
+## console_id -> position: the exit's information console (M2 expedition frame, Slice 1). The sim
+## holds only WHERE it is, so the attack press can arbitrate it with the rule keys use; what it
+## shows is presentation's, read from a plan the sim never sees.
+var _exit_consoles: Dictionary = {}
 ## Static obstacle footprints, subtracted from every region this floor builds.
 var _obstacle_rects: Array[Rect2] = []
 ## pad_id -> {rect, safe_ticks, active_ticks, phase_offset, damage, damage_type, was_active}.
@@ -458,6 +462,7 @@ const STATE_SCOPES: Dictionary = {
 	# Keys belong to the floor they were authored on; nobody carries one down an elevator.
 	"_carriables": SCOPE_FLOOR,
 	"_carrying": SCOPE_FLOOR,
+	"_exit_consoles": SCOPE_FLOOR,
 	"_obstacle_rects": SCOPE_FLOOR,
 	"_spike_pads": SCOPE_FLOOR,
 	"_gate_barriers": SCOPE_FLOOR,
@@ -738,6 +743,13 @@ func register_hit_switch(switch_id: int, position: Vector3, radius: float, mode:
 ## no scan, and only _resolve_interaction_target ever looks at it.
 func register_carriable(carriable_id: int, position: Vector3, starts_hidden: bool = false) -> void:
 	_carriables[carriable_id] = {"position": position, "hidden": starts_hidden, "carrier": -1, "inserted": false}
+
+
+## The exit's information console. Inspected by the attack press under the same focus rule as a
+## key, ranked below one (_resolve_interaction_target). Not a combatant, not a hit target, not a
+## trigger: inspecting it changes no floor state at all.
+func register_exit_console(console_id: int, position: Vector3) -> void:
+	_exit_consoles[console_id] = position
 
 
 ## Grants an actor the ability to lift carriables, with its content-owned reach and focus cone
@@ -1192,6 +1204,7 @@ func debug_activate_hit_switch(switch_id: int) -> Array[Event]:
 ##   carrying, standing in an unfilled receiver   -> insert
 ##   carrying, anywhere else                      -> drop (voluntary)
 ##   empty-handed, a key FOCUSED                  -> lift
+##   empty-handed, no key, the exit console FOCUSED -> inspect (M2 expedition frame, Slice 1)
 ##
 ## FOCUS IS THE WAY YOU AIM (revised after the Stage 2 playtest, 2026-10-16: cursor-on-key was
 ## "overly precise"). A key is focused when it is within reach, lies inside the aim cone -- the
@@ -1238,21 +1251,39 @@ func _resolve_interaction_target(actor_id: int, aim: Vector3) -> Dictionary:
 			return {}
 	var reach: Dictionary = _carry_reach[actor_id]
 	var aim_direction: Vector3 = offset.normalized()
+	var loose_keys: Dictionary = {}
+	for carriable_id: int in _carriables:
+		var carriable: Dictionary = _carriables[carriable_id]
+		if not (bool(carriable["hidden"]) or bool(carriable["inserted"]) or int(carriable["carrier"]) >= 0):
+			loose_keys[carriable_id] = carriable["position"]
+	var key_id: int = _best_focused(position, aim_direction, reach, loose_keys)
+	if key_id >= 0:
+		return {"kind": "lift", "carriable_id": key_id}
+	# A KEY OUTRANKS THE CONSOLE: picking one up is progression, reading the console is optional,
+	# so a key lying in front of it is what the press lifts. Same reach, cone and line of sight --
+	# one focus rule, two kinds of thing it can land on.
+	var console_id: int = _best_focused(position, aim_direction, reach, _exit_consoles)
+	if console_id >= 0:
+		return {"kind": "inspect", "console_id": console_id}
+	return {}
+
+
+## The candidate (id -> position) the aim focuses, or -1: within reach, outside the underfoot
+## radius, inside the aim cone, with walkable ground all the way to it. The most closely aligned
+## wins, then the nearer, then the lower id.
+func _best_focused(position: Vector3, aim_direction: Vector3, reach: Dictionary, candidates: Dictionary) -> int:
 	var best_id: int = -1
 	var best_alignment: float = -INF
 	var best_distance: float = INF
-	var carriable_ids: Array = _carriables.keys()
-	carriable_ids.sort()  # ties go to the lower id, never Dictionary order
-	for carriable_id: int in carriable_ids:
-		var carriable: Dictionary = _carriables[carriable_id]
-		if bool(carriable["hidden"]) or bool(carriable["inserted"]) or int(carriable["carrier"]) >= 0:
-			continue
-		var at: Vector3 = carriable["position"]
-		var to_key := Vector3(at.x - position.x, 0.0, at.z - position.z)
-		var distance: float = to_key.length()
+	var candidate_ids: Array = candidates.keys()
+	candidate_ids.sort()  # ties go to the lower id, never Dictionary order
+	for candidate_id: int in candidate_ids:
+		var at: Vector3 = candidates[candidate_id]
+		var to_target := Vector3(at.x - position.x, 0.0, at.z - position.z)
+		var distance: float = to_target.length()
 		if distance > float(reach["reach"]) or distance < float(reach["underfoot"]):
 			continue
-		var alignment: float = aim_direction.dot(to_key / distance)
+		var alignment: float = aim_direction.dot(to_target / distance)
 		if alignment < float(reach["cos_half_angle"]):
 			continue
 		# Equal alignment within float noise is a tie (two keys on one line), settled by distance.
@@ -1261,12 +1292,10 @@ func _resolve_interaction_target(actor_id: int, aim: Vector3) -> Dictionary:
 			continue
 		if _bounds != null and not _segment_is_clear(_bounds, position, at, 0.0, 0.0):
 			continue
-		best_id = carriable_id
+		best_id = candidate_id
 		best_alignment = alignment
 		best_distance = distance
-	if best_id < 0:
-		return {}
-	return {"kind": "lift", "carriable_id": best_id}
+	return best_id
 
 
 ## The unfilled receiver whose region the Envoy stands in, or -1. INCLUSIVE, like every occupancy
@@ -1293,7 +1322,18 @@ func _perform_interaction(actor_id: int, interaction: Dictionary) -> Array[Event
 			return _insert_carried(actor_id, int(interaction["trigger_id"]))
 		"drop":
 			return _release_carried(actor_id, "voluntary", entities.get(actor_id, Vector3.ZERO))
+		"inspect":
+			return _inspect_exit_console(actor_id, int(interaction["console_id"]))
 	return []
+
+
+## THE PRESS IS SPENT ON READING, exactly as it is on a lift: any open hold, combo step and
+## buffered press are cleared, so neither this press nor its held/released can also swing. The
+## Event is the whole effect -- whether a panel is open is presentation's, never the sim's.
+func _inspect_exit_console(actor_id: int, console_id: int) -> Array[Event]:
+	var events: Array[Event] = _clear_attack_input_state(actor_id)
+	events.append(Event.new(tick_count, "exit_console_inspected", {"console_id": console_id, "actor_id": actor_id}))
+	return events
 
 
 ## Lifting leaves nothing behind to fire later: any open hold, combo step and buffered press are
@@ -1351,6 +1391,14 @@ static func _flat_distance(a: Vector3, b: Vector3) -> float:
 ## the server still validates.
 func interaction_focus(actor_id: int, aim: Vector3) -> Dictionary:
 	return _resolve_interaction_target(actor_id, aim)
+
+
+## READ-ONLY: is the actor still close enough to read the console -- the focus rule's own reach,
+## without its aim cone, so turning to look around does not close a panel walking away does.
+func exit_console_within_reach(actor_id: int, console_id: int) -> bool:
+	if not _exit_consoles.has(console_id) or not _carry_reach.has(actor_id):
+		return false
+	return _flat_distance(entities.get(actor_id, Vector3.ZERO), _exit_consoles[console_id]) <= float(_carry_reach[actor_id]["reach"])
 
 
 ## Read-only: which carriable an actor holds, or -1.

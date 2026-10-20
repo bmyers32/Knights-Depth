@@ -75,3 +75,4 @@ connections = Array[ExtResource("1_conn")]([SubResource("Resource_c_in"), SubRes
 triggers = Array[ExtResource("4_trig")]([SubResource("Resource_t_recovery"), SubResource("Resource_t_exit")])
 entry_point = Vector3(0, 0, -3)
 end_marker = Vector3(0, 0, -35)
+exit_console = Vector3(4.5, 0, -35)

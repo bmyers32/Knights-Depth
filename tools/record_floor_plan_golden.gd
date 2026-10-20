@@ -108,6 +108,10 @@ extends SceneTree
 ##               column, so a wall-hugging entry can no longer reach the key with the room
 ##               asleep. One trigger region changed; roster, positions and leash untouched.
 ##               Depths 1-3 byte-identical.
+##   2026-10-19  ALL FOUR RE-RECORDED for the exit console (M2 expedition Slice 1, human-approved
+##               Option A): FloorPlan gained `exit_console`, an authored point beside each exit
+##               plate. Schema addition only -- each fixture gains that one key and every
+##               previously recorded value is byte-identical (the diff has no removed lines).
 ##
 ## RE-BASELINING IS A DELIBERATE ACT, NEVER A WAY TO MAKE A RED TEST GREEN. This fixture's
 ## whole job is to notice that generation changed. If test_golden_seed.gd goes red, the

@@ -642,6 +642,8 @@ func test_hazard_pads_correspond_after_load_descent_and_reload() -> void:
 	assert_eq(descending._floor_builder.hazard_pad_ids().size(), 0, "the Terminal has no pads")
 	descending._report_events([Event.new(descending.sim.tick_count, "floor_complete", {})] as Array[Event])
 	descending._resolve_floor_complete()
+	for i in descending.descent_ticks:
+		descending._step([] as Array[Command], 1.0 / 30.0)
 	assert_eq(descending.expedition.current_depth(), 4)
 	_assert_hazards_correspond(descending, "descent")
 	_assert_hazards_correspond(_hazard_arena([4] as Array[int]), "reload")

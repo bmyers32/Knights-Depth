@@ -273,3 +273,4 @@ encounters = Array[ExtResource("3_thmg8")]([SubResource("Resource_dtbv2"), SubRe
 breakables = Array[ExtResource("1_860t0")]([SubResource("Resource_1qpoa")])
 entry_point = Vector3(0, 0, -3)
 end_marker = Vector3(0, 0, -95)
+exit_console = Vector3(4.5, 0, -95)

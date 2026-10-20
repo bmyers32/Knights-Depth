@@ -48,6 +48,9 @@ extends Resource
 
 @export var entry_point: Vector3 = Vector3.ZERO
 @export var end_marker: Vector3 = Vector3.ZERO
+## The exit's optional information console (M2 expedition frame, Slice 1): where it stands,
+## authored per floor beside the exit plate and clear of its approach.
+@export var exit_console: Vector3 = Vector3.ZERO
 
 
 ## THE NUMERIC ID BEHIND AN AUTHORING KEY. Keys are unique across the whole layout -- the

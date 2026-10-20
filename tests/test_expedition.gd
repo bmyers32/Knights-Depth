@@ -63,3 +63,84 @@ func test_entries_are_visited_in_itinerary_order() -> void:
 	assert_eq(expedition.current_depth(), 2)
 	assert_true(expedition.advance())
 	assert_eq(expedition.current_depth(), 1)
+
+
+# --- THE DESCENT (M2 expedition frame, Slice 1) --------------------------------------------
+
+func _kinds(events: Array[Event]) -> Array[String]:
+	var kinds: Array[String] = []
+	for event in events:
+		kinds.append(event.kind)
+	return kinds
+
+
+func test_completing_a_floor_with_an_entry_left_begins_a_descent() -> void:
+	var expedition: Expedition = Expedition.new(7, [1, 2] as Array[int], 3)
+	var events: Array[Event] = expedition.complete_floor(40)
+	assert_eq(_kinds(events), ["descent_begun"] as Array[String])
+	assert_eq(events[0].tick, 40, "stamped with the tick the floor was completed on")
+	assert_eq(events[0].payload, {"from_depth": 1, "to_depth": 2, "descent_ticks": 3})
+	assert_eq(expedition.phase, Expedition.PHASE_DESCENDING)
+	assert_eq(expedition.position, 0, "the party has not arrived anywhere yet")
+	assert_false(expedition.is_complete)
+
+
+## EXACTLY descent_ticks ticks, and the arrival is announced once, on the last of them.
+func test_a_descent_lasts_exactly_its_ticks_and_arrives_once() -> void:
+	var expedition: Expedition = Expedition.new(7, [1, 2] as Array[int], 3)
+	expedition.complete_floor(0)
+	assert_eq(_kinds(expedition.tick_descent(0)), [] as Array[String], "tick 1 of 3")
+	assert_eq(_kinds(expedition.tick_descent(0)), [] as Array[String], "tick 2 of 3")
+	assert_eq(expedition.position, 0)
+	var arrival: Array[Event] = expedition.tick_descent(0)
+	assert_eq(_kinds(arrival), ["floor_entered"] as Array[String], "tick 3 of 3 arrives")
+	assert_eq(arrival[0].payload, {"run_seed": 7, "depth": 2, "position": 1})
+	assert_eq(expedition.phase, Expedition.PHASE_EXPLORING)
+	assert_eq(expedition.position, 1)
+	assert_eq(_kinds(expedition.tick_descent(0)), [] as Array[String], "and a further tick is no second arrival")
+
+
+## One completion, one transition: a completion mid-descent is refused, never queued.
+func test_a_completion_during_a_descent_is_refused() -> void:
+	var expedition: Expedition = Expedition.new(0, [1, 2, 3] as Array[int], 2)
+	expedition.complete_floor(0)
+	assert_eq(_kinds(expedition.complete_floor(0)), [] as Array[String])
+	expedition.tick_descent(0)
+	expedition.tick_descent(0)
+	assert_eq(expedition.position, 1, "one floor down, not two")
+	assert_eq(expedition.phase, Expedition.PHASE_EXPLORING)
+
+
+func test_completing_the_last_floor_completes_without_a_descent() -> void:
+	var expedition: Expedition = Expedition.new(0, [1, 2] as Array[int], 5)
+	expedition.complete_floor(0)
+	for i in 5:
+		expedition.tick_descent(0)
+	var events: Array[Event] = expedition.complete_floor(99)
+	assert_eq(_kinds(events), ["expedition_complete"] as Array[String])
+	assert_eq(events[0].payload, {"final_depth": 2})
+	assert_true(expedition.is_complete)
+	assert_eq(expedition.phase, Expedition.PHASE_COMPLETE)
+	assert_eq(_kinds(expedition.complete_floor(100)), [] as Array[String], "the end happens once")
+	assert_eq(_kinds(expedition.tick_descent(100)), [] as Array[String])
+
+
+func test_the_next_depth_is_named_only_when_there_is_one() -> void:
+	var expedition: Expedition = Expedition.new(0, [1, 3] as Array[int], 1)
+	assert_eq(expedition.next_depth(), 3)
+	expedition.complete_floor(0)
+	expedition.tick_descent(0)
+	assert_eq(expedition.next_depth(), -1, "the last floor leads out, not to a depth")
+	assert_false(expedition.has_next())
+
+
+func test_descent_progress_runs_from_zero_to_one() -> void:
+	var expedition: Expedition = Expedition.new(0, [1, 2] as Array[int], 4)
+	assert_eq(expedition.descent_progress(), 0.0, "not descending")
+	expedition.complete_floor(0)
+	assert_eq(expedition.descent_progress(), 0.0)
+	expedition.tick_descent(0)
+	assert_almost_eq(expedition.descent_progress(), 0.25, 0.0001)
+	expedition.tick_descent(0)
+	expedition.tick_descent(0)
+	assert_almost_eq(expedition.descent_progress(), 0.75, 0.0001)

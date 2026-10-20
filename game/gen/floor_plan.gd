@@ -51,6 +51,9 @@ var entry_point: Vector3 = Vector3.ZERO
 ## Deterministic terminal endpoint. NOT an elevator, no transition logic, no run-end UI --
 ## it exists so the traversal grammar has a visible end.
 var end_marker: Vector3 = Vector3.ZERO
+## The exit's information console: inspected with the attack press, read-only, never a trigger.
+## Level content like the marker, so it is serialized and the goldens notice if it moves.
+var exit_console: Vector3 = Vector3.ZERO
 
 
 ## The legality view, for a given set of open connections. A BLOCKED connection contributes
@@ -470,6 +473,7 @@ func to_dict() -> Dictionary:
 		"hit_switches": switch_dicts, "obstacles": obstacle_dicts, "spike_pads": pad_dicts,
 		"carriables": carriable_dicts,
 		"entry_point": _point(entry_point), "end_marker": _point(end_marker),
+		"exit_console": _point(exit_console),
 	}
 
 

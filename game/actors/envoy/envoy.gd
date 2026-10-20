@@ -84,6 +84,7 @@ func build_commands(tick: int) -> Array[Command]:
 	# `interact` Command was retired with its last consumer rather than kept warm for a future
 	# one (§1.4 rule of two, run backwards). Carrying keys (2026-10-16) did not bring it back: a
 	# key is lifted, dropped and delivered by the attack press above, which the sim arbitrates.
+	# The exit console (2026-10-19) is read by that same press: E stays unbound to any Command.
 
 	if Input.is_action_just_pressed("switch_weapon"):
 		# No weapon_id in params — this only ever advances the sim-owned loadout

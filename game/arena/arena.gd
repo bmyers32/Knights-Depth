@@ -15,6 +15,9 @@ extends Node3D
 @onready var _failure_overlay: FailureOverlay = $FailureOverlay
 @onready var _arrival_card: ArrivalCard = $ArrivalCard
 @onready var _completion_overlay: ExpeditionCompleteOverlay = $ExpeditionCompleteOverlay
+@onready var _descent_overlay: DescentOverlay = $DescentOverlay
+@onready var _console_panel: ExitConsolePanel = $ExitConsolePanel
+@onready var _transmission: TransmissionField = $TransmissionField
 
 const PROJECTILE_TRACER: PackedScene = preload("res://game/actors/projectile_tracer.tscn")
 ## Player-shot tracer colour. GAME-RULES §3's channel law says damage TYPES own colour,
@@ -55,6 +58,10 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## a floor is the last, is the Expedition's to say, never this node's. A one-entry itinerary is
 ## how a test (or a human) boots a single floor.
 @export var itinerary: Array[int] = [1, 2, 3, 4]
+## How long a descent between floors lasts, in sim-rate ticks -- run configuration beside the
+## itinerary, handed to the Expedition, which owns the countdown. PROVISIONAL: 45 (1.5 s at
+## 30 Hz) awaits the expedition-transition playtest; no calibration date yet.
+@export var descent_ticks: int = 45
 
 ## Debug/diagnostic exports (manual-pass convention, this session): every export in
 ## this block is named debug_* and defaults to the AUTHENTIC game behavior — "all
@@ -116,6 +123,12 @@ var expedition: Expedition
 ## rest of that batch naming actors of a floor that no longer exists, and a flag cannot skip a
 ## floor however many completions one batch carries.
 var _floor_complete_pending: bool = false
+## The floor installed now, and the floor the exit leads to. THE PREVIEW IS A GAMEPLAY PROMISE
+## (ROADMAP P6): it is read from `_next_plan`, and a descent installs exactly `_next_plan` --
+## never a second generate() that could disagree with what the player was shown. Null on the
+## last floor, whose exit leads out of the expedition rather than to a plan.
+var _current_plan: FloorPlan
+var _next_plan: FloorPlan
 var _enemies: Dictionary = {}  # actor_id -> Node3D, entries removed on death
 ## Monotonic across the whole RUN, never reset per floor: a reused actor_id would make two
 ## different enemies indistinguishable in one run's event log. Starts at 1 because the Envoy
@@ -147,6 +160,8 @@ var _projectile_tracers: Dictionary = {}
 const _MUZZLE_HEIGHT: float = 0.9
 ## How high a carried key rides above its carrier. Presentation only, like the muzzle height.
 const _CARRIED_KEY_LIFT: float = 1.6
+## The one console a floor has, by the id the sim registers it under.
+const _EXIT_CONSOLE_ID: int = 0
 ## actor_id -> {"opens_tick": int, "ends_tick": int, "marked": bool} for the P29 vulnerable
 ## cue. Absolute sim ticks derived from the telegraph Event's OWN tick plus authored
 ## content -- Event.tick is the authoritative timestamp (BRAIN), never tick_count sampled
@@ -175,7 +190,7 @@ func _ready() -> void:
 ## runs again mid-run. Booting the scene is today's only caller, and a restart reaches it by
 ## reloading the scene -- a title screen, ready room or Gate calls this same function later.
 func begin_expedition() -> void:
-	expedition = Expedition.new(run_seed, itinerary)
+	expedition = Expedition.new(run_seed, itinerary, descent_ticks)
 	sim.seed_combat_rng(expedition.run_seed)
 	print("expedition begun: ", {"run_seed": expedition.run_seed, "itinerary": expedition.itinerary})
 
@@ -230,7 +245,7 @@ func begin_expedition() -> void:
 	sim.register_shield(envoy.actor_id, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance, shield.bump_padding, shield.bump_distance, shield.bump_slide_ticks, shield.bump_cooldown_ticks, shield.parry_window_ticks, shield.parry_exposure_ticks, shield.parry_damage_multiplier)
 
 	# LAST: every RUN-scoped registration above must exist before a floor is loaded into it.
-	_load_floor()
+	_load_floor(DepthGenerator.generate(expedition.run_seed, expedition.current_depth()))
 
 
 ## Resolves tracer speed/colour for any GunStats in the given ids. Colour comes from the
@@ -247,20 +262,23 @@ func _cache_gun_visuals(weapon_ids: Array[StringName]) -> void:
 			}
 
 
-## Generates the expedition's CURRENT floor and installs it in BOTH layers: the sim gets
-## the walkable law and a cleared encounter, presentation gets geometry and actor scenes --
-## both from the SAME FloorPlan, so the room the player sees and the room the sim clamps
-## against can never be two different rooms.
+## Installs the expedition's CURRENT floor in BOTH layers: the sim gets the walkable law and a
+## cleared encounter, presentation gets geometry and actor scenes -- both from the SAME
+## FloorPlan, so the room the player sees and the room the sim clamps against can never be two
+## different rooms.
 ##
 ## Ordering matters and is not incidental:
-##   1. generate      -- pure, no side effects, so a bad plan is diagnosable before anything
-##                       is mutated
+##   1. generate      -- by the CALLER, pure, so a bad plan is diagnosable before anything is
+##                       mutated (and a descent installs the plan cached a floor earlier)
 ##   2. sim.load_floor -- retires the OLD encounter (statuses, projectiles, AI, old actors)
 ##                       and adopts the new bounds, BEFORE any new actor is registered
 ##   3. build         -- new scenes instantiated with freshly allocated actor_ids
 ##   4. register      -- through the ordinary ContentRegistrar path, unchanged
-func _load_floor() -> FloorPlan:
-	var plan: FloorPlan = DepthGenerator.generate(expedition.run_seed, expedition.current_depth())
+##   5. look ahead    -- the next floor's plan is generated NOW, so the exit console can say
+##                       where the descent leads before the party reaches it
+func _load_floor(plan: FloorPlan) -> FloorPlan:
+	assert(plan.depth == expedition.current_depth(), "installing a plan for depth %d while the expedition stands at %d" % [plan.depth, expedition.current_depth()])
+	_current_plan = plan
 	print("floor loaded: ", {
 		"run_seed": plan.run_seed, "depth": plan.depth, "authored_layout": plan.authored_layout,
 		"patches": plan.patches.size(), "connections": plan.connections.size(),
@@ -335,7 +353,33 @@ func _load_floor() -> FloorPlan:
 	# of the wrong phase.
 	_project_hazards()
 	_update_seed_label(plan)
+	_next_plan = DepthGenerator.generate(expedition.run_seed, expedition.next_depth()) if expedition.has_next() else null
+	# Whatever the last floor's console said, it said about the last floor.
+	_console_panel.close()
+	envoy.visible = true
 	return plan
+
+
+## What the exit console says about where the descent leads, DERIVED from the cached destination
+## plan: its depth, what the place is called, its stratum, and which families its roster actually
+## fields, most numerous first. No thresholds ("Fang-heavy") until a variable roster exists to
+## need them (P6). Empty on the last floor, whose exit leads out rather than to a plan.
+func next_floor_preview() -> Dictionary:
+	if _next_plan == null:
+		return {}
+	var counts: Dictionary = {}
+	for spawn: Dictionary in _next_plan.all_spawns():
+		var stats: Resource = ContentDB.get_resource(&"enemy", spawn["enemy_key"])
+		var family: StringName = stats.family if stats != null else StringName(spawn["enemy_key"])
+		counts[family] = int(counts.get(family, 0)) + 1
+	var families: Array = counts.keys()
+	# Ties broken by name so the line never depends on Dictionary order.
+	families.sort_custom(func(a: StringName, b: StringName) -> bool:
+		return counts[a] > counts[b] or (counts[a] == counts[b] and String(a) < String(b)))
+	return {
+		"depth": _next_plan.depth, "place": _place_name(_next_plan),
+		"stratum": String(_next_plan.stratum_id).capitalize(), "families": families,
+	}
 
 
 ## Unpacks the four floor LAYERS into the sim. The driver does the unpacking so sim/ never
@@ -363,6 +407,7 @@ func _unpack_floor(plan: FloorPlan) -> void:
 			hit_switch.mode, hit_switch.effects, hit_switch.starts_hidden)
 	for carriable in plan.carriables:
 		sim.register_carriable(carriable.carriable_id, carriable.position, carriable.starts_hidden)
+	sim.register_exit_console(_EXIT_CONSOLE_ID, plan.exit_console)
 	for trigger in plan.triggers:
 		sim.register_trigger(trigger.trigger_id, trigger.kind, trigger.region, trigger.source_id, trigger.once, trigger.effects, trigger.starts_enabled)
 
@@ -438,7 +483,9 @@ func _physics_process(delta: float) -> void:
 	# typed-Array ternary doesn't coerce a bare "[]" to Array[Command], hence the
 	# if/else instead of a one-line ternary here.)
 	var commands: Array[Command] = []
-	if _envoy_alive and not expedition.is_complete:
+	# Only an EXPLORING expedition reads input: during a descent the floor is suspended and an
+	# input has no floor to act on, so none is built (and _step drops any that arrive anyway).
+	if _envoy_alive and expedition.phase == Expedition.PHASE_EXPLORING:
 		_process_debug_weapon_cycle()  # stops along with every other Envoy input on death
 		_process_debug_burrow_trigger()
 		commands = envoy.build_commands(sim.tick_count)
@@ -456,6 +503,13 @@ func _step(commands: Array[Command], delta: float) -> void:
 	# This is the END state only -- a descent never pauses the sim.
 	if expedition.is_complete:
 		return
+	# A DESCENT SUSPENDS THE FLOOR (ruled 2026-10-18): the floor's SimWorld is not ticked, so no
+	# Command, attack, damage, AI or hazard advances, while the Expedition's own countdown does
+	# -- one tick per driver step, at the fixed sim rate. Commands handed in are DROPPED, not
+	# queued: replaying them on the next floor would be acting on a floor they were never for.
+	if expedition.phase == Expedition.PHASE_DESCENDING:
+		_advance_descent()
+		return
 	var events: Array[Event] = sim.tick(commands, delta)
 	# ON SCREEN WHILE THEY PLAY, not only in a death report they may never trigger. Presentation
 	# only: it reads the ledger and writes a label, and touches no gameplay state.
@@ -466,6 +520,7 @@ func _step(commands: Array[Command], delta: float) -> void:
 		actor.sync_from_sim(_grounded(sim.entities.get(actor_id, actor.position)))
 	_report_events(events)
 	_project_carrying()
+	_project_console_panel()
 	_project_hazards()
 	_resolve_floor_complete()
 	_advance_windup_cues()
@@ -506,6 +561,20 @@ func _project_carrying() -> void:
 		int(focus.get("carriable_id", -1)), int(focus.get("trigger_id", -1)))
 
 
+## The console's panel stays open only while the Envoy can still read it: walking away (or dying)
+## closes it. The reach is the sim's own (exit_console_within_reach), never a second number here.
+func _project_console_panel() -> void:
+	if _console_panel.is_open() and not (_envoy_alive and sim.exit_console_within_reach(envoy.actor_id, _EXIT_CONSOLE_ID)):
+		_console_panel.close()
+
+
+## Esc closes the panel. Presentation input only: nothing the sim knows about is open or closed.
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and _console_panel.is_open():
+		_console_panel.close()
+		get_viewport().set_input_as_handled()
+
+
 ## HAZARDS, PROJECTED (P41). After sim.tick() resolved tick N, tick_count is N+1, so the query
 ## answers for the tick the NEXT input resolves under: the pad looks active on exactly the frames
 ## whose input will meet an active pad. A drawn pad the sim does not know is a registration bug,
@@ -529,17 +598,50 @@ func _resolve_floor_complete() -> void:
 	_floor_complete_pending = false
 	if not _envoy_alive:
 		return
-	var from_depth: int = expedition.current_depth()
-	if expedition.advance():
-		# DESCENT: same SimWorld, same Envoy. load_floor keeps what belongs to the run and
-		# drops what belonged to the floor (SimWorld.STATE_SCOPES) -- nothing is copied here.
-		print("descent: ", {"from_depth": from_depth, "to_depth": expedition.current_depth(), "tick": sim.tick_count})
-		var plan: FloorPlan = _load_floor()
-		_arrival_card.show_arrival(plan.depth, _place_name(plan))
-	else:
-		print("EXPEDITION COMPLETE: ", {"final_depth": from_depth, "tick": sim.tick_count})
+	# The Expedition decides; its Events say what it decided, through the same reporting path
+	# every sim Event takes.
+	_report_events(expedition.complete_floor(sim.tick_count))
+	_console_panel.close()
+	if expedition.is_complete:
+		_transmission.reset()
 		print(damage_ledger.summary())
 		_completion_overlay.show_complete()
+	elif expedition.phase == Expedition.PHASE_DESCENDING:
+		envoy.clear_charge_ready()
+		# The Envoy has left the floor's events behind: a shot still drawn in flight would fly on
+		# through a suspended world. Its projectile dies with the floor on arrival (STATE_SCOPES).
+		for projectile_id: int in _projectile_tracers.keys():
+			_despawn_tracer(projectile_id)
+		# Nothing on a suspended floor can be the target of the next press.
+		_floor_builder.show_interaction_focus("", -1, -1)
+		_transmission.begin(_floor_builder.exit_pad_centre())
+		_descent_overlay.begin()
+		_project_descent()
+
+
+## One sim-rate tick of a descent. The floor stays suspended; only the countdown moves. The tick
+## that ends it installs the cached destination -- the plan the exit previewed, not a new one.
+func _advance_descent() -> void:
+	var events: Array[Event] = expedition.tick_descent(sim.tick_count)
+	_report_events(events)
+	if expedition.phase == Expedition.PHASE_DESCENDING:
+		_project_descent()
+		return
+	# DESCENT ENDED: same SimWorld, same Envoy. load_floor keeps what belongs to the run and
+	# drops what belonged to the floor (SimWorld.STATE_SCOPES) -- nothing is copied here.
+	var plan: FloorPlan = _load_floor(_next_plan)
+	_transmission.arrive(_grounded(plan.entry_point))
+	_descent_overlay.arrive()
+	_arrival_card.show_arrival(plan.depth, _place_name(plan))
+
+
+## The transmission, as a picture of the countdown: the pad's field rises round the Envoy, the
+## Envoy goes to light and is gone, and the overlay darkens. Presentation reads the Expedition; it
+## keeps no clock of its own, so it cannot finish a descent early or late.
+func _project_descent() -> void:
+	var progress: float = expedition.descent_progress()
+	envoy.visible = _transmission.show_progress(progress)
+	_descent_overlay.show_progress(progress)
 
 
 ## STAGE 1 controlled burrow. Edge-detected raw KEY_B, no-op unless debug_burrow_trigger is
@@ -788,6 +890,15 @@ func _report_events(events: Array[Event]) -> void:
 				print("FLOOR COMPLETE: the expedition stood on the exit together")
 				# Noted, not acted on: see _floor_complete_pending.
 				_floor_complete_pending = true
+			# The Expedition's transitions. Acted on by the code that asked for them
+			# (_resolve_floor_complete / _advance_descent); reported here so the run's
+			# progression is in the same log as everything that happened on its floors.
+			"descent_begun":
+				print("DESCENT BEGUN: ", event.payload)
+			"floor_entered":
+				print("FLOOR ENTERED: ", event.payload)
+			"expedition_complete":
+				print("EXPEDITION COMPLETE: ", event.payload)
 			"breakable_hit":
 				print("breakable hit: ", event.payload)
 			"breakable_destroyed":
@@ -829,6 +940,14 @@ func _report_events(events: Array[Event]) -> void:
 				_floor_builder.set_carriable_visible(int(event.payload["carriable_id"]), true)
 			"carriable_lifted":
 				print("KEY LIFTED: ", event.payload)
+			"exit_console_inspected":
+				# The press is the sim's to arbitrate; what the console shows is ours. A press on an
+				# open console closes it -- the same button reads and puts away.
+				print("EXIT CONSOLE INSPECTED: ", event.payload)
+				if _console_panel.is_open():
+					_console_panel.close()
+				else:
+					_console_panel.open(next_floor_preview())
 			"carriable_dropped":
 				# Where it fell is the sim's fact; this only draws it there.
 				print("KEY DROPPED: ", event.payload)

@@ -63,8 +63,17 @@ func _deliver(arena: Node3D, kinds: Array) -> void:
 	arena._resolve_floor_complete()
 
 
+## Completes the floor and rides the whole descent, landing on the far side of it. Tests about
+## the descent window itself use _deliver and step it by hand.
 func _complete_the_floor(arena: Node3D) -> void:
 	_deliver(arena, ["floor_complete"])
+	_ride(arena)
+
+
+## The descent's fixed window, one driver step per sim-rate tick. Idling is the honest input: a
+## descent ignores whatever is sent, so nothing richer could change the result.
+func _ride(arena: Node3D) -> void:
+	_idle(arena, arena.descent_ticks)
 
 
 func _plan(depth: int) -> FloorPlan:
@@ -247,12 +256,16 @@ func test_nothing_changes_until_the_whole_batch_is_reported() -> void:
 	assert_eq(arena.expedition.position, 0, "reporting a completion is not acting on it")
 	assert_eq(arena.sim._patch_rects.size(), _plan(1).patches.size(), "Floor 1 is still loaded")
 	arena._resolve_floor_complete()
-	assert_eq(arena.expedition.position, 1, "resolution is what descends")
+	assert_eq(arena.expedition.phase, Expedition.PHASE_DESCENDING, "resolution is what begins the descent")
+	_ride(arena)
+	assert_eq(arena.expedition.position, 1, "and riding it out is what arrives")
 
 
 func test_a_duplicated_completion_cannot_skip_a_floor() -> void:
 	var arena: Node3D = _boot([1, 2, 2] as Array[int])
 	_deliver(arena, ["floor_complete", "floor_complete", "floor_complete"])
+	assert_eq(arena.expedition.phase, Expedition.PHASE_DESCENDING)
+	_ride(arena)
 	assert_eq(arena.expedition.position, 1, "three completions in one batch are one descent")
 	assert_false(arena.expedition.is_complete)
 	arena._resolve_floor_complete()
@@ -267,6 +280,8 @@ func test_dying_on_the_completing_tick_is_failure_not_descent() -> void:
 		_deliver(arena, order)
 		assert_eq(arena.expedition.position, 0, "%s: a dead expedition does not descend" % [order])
 		assert_false(arena.expedition.is_complete, "%s: and does not complete" % [order])
+		assert_eq(arena.expedition.phase, Expedition.PHASE_EXPLORING, "%s: no descent is begun either" % [order])
+		assert_false(arena._descent_overlay.visible, "%s" % [order])
 		assert_true(arena._failure_overlay.visible, "%s: it fails" % [order])
 		assert_false(arena._arrival_card.visible)
 		assert_false(arena._completion_overlay.visible)
@@ -587,3 +602,387 @@ func test_a_whole_expedition_plays_from_floor_one_to_completion() -> void:
 	var stopped_at: int = arena.sim.tick_count
 	_idle(arena, 30)
 	assert_eq(arena.sim.tick_count, stopped_at, "and the world stops with it")
+
+
+# --- THE DESCENT (M2 expedition frame, Slice 1) --------------------------------------------
+
+## Every input the Envoy can send, for a tick that is supposed to ignore all of them.
+func _everything(arena: Node3D, phase: String) -> Array[Command]:
+	var envoy_id: int = _envoy(arena)
+	var tick: int = arena.sim.tick_count
+	return [
+		Command.new(tick, envoy_id, "move", {"direction": Vector3(1, 0, 0)}),
+		Command.new(tick, envoy_id, "attack", {"aim": Vector3(0, 0, -1), "phase": phase}),
+		Command.new(tick, envoy_id, "block", {"held": true}),
+		Command.new(tick, envoy_id, "switch_weapon", {}),
+	] as Array[Command]
+
+
+## The families a plan fields, most numerous first, ties by name -- derived here from the plan
+## alone, so the arena's preview is checked against the content rather than against itself.
+func _expected_families(plan: FloorPlan) -> Array:
+	var counts: Dictionary = {}
+	for spawn: Dictionary in plan.all_spawns():
+		var family: StringName = ContentDB.get_resource(&"enemy", spawn["enemy_key"]).family
+		counts[family] = int(counts.get(family, 0)) + 1
+	var families: Array = counts.keys()
+	families.sort_custom(func(a: StringName, b: StringName) -> bool:
+		return counts[a] > counts[b] or (counts[a] == counts[b] and String(a) < String(b)))
+	return families
+
+
+## THE DESTINATION IS RESOLVED BEFORE THE EXIT IS REACHED: on the first tick of a floor, with
+## nothing completed, the next floor's plan is cached and the console can already describe it.
+func test_the_next_floor_is_resolved_from_the_moment_of_arrival() -> void:
+	var arena: Node3D = _boot()
+	assert_eq(arena.expedition.phase, Expedition.PHASE_EXPLORING, "sanity: nobody is on the exit")
+	assert_not_null(arena._next_plan, "the destination is resolved before the exit is reached")
+	var preview: Dictionary = arena.next_floor_preview()
+	assert_eq(preview["depth"], 2)
+	assert_eq(preview["place"], "Archive")
+	assert_eq(preview["stratum"], "Archive")
+	assert_eq(preview["families"], _expected_families(_plan(2)), "the families Floor 2 actually fields")
+	assert_false(arena._console_panel.is_open(), "nothing is shown until the console is read")
+
+
+## THE PREVIEW IS A PROMISE: the floor installed is the very plan the console was read from.
+func test_the_floor_installed_is_the_plan_the_console_describes() -> void:
+	var arena: Node3D = _boot()
+	for expected_depth: int in [2, 3, 4]:
+		var previewed: FloorPlan = arena._next_plan
+		assert_eq(previewed.depth, expected_depth)
+		_complete_the_floor(arena)
+		assert_same(arena._current_plan, previewed, "depth %d: the same plan object, not a regeneration" % expected_depth)
+		assert_eq(arena.sim._patch_rects.size(), previewed.patches.size())
+
+
+# --- THE EXIT CONSOLE (revised 2026-10-19) ----------------------------------------------------
+
+## Where an Envoy stands to read the console: on the line from the console toward the pad, at
+## the shipped reach less a margin -- the natural spot for someone walking up to the exit.
+func _reading_spot(plan: FloorPlan) -> Vector3:
+	var reach: float = (load("res://game/content/envoy/envoy_stats.tres") as EnvoyStats).pickup_reach
+	var toward_pad := Vector3(plan.end_marker.x - plan.exit_console.x, 0.0, plan.end_marker.z - plan.exit_console.z).normalized()
+	return plan.exit_console + toward_pad * (reach - 0.5)
+
+
+## Stands the Envoy at the reading spot and presses attack at the console, through the driver.
+func _read_console(arena: Node3D) -> void:
+	var envoy_id: int = _envoy(arena)
+	var plan: FloorPlan = arena._current_plan
+	arena.sim.entities[envoy_id] = _reading_spot(plan)
+	var aim: Vector3 = plan.exit_console - _reading_spot(plan)
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim, "phase": "pressed"})] as Array[Command], DT)
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": aim, "phase": "released"})] as Array[Command], DT)
+
+
+func _exit_region(plan: FloorPlan) -> Rect2:
+	for trigger in plan.triggers:
+		for effect: Dictionary in trigger.effects:
+			if effect["kind"] == FloorLayers.EFFECT_COMPLETE_FLOOR:
+				return trigger.region
+	return Rect2()
+
+
+## EVERY FLOOR'S CONSOLE CAN BE READ WITHOUT DESCENDING: it stands on walkable ground beside its
+## pad, and the spot it is read from is walkable, within the sim's reach, and on no trigger.
+func test_every_floor_has_a_console_beside_its_exit_that_is_read_off_the_pad() -> void:
+	for depth: int in [1, 2, 3, 4]:
+		var plan: FloorPlan = _plan(depth)
+		var bounds: WalkableBounds = plan.make_bounds()
+		var exit: Rect2 = _exit_region(plan)
+		assert_true(bounds.is_inside(plan.exit_console), "depth %d: the console stands on the floor" % depth)
+		assert_false(WalkableBounds.contains(exit, plan.exit_console.x, plan.exit_console.z), "depth %d: not on the pad" % depth)
+		assert_lt(Vector2(plan.exit_console.x - plan.end_marker.x, plan.exit_console.z - plan.end_marker.z).length(), 8.0,
+			"depth %d: beside the pad, not across the room" % depth)
+		var spot: Vector3 = _reading_spot(plan)
+		assert_true(bounds.is_inside(spot), "depth %d: the reading spot is walkable" % depth)
+		for trigger in plan.triggers:
+			assert_false(WalkableBounds.contains(trigger.region, spot.x, spot.z), "depth %d: reading stands on no trigger (%d)" % [depth, trigger.trigger_id])
+
+
+## Read it, read it again to put it away, read it again; Esc closes it; walking away closes it.
+func test_the_console_is_optional_dismissable_and_rereadable() -> void:
+	var arena: Node3D = _boot()
+	_read_console(arena)
+	assert_true(arena._console_panel.is_open(), "the press read the console")
+	_read_console(arena)
+	assert_false(arena._console_panel.is_open(), "the same press puts it away")
+	_read_console(arena)
+	assert_true(arena._console_panel.is_open(), "and it can be read again")
+	var escape := InputEventAction.new()
+	escape.action = &"ui_cancel"
+	escape.pressed = true
+	arena._unhandled_input(escape)
+	assert_false(arena._console_panel.is_open(), "Esc closes it")
+	_read_console(arena)
+	assert_true(arena._console_panel.is_open())
+	var plan: FloorPlan = arena._current_plan
+	var away: Vector3 = _reading_spot(plan) + (_reading_spot(plan) - plan.exit_console).normalized() * 0.2
+	# Bounded: a reach check that never says "out" must fail this test, not hang the suite.
+	for step in 20:
+		if not arena.sim.exit_console_within_reach(_envoy(arena), arena._EXIT_CONSOLE_ID):
+			break
+		away += (away - plan.exit_console).normalized() * 0.5
+		arena.sim.entities[_envoy(arena)] = away
+	_idle(arena, 1)
+	assert_false(arena._console_panel.is_open(), "walking out of reach closes it")
+
+
+func test_the_console_says_what_the_cached_destination_is() -> void:
+	var arena: Node3D = _boot()
+	_read_console(arena)
+	var text: String = arena._console_panel.text()
+	assert_true(text.contains("Depth 2"), "got '%s'" % text)
+	assert_true(text.contains("Archive"), "got '%s'" % text)
+	for family: StringName in _expected_families(_plan(2)):
+		assert_true(text.contains(String(family).capitalize()), "and %s, got '%s'" % [family, text])
+
+
+## The console reads the CACHED plan, never one of its own: swap what is cached and it says so.
+func test_the_console_reads_the_cached_plan_and_nothing_else() -> void:
+	var arena: Node3D = _boot()
+	arena._next_plan = _plan(4)
+	_read_console(arena)
+	var text: String = arena._console_panel.text()
+	assert_true(text.contains("Depth 4") and text.contains("Foundry"), "got '%s'" % text)
+
+
+func test_the_terminal_console_names_the_foundry() -> void:
+	var arena: Node3D = _boot([3, 4] as Array[int])
+	_read_console(arena)
+	var text: String = arena._console_panel.text()
+	assert_true(text.contains("Depth 4") and text.contains("Foundry"), "got '%s'" % text)
+	for family: StringName in _expected_families(_plan(4)):
+		assert_true(text.contains(String(family).capitalize()), "and %s, got '%s'" % [family, text])
+
+
+func test_reading_the_console_never_starts_a_descent() -> void:
+	var arena: Node3D = _boot()
+	for i in 6:
+		_read_console(arena)
+	_idle(arena, 3)
+	assert_eq(arena.expedition.phase, Expedition.PHASE_EXPLORING)
+	assert_eq(arena.expedition.position, 0)
+	assert_false(arena.sim._floor_complete)
+	assert_false(arena._descent_overlay.visible)
+
+
+## Never reading it costs nothing: the exit works exactly as it does for a reader.
+func test_a_floor_is_descended_without_ever_reading_the_console() -> void:
+	var arena: Node3D = _boot()
+	_complete_the_floor(arena)
+	assert_eq(arena.expedition.current_depth(), 2)
+	assert_false(arena._console_panel.is_open())
+
+
+func test_a_descent_closes_the_console() -> void:
+	var arena: Node3D = _boot()
+	_read_console(arena)
+	assert_true(arena._console_panel.is_open(), "sanity")
+	_deliver(arena, ["floor_complete"])
+	assert_false(arena._console_panel.is_open(), "closed the moment the descent began")
+	arena._step(_everything(arena, "pressed"), DT)
+	assert_false(arena._console_panel.is_open(), "and no press during the descent reads anything")
+	_ride(arena)
+	assert_false(arena._console_panel.is_open(), "nor is it open on arrival")
+
+
+func test_the_final_floor_console_names_extraction_not_a_floor() -> void:
+	var arena: Node3D = _boot([1, 2] as Array[int])
+	_complete_the_floor(arena)
+	assert_null(arena._next_plan, "nothing lies below the last floor")
+	assert_eq(arena.next_floor_preview(), {})
+	_read_console(arena)
+	var text: String = arena._console_panel.text()
+	assert_true(text.contains("Extraction"), "got '%s'" % text)
+	assert_false(text.contains("Depth"), "no invented destination, got '%s'" % text)
+	_deliver(arena, ["floor_complete"])
+	assert_true(arena.expedition.is_complete, "the last exit ends the run at once -- no ride to nowhere")
+	assert_eq(arena.expedition.phase, Expedition.PHASE_COMPLETE)
+	assert_false(arena._console_panel.is_open())
+	assert_false(arena._transmission.is_showing(), "no transmission for a ride that never starts")
+	assert_true(arena.envoy.visible)
+	assert_true(arena._completion_overlay.visible)
+
+
+## Floors 1-4 each draw their console where the plan puts it, on the ground it stands on, and
+## the pad's frame where the plan's exit is -- no tall marker over it.
+func test_each_floor_draws_its_console_and_pad() -> void:
+	var arena: Node3D = _boot()
+	for depth: int in [1, 2, 3, 4]:
+		var plan: FloorPlan = arena._current_plan
+		assert_eq(plan.depth, depth)
+		var console: Node3D = arena._floor_builder.exit_console_node()
+		assert_not_null(console, "depth %d" % depth)
+		var expected := Vector3(plan.exit_console.x, arena._floor_builder.elevation_at(plan.exit_console), plan.exit_console.z)
+		assert_almost_eq(console.position, expected, Vector3.ONE * 0.001, "depth %d: where the plan says" % depth)
+		var centre: Vector3 = arena._floor_builder.exit_pad_centre()
+		assert_almost_eq(Vector2(centre.x, centre.z), Vector2(plan.end_marker.x, plan.end_marker.z), Vector2.ONE * 0.001, "depth %d: the pad" % depth)
+		if depth < 4:
+			_complete_the_floor(arena)
+
+
+func test_the_focus_glow_follows_the_sims_answer() -> void:
+	var arena: Node3D = _boot()
+	arena._floor_builder.show_interaction_focus("inspect", -1, -1)
+	assert_true(arena._floor_builder.exit_console_focused())
+	assert_true(arena._floor_builder._focus_ring.visible)
+	arena._floor_builder.show_interaction_focus("", -1, -1)
+	assert_false(arena._floor_builder.exit_console_focused())
+	assert_false(arena._floor_builder._focus_ring.visible)
+
+
+## EXACT FIXED-TICK DURATION, from the run configuration -- checked at a non-default value too,
+## so the countdown is shown to come from config rather than coincide with it.
+func test_the_descent_lasts_exactly_the_configured_ticks() -> void:
+	for ticks: int in [45, 7]:
+		var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+		arena.descent_ticks = ticks
+		add_child_autofree(arena)
+		_deliver(arena, ["floor_complete"])
+		_idle(arena, ticks - 1)
+		assert_eq(arena.expedition.phase, Expedition.PHASE_DESCENDING, "%d: still riding after %d ticks" % [ticks, ticks - 1])
+		assert_eq(arena.expedition.position, 0)
+		_idle(arena, 1)
+		assert_eq(arena.expedition.phase, Expedition.PHASE_EXPLORING, "%d: arrived on tick %d" % [ticks, ticks])
+		assert_eq(arena.expedition.position, 1)
+		assert_eq(arena.expedition.current_depth(), 2)
+
+
+## THE FLOOR IS SUSPENDED (ruled): no tick, no movement, no AI, no damage, no projectile, no
+## hazard progress -- whatever the player presses -- for the whole descent.
+func test_the_floor_is_suspended_for_the_whole_descent() -> void:
+	var arena: Node3D = load("res://game/arena/arena.tscn").instantiate()
+	arena.itinerary = [4, 3] as Array[int]
+	arena.debug_force_aggro = true  # every enemy awake, so a frozen one is frozen, not idle
+	add_child_autofree(arena)
+	var envoy_id: int = _envoy(arena)
+	# A shot in flight, so a projectile has a reason to move.
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "switch_weapon", {})] as Array[Command], DT)
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": Vector3(0, 0, -1)})] as Array[Command], DT)
+	_idle(arena, 3)
+	assert_gt(arena.sim._projectiles.size(), 0, "sanity: a projectile is in flight")
+	# CONTROL: the very same inputs DO act on a live floor.
+	var before_control: Vector3 = arena.sim.entities[envoy_id]
+	arena._step(_everything(arena, "pressed"), DT)
+	assert_ne(arena.sim.entities[envoy_id], before_control, "sanity: on a live floor, input moves the Envoy")
+
+	_deliver(arena, ["floor_complete"])
+	assert_eq(arena.expedition.phase, Expedition.PHASE_DESCENDING)
+	var tick: int = arena.sim.tick_count
+	var entities: Dictionary = arena.sim.entities.duplicate(true)
+	var health: Dictionary = arena.sim._health.duplicate(true)
+	var projectiles: Variant = arena.sim._projectiles.duplicate(true)
+	var ai_state: Dictionary = arena.sim._ai_state.duplicate(true)
+	var shield: float = arena.sim._shield_meter[envoy_id]
+	var equipped: StringName = arena.sim._equipped_weapon[envoy_id]
+	var pads: Dictionary = {}
+	for pad_id: int in arena._floor_builder.hazard_pad_ids():
+		pads[pad_id] = arena.sim.spike_pad_ticks_until_active(pad_id)
+	assert_gt(pads.size(), 0, "sanity: the Foundry has pads to freeze")
+
+	for i in arena.descent_ticks - 1:
+		arena._step(_everything(arena, "held" if i % 2 == 0 else "pressed"), DT)
+		assert_eq(arena.sim.tick_count, tick, "descent tick %d: the floor's clock did not move" % i)
+	assert_eq(arena.sim.entities, entities, "nobody moved, the Envoy included")
+	assert_eq(arena.sim._health, health, "nobody was hurt")
+	assert_eq(arena.sim._projectiles, projectiles, "no shot travelled")
+	assert_eq(arena.sim._ai_state, ai_state, "no AI decided anything")
+	assert_eq(arena.sim._shield_meter[envoy_id], shield, "the shield neither drained nor regenerated")
+	assert_eq(arena.sim._equipped_weapon[envoy_id], equipped, "no weapon switch was applied")
+	for pad_id: int in pads:
+		assert_eq(arena.sim.spike_pad_ticks_until_active(pad_id), pads[pad_id], "pad %d did not advance" % pad_id)
+
+
+## NO STALE INTENT CROSSES THE SHAFT: a charge held into the lift and a button still down on
+## arrival start nothing on the new floor.
+func test_no_attack_or_movement_intent_is_carried_into_the_new_floor() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = _envoy(arena)
+	# Sword in hand (the shipped first weapon): press and hold, so a charge is open at the exit.
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": Vector3(0, 0, -1), "phase": "pressed"})] as Array[Command], DT)
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": Vector3(0, 0, -1), "phase": "held"})] as Array[Command], DT)
+	assert_true(arena.sim._melee_hold.has(envoy_id), "sanity: a charge is open when the floor completes")
+
+	_deliver(arena, ["floor_complete"])
+	for i in arena.descent_ticks:
+		arena._step(_everything(arena, "pressed"), DT)
+	assert_eq(arena.expedition.current_depth(), 2, "sanity: arrived")
+	assert_eq(arena.sim.entities[envoy_id], _plan(2).entry_point, "standing exactly on the entry: no move was banked")
+	assert_false(arena.sim._melee_hold.has(envoy_id), "the charge stayed on Floor 1")
+	assert_false(arena.sim._melee_buffered_press.has(envoy_id), "and no press was buffered on the way down")
+	assert_ne(arena.sim._shield_state.get(envoy_id, "ready"), "held", "the shield is not raised by a block sent in the lift")
+
+	# The button is still down on arrival, then let go: an orphan hold/release is not an attack.
+	var events: Array[Event] = arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": Vector3(0, 0, -1), "phase": "held"})] as Array[Command], DT)
+	events.append_array(arena.sim.tick([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": Vector3(0, 0, -1), "phase": "released"})] as Array[Command], DT))
+	for event in events:
+		assert_ne(event.kind, "melee_swing", "a release with no press on this floor swung the sword")
+		assert_ne(event.kind, "charge_ready")
+
+
+func test_a_completion_during_the_descent_is_not_a_second_descent() -> void:
+	var arena: Node3D = _boot()
+	_deliver(arena, ["floor_complete"])
+	_idle(arena, 5)
+	_deliver(arena, ["floor_complete", "floor_complete"])
+	_idle(arena, arena.descent_ticks)
+	assert_eq(arena.expedition.position, 1, "one floor down, not two")
+	assert_eq(arena.expedition.phase, Expedition.PHASE_EXPLORING)
+
+
+## THE TRANSMISSION, as a picture of the countdown: the field rises round the Envoy, the Envoy goes
+## to light and is hidden -- never scaled -- and on arrival it is shown again at the entry with the
+## light fading off it. Everything transient is put away once the fade is done.
+func test_the_envoy_is_transmitted_out_and_rematerializes_on_arrival() -> void:
+	var arena: Node3D = _boot()
+	var model: Node3D = arena.envoy.get_node("Model")
+	var model_scale: Vector3 = model.scale
+	_deliver(arena, ["floor_complete"])
+	assert_true(arena._transmission.is_showing(), "the pad is transmitting")
+	assert_almost_eq(arena._transmission.position, arena._floor_builder.exit_pad_centre(), Vector3.ONE * 0.001, "at the pad")
+	assert_true(arena.envoy.visible, "the Envoy is still there as it begins")
+	var vanish_tick: int = ceili(arena._transmission.vanish_progress * arena.descent_ticks)
+	_idle(arena, vanish_tick + 1)
+	assert_false(arena.envoy.visible, "gone to light before the screen is dark")
+	assert_eq(arena.envoy.scale, Vector3.ONE, "the Envoy is hidden, never squashed")
+	assert_eq(model.scale, model_scale)
+	_idle(arena, arena.descent_ticks - vanish_tick - 1)
+	assert_eq(arena.expedition.current_depth(), 2)
+	assert_true(arena.envoy.visible, "rematerialized on the new floor")
+	assert_eq(arena.envoy.position, _plan(2).entry_point, "standing on the new floor, not below it")
+	assert_true(arena._transmission.is_showing(), "the arrival glow is fading off it")
+	assert_almost_eq(arena._transmission.position, arena._grounded(_plan(2).entry_point), Vector3.ONE * 0.001)
+	assert_true(arena._arrival_card.visible)
+	arena._transmission._process(arena._transmission.arrival_seconds + 0.01)
+	assert_false(arena._transmission.is_showing(), "and put away once it has")
+
+
+## A shot drawn in flight is put away when the Envoy leaves: it would otherwise keep flying
+## through a suspended floor.
+func test_tracers_are_put_away_when_the_descent_begins() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = _envoy(arena)
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "switch_weapon", {})] as Array[Command], DT)
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": Vector3(0, 0, -1)})] as Array[Command], DT)
+	assert_gt(arena._projectile_tracers.size(), 0, "sanity: a shot is drawn")
+	_deliver(arena, ["floor_complete"])
+	assert_eq(arena._projectile_tracers.size(), 0)
+
+
+## Restart mid-descent: a fresh arena owes nothing to a run caught in the shaft.
+func test_a_restart_during_the_descent_begins_a_fresh_expedition() -> void:
+	var first: Node3D = _boot()
+	_deliver(first, ["floor_complete"])
+	_idle(first, 10)
+	assert_eq(first.expedition.phase, Expedition.PHASE_DESCENDING, "sanity: caught mid-ride")
+	first.free()
+	var second: Node3D = _boot()
+	assert_eq(second.expedition.phase, Expedition.PHASE_EXPLORING)
+	assert_eq(second.expedition.position, 0)
+	assert_false(second._descent_overlay.visible)
+	assert_false(second._transmission.is_showing())
+	assert_true(second.envoy.visible)
+	assert_false(second._console_panel.is_open())
+	assert_eq(second._next_plan.depth, 2)

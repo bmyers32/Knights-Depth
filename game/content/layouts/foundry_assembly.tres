@@ -936,3 +936,4 @@ spike_pads = Array[ExtResource("6_pad")]([SubResource("Resource_pad_seq_0"), Sub
 carriables = Array[ExtResource("7_carriable")]([SubResource("Resource_k_west"), SubResource("Resource_k_east")])
 entry_point = Vector3(-50, 0, 0)
 end_marker = Vector3(74, 0, -144)
+exit_console = Vector3(74, 0, -138.5)
