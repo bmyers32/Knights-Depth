@@ -34,6 +34,17 @@ var _max_health: Dictionary = {}  # actor_id -> float (combatants only)
 var _families: Dictionary = {}  # actor_id -> StringName (combatants only)
 var _iframe_ticks_on_hit: Dictionary = {}  # actor_id -> int (combatants only)
 var _iframe_ticks_remaining: Dictionary = {}  # actor_id -> int, counts down once per tick()
+## EMERGENCY RESYNCHRONIZATION (M2 Slice 2, ruled 2026-10-20). INCAPACITATED IS ZERO HEALTH -- not a
+## second "downed" state -- so every existing `_health <= 0` guard (targeting, hazards, triggers, AI,
+## status ticks) already treats a recovering Envoy as out of play. A revival is health restored.
+## actor_id -> {per_floor: int, health_fraction: float, delay_ticks: int}. Only actors registered
+## here can resynchronize; enemies never are, so every enemy death path is untouched.
+var _resync_profiles: Dictionary = {}
+## actor_id -> int, revivals spent on THIS floor. A usage count reset by load_floor (ACTOR_TRANSIENT),
+## never a stock that is granted: an unused charge cannot bank, and a new floor is a fresh one.
+var _resyncs_used_on_floor: Dictionary = {}
+## actor_id -> int, the ABSOLUTE tick a committed revival lands. Present only while one is pending.
+var _resync_due_tick: Dictionary = {}
 var _weapons: Dictionary = {}  # weapon_id(String) -> Dictionary of resolved weapon stats
 var _equipped_weapon: Dictionary = {}  # actor_id -> weapon_id(String), sim-owned equip state
 var _weapon_loadouts: Dictionary = {}  # actor_id -> Array[String], switch_weapon's fixed cycle order
@@ -408,10 +419,16 @@ const STATE_SCOPES: Dictionary = {
 	# resets below. Clearing this instead would be a stealth NERF, not neutrality:
 	# _shield_meter.get(id, 0.0) defaults to zero.
 	"_shield_meter": SCOPE_RUN_ACTOR,
+	"_resync_profiles": SCOPE_RUN_ACTOR,
 
 	# --- ACTOR_TRANSIENT: combat state whose episode ended with the floor.
 	"_status_instances": SCOPE_ACTOR_TRANSIENT,  # Burn does NOT cross a floor boundary
 	"_iframe_ticks_remaining": SCOPE_ACTOR_TRANSIENT,
+	# ONE FREE REVIVAL PER FLOOR is exactly this clearing: a floor transition forgets what was
+	# spent. A pending revival cannot cross one (a downed party cannot complete a floor), so its
+	# clearing is belt and braces.
+	"_resyncs_used_on_floor": SCOPE_ACTOR_TRANSIENT,
+	"_resync_due_tick": SCOPE_ACTOR_TRANSIENT,
 	# Cooldowns are absolute-tick deadlines against a clock that keeps running; a carried
 	# value is either already expired or an arbitrary delay on the new floor's first swing.
 	"_next_fire_tick": SCOPE_ACTOR_TRANSIENT,
@@ -1040,6 +1057,100 @@ func health_of(actor_id: int) -> float:
 
 func max_health_of(actor_id: int) -> float:
 	return _max_health.get(actor_id, 0.0)
+
+
+## Read-only: the family a combatant was registered with ("" for none).
+func family_of(actor_id: int) -> StringName:
+	return _families.get(actor_id, &"")
+
+
+## In play: above zero health. An incapacitated Envoy -- recovering or not -- is not.
+func is_active(actor_id: int) -> bool:
+	return _health.get(actor_id, 0.0) > 0.0
+
+
+func resync_pending(actor_id: int) -> bool:
+	return _resync_due_tick.has(actor_id)
+
+
+## Ticks until a pending revival lands, measured against the tick the NEXT tick() resolves; 0 when
+## none is pending. Presentation reads this for its countdown and keeps no clock of its own.
+func resync_ticks_remaining(actor_id: int) -> int:
+	if not _resync_due_tick.has(actor_id):
+		return 0
+	return maxi(0, int(_resync_due_tick[actor_id]) - tick_count)
+
+
+## Makes an actor able to resynchronize after incapacitation. Values are content (EnvoyStats),
+## unpacked by the driver at expedition start.
+func register_resync(actor_id: int, per_floor: int, health_fraction: float, delay_ticks: int) -> void:
+	assert(delay_ticks >= 1, "a revival lands at least one tick after the incapacitation")
+	_resync_profiles[actor_id] = {
+		"per_floor": per_floor, "health_fraction": health_fraction, "delay_ticks": delay_ticks,
+	}
+
+
+## THE ONE INCAPACITATION HOOK, called from both death sites a resynchronizing actor can reach (a
+## lethal hit, a lethal Burn tick) after their own cleanup and before the key drop. A no-op for any
+## actor without a profile, so enemy deaths emit exactly what they always did.
+##
+## The charge is COMMITTED here, not at the revival: nothing in between can interrupt it (the actor
+## is untargetable and no floor can complete around a downed party), so "spent when used" and
+## "spent when begun" cannot differ -- and committing now leaves no half-spent state to scope.
+func _on_incapacitated(actor_id: int) -> Array[Event]:
+	if not _resync_profiles.has(actor_id):
+		return []
+	var events: Array[Event] = []
+	# A status survives a HIT death in its slot (status ticks merely skip the dead), and a Burn tick
+	# ignores i-frames -- so a revival over a live Burn could kill again inside its own safety
+	# window. The resynchronized form arrives clean, whichever way it fell.
+	if _status_instances.has(actor_id):
+		events.append(Event.new(tick_count, "status_cleared", {
+			"actor_id": actor_id, "status_id": _status_instances[actor_id].id, "reason": "incapacitated",
+		}))
+		_status_instances.erase(actor_id)
+	var profile: Dictionary = _resync_profiles[actor_id]
+	var used: int = int(_resyncs_used_on_floor.get(actor_id, 0))
+	if used < int(profile["per_floor"]):
+		_resyncs_used_on_floor[actor_id] = used + 1
+		_resync_due_tick[actor_id] = tick_count + int(profile["delay_ticks"])
+		events.append(Event.new(tick_count, "resync_begun", {
+			"actor_id": actor_id, "resync_tick": _resync_due_tick[actor_id],
+		}))
+	elif not _party_can_recover():
+		# A PARTY FACT, like floor_complete: the sim says nobody is left to carry the expedition and
+		# the Expedition decides what that means. Solo resolves to "this Envoy"; with a party, one
+		# Envoy down for good is not yet the end.
+		events.append(Event.new(tick_count, "recovery_exhausted", {"actor_id": actor_id}))
+	return events
+
+
+## Same roster as all_active_envoys_occupy: the expedition's party, never "whoever is nearby".
+func _party_can_recover() -> bool:
+	for actor_id: int in _run_persistent_actors:
+		if _health.get(actor_id, 0.0) > 0.0 or _resync_due_tick.has(actor_id):
+			return true
+	return false
+
+
+## Lands every revival due this tick. Runs right after _advance_iframes, before anything can hit, so
+## the shared window covers the whole revival tick -- the same 90 ticks a non-lethal hit grants,
+## through the same timer (P44: one window, a second trigger, no new category).
+func _advance_resyncs() -> Array[Event]:
+	var events: Array[Event] = []
+	var actor_ids: Array = _resync_due_tick.keys()
+	actor_ids.sort()
+	for actor_id: int in actor_ids:
+		if tick_count < int(_resync_due_tick[actor_id]):
+			continue
+		_resync_due_tick.erase(actor_id)
+		var ceiling: float = _max_health.get(actor_id, 0.0)
+		_health[actor_id] = ceiling * float(_resync_profiles[actor_id]["health_fraction"])
+		_iframe_ticks_remaining[actor_id] = _iframe_ticks_on_hit.get(actor_id, 0)
+		events.append(Event.new(tick_count, "resynchronized", {
+			"actor_id": actor_id, "health": _health[actor_id], "max_health": ceiling,
+		}))
+	return events
 
 
 ## ACTIVATION IS AUTHORED. There is no "the player entered the region, therefore fight" rule
@@ -2072,11 +2183,12 @@ func debug_override_health(actor_id: int, health: float) -> void:
 ## actor's eligibility within the same phase.
 func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	_advance_iframes()
+	var events: Array[Event] = _advance_resyncs()
 	# Projectiles advance before this tick's Commands are processed (mirrors
 	# _advance_iframes running first) — a shot spawned THIS tick doesn't also travel
 	# this tick, so spawn and first step of travel always land on separate ticks, same
 	# as a melee swing resolving instantly on its own tick.
-	var events: Array[Event] = _advance_projectiles(dt)
+	events.append_array(_advance_projectiles(dt))
 	# Input buffer (manual-pass, GAME-RULES §3): resolve any press that queued during
 	# a prior tick's cooldown BEFORE this tick's Commands process, so if this same
 	# tick also carries this actor's "held"/"released" Command, it lands against the
@@ -2111,6 +2223,12 @@ func tick(commands: Array[Command], dt: float) -> Array[Event]:
 	events.append_array(_advance_floor_state())
 	var all_commands: Array[Command] = commands + _decide_ai_commands(events)
 	for command in all_commands:
+		# AN INCAPACITATED ACTOR ACTS ON NOTHING. Its move, block and switch are dropped here, where
+		# a server would drop them (§4.2): with a revival landing in place, a downed body that could
+		# still be steered would choose its own revival point. "attack" is excluded only because
+		# _apply_attack already refuses it with its own observable attack_rejected.
+		if command.kind != "attack" and _health.has(command.actor_id) and _health[command.actor_id] <= 0.0:
+			continue
 		if command.kind == "move":
 			# Movement suppression during "executing" (manual-pass, locked):
 			# authored lunge movement REPLACES input by design -- the lunge is
@@ -3085,6 +3203,7 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 		events.append_array(_clear_attack_input_state(target_id))
 		_clear_clamps_targeting(target_id)
 		_clear_reaction_state(target_id)
+		events.append_array(_on_incapacitated(target_id))
 	else:
 		# Lethal hits start no timer (moot for the dead) — non-lethal unblocked hits
 		# are the ONLY i-frame trigger this session (dodge is a future, separately-
@@ -5042,6 +5161,7 @@ func _advance_status_ticks() -> Array[Event]:
 				_status_instances.erase(actor_id)
 				events.append_array(_clear_attack_input_state(actor_id))
 				_clear_clamps_targeting(actor_id)
+				events.append_array(_on_incapacitated(actor_id))
 				# Burn ticks never drop a key; dying of Burn always does (ruled 2026-10-16).
 				events.append_array(_release_carried(actor_id, "death", entities.get(actor_id, Vector3.ZERO)))
 				died = true

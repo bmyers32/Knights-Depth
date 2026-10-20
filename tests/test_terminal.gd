@@ -506,4 +506,4 @@ func test_a_status_carried_into_the_final_completion_is_cleared_with_it() -> voi
 	for i in 300:
 		arena._step([] as Array[Command], DT)
 	assert_eq(_health(arena), at_completion, "a completed expedition takes no more damage from anything")
-	assert_false(arena._failure_overlay.visible)
+	assert_ne(arena._run_summary.outcome(), RunSummaryOverlay.OUTCOME_RECALL)

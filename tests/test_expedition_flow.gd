@@ -53,14 +53,42 @@ func _move(arena: Node3D, direction: Vector3) -> void:
 	arena._step([Command.new(arena.sim.tick_count, _envoy(arena), "move", {"direction": direction})] as Array[Command], DT)
 
 
-## One driver step's worth of reporting + resolution for a hand-built batch.
+## One driver step's worth of reporting + resolution for a hand-built batch. "fall" is not a kind:
+## it is a REAL lethal blow through the sim's own pipeline (_fall), spliced in at that position, so
+## the sim's health, revival charge and party fact are what the driver reads -- a bare "died" Event
+## no longer decides anything (M2 Slice 2).
 func _deliver(arena: Node3D, kinds: Array) -> void:
 	var batch: Array[Event] = []
 	for kind: String in kinds:
-		var payload: Dictionary = {"actor_id": _envoy(arena)} if kind == "died" else {}
-		batch.append(Event.new(arena.sim.tick_count, kind, payload))
+		if kind == "fall":
+			batch.append_array(_fall(arena))
+		else:
+			batch.append(Event.new(arena.sim.tick_count, kind, {}))
 	arena._report_events(batch)
-	arena._resolve_floor_complete()
+	arena._resolve_transitions()
+
+
+## A lethal environmental blow through the ordinary hit pipeline (the spike pad's own path: no
+## knockback, no aggro), with any post-hit window cleared first so it cannot be absorbed.
+func _fall(arena: Node3D) -> Array[Event]:
+	arena.sim._iframe_ticks_remaining[_envoy(arena)] = 0
+	var lethal: Dictionary = {
+		"damage": 1000.0, "damage_type": "force", "knockback_distance": 0.0,
+		"contributes_pressure": false, "flinch_capability": "none", "interrupt_strength": 0,
+	}
+	return arena.sim._resolve_hit_on_target(-1, _envoy(arena), lethal, Vector3(0, 0, 1), "test_fall", "", -1, SimWorld.SOURCE_ENVIRONMENT)
+
+
+func _resync_delay(arena: Node3D) -> int:
+	return arena.envoy.stats.resync_delay_ticks
+
+
+## Falls and waits the revival out: the floor's one free revival, spent.
+func _spend_the_revival(arena: Node3D) -> void:
+	_deliver(arena, ["fall"])
+	assert_true(arena.sim.resync_pending(_envoy(arena)), "sanity: the first fall on a floor is recoverable")
+	_idle(arena, _resync_delay(arena) + 1)
+	assert_true(arena.sim.is_active(_envoy(arena)), "sanity: and it was recovered")
 
 
 ## Completes the floor and rides the whole descent, landing on the far side of it. Tests about
@@ -101,8 +129,8 @@ func test_the_boot_scene_begins_the_shipped_expedition_on_floor_one() -> void:
 	assert_true(arena._seed_label.text.contains("depth 1"), "the HUD names the depth, got '%s'" % arena._seed_label.text)
 	assert_true(arena._seed_label.text.contains("floor 1/4"), "and the position in the run, got '%s'" % arena._seed_label.text)
 	assert_false(arena._arrival_card.visible, "beginning is not arriving from a descent")
-	assert_false(arena._completion_overlay.visible)
-	assert_false(arena._failure_overlay.visible)
+	assert_false(arena._run_summary.is_open())
+	assert_false(arena._resync_overlay.visible)
 
 
 ## The expedition, not the node, is the authority: the node's export is only what it was begun
@@ -134,7 +162,7 @@ func test_completing_a_floor_with_an_entry_left_descends() -> void:
 	assert_true(arena._seed_label.text.contains("depth 2"), "got '%s'" % arena._seed_label.text)
 	assert_true(arena._seed_label.text.contains("floor 2/4"), "got '%s'" % arena._seed_label.text)
 	assert_true(arena._arrival_card.visible, "the arrival is announced")
-	assert_false(arena._completion_overlay.visible, "a descent is not the end of the run")
+	assert_false(arena._run_summary.is_open(), "a descent is not the end of the run")
 
 
 func test_health_equipment_and_shield_survive_the_descent() -> void:
@@ -273,31 +301,341 @@ func test_a_duplicated_completion_cannot_skip_a_floor() -> void:
 	assert_eq(arena.expedition.position, 1, "and resolving again with nothing new does nothing")
 
 
-## FAILURE WINS (ruled): completing the floor on the tick the Envoy dies is a failed run.
-func test_dying_on_the_completing_tick_is_failure_not_descent() -> void:
-	for order: Array in [["floor_complete", "died"], ["died", "floor_complete"]]:
+# --- FALLING, RESYNCHRONIZING, RECALL (M2 Slice 2) -----------------------------------------
+#
+# FAILURE WINS, re-baselined DELIBERATELY 2026-10-20 (human-approved Slice 2 arbitration). The
+# rule was "completing the floor on the tick the Envoy dies is a failed run". With one free
+# revival per floor, a fall is no longer a failure, so it now reads:
+#   recovery EXHAUSTED on the completing tick -> Emergency Recall (unchanged in spirit);
+#   revival PENDING on the completing tick   -> the completion waits for the revival tick.
+
+## The first fall on a floor is recoverable: the Envoy is out of play for the delay, then back IN
+## PLACE at full health with the shared post-hit window -- and the floor is exactly as it was.
+func test_the_first_fall_resynchronizes_in_place_at_full_health() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = _envoy(arena)
+	_idle(arena, 3)
+	var where: Vector3 = arena.sim.entities[envoy_id]
+	var enemies_before: Array = arena._enemies.keys()
+	_deliver(arena, ["fall"])
+	assert_false(arena.sim.is_active(envoy_id))
+	assert_true(arena.envoy.visible, "the body stays in view while desynchronized")
+	assert_true(arena.envoy.is_collapsed(), "and it is down")
+	assert_true(arena._resync_overlay.visible)
+	assert_true(arena._resync_overlay.text().contains("SYNCHRONIZATION FAILURE"), "got '%s'" % arena._resync_overlay.text())
+	assert_eq(arena.expedition.phase, Expedition.PHASE_EXPLORING, "a fall is not the end of the run")
+	assert_false(arena._run_summary.is_open())
+
+	# A downed body cannot be steered to a better revival point.
+	for i in _resync_delay(arena):
+		_move(arena, Vector3(1, 0, 0))
+	assert_false(arena.sim.is_active(envoy_id), "still out on the last tick of the delay")
+	assert_eq(arena.sim.entities[envoy_id], where, "and not one step taken while down")
+	assert_true(arena._resync_overlay.text().contains("Emergency Resynchronization"), "got '%s'" % arena._resync_overlay.text())
+
+	_idle(arena, 1)
+	assert_true(arena.sim.is_active(envoy_id), "back on the tick the sim said")
+	assert_eq(_health(arena), arena.sim.max_health_of(envoy_id), "FULL health (ruled 2026-10-20)")
+	assert_eq(_health(arena), 30.0, "a 30-max Envoy returns at 30/30")
+	assert_eq(arena.sim.entities[envoy_id], where, "where it fell")
+	assert_eq(arena.sim._iframe_ticks_remaining[envoy_id], arena.envoy.stats.iframe_ticks_on_hit, "with the shared post-hit window")
+	assert_true(arena.envoy.visible)
+	assert_false(arena.envoy.is_collapsed(), "on its feet again")
+	assert_true(arena._transmission.is_showing(), "in the arrival light")
+	assert_eq(arena._resync_overlay.text(), ResyncOverlay.RESYNCED_LINE)
+	assert_eq(arena._enemies.keys(), enemies_before, "nobody respawned, nobody removed")
+	assert_eq(arena.expedition.position, 0, "and the floor never reloaded")
+
+
+func test_a_second_fall_on_the_same_floor_is_emergency_recall() -> void:
+	var arena: Node3D = _boot()
+	_spend_the_revival(arena)
+	_deliver(arena, ["fall"])
+	assert_false(arena.sim.resync_pending(_envoy(arena)), "the floor's one revival is spent")
+	assert_true(arena.expedition.is_recalled)
+	assert_eq(arena.expedition.phase, Expedition.PHASE_RECALLED)
+	assert_false(arena.expedition.is_complete, "Recall is not completion")
+	assert_eq(arena._run_summary.outcome(), RunSummaryOverlay.OUTCOME_RECALL)
+	assert_true(arena._run_summary.text().contains("EMERGENCY RECALL"), "got '%s'" % arena._run_summary.text())
+	assert_false(arena._run_summary.text().contains("EXTRACTION"), "never both endings")
+	assert_false(arena._resync_overlay.visible, "no revival countdown for a revival that is not coming")
+
+
+## Recall wins the completing tick when there is no recovery left -- in either batch order.
+func test_exhausted_recovery_on_the_completing_tick_is_recall_not_descent() -> void:
+	for order: Array in [["floor_complete", "fall"], ["fall", "floor_complete"]]:
 		var arena: Node3D = _boot()
+		_spend_the_revival(arena)
 		_deliver(arena, order)
-		assert_eq(arena.expedition.position, 0, "%s: a dead expedition does not descend" % [order])
+		assert_eq(arena.expedition.position, 0, "%s: a recalled expedition does not descend" % [order])
+		assert_true(arena.expedition.is_recalled, "%s" % [order])
 		assert_false(arena.expedition.is_complete, "%s: and does not complete" % [order])
-		assert_eq(arena.expedition.phase, Expedition.PHASE_EXPLORING, "%s: no descent is begun either" % [order])
 		assert_false(arena._descent_overlay.visible, "%s" % [order])
-		assert_true(arena._failure_overlay.visible, "%s: it fails" % [order])
 		assert_false(arena._arrival_card.visible)
-		assert_false(arena._completion_overlay.visible)
+		assert_eq(arena._run_summary.outcome(), RunSummaryOverlay.OUTCOME_RECALL, "%s" % [order])
 		assert_eq(arena.sim._patch_rects.size(), _plan(1).patches.size(), "%s: Floor 1 stays loaded" % [order])
 		arena.free()
 
 
-func test_dying_on_the_final_floor_is_failure_not_completion() -> void:
+## A completion on the tick of a RECOVERABLE fall waits for the revival, then descends -- it is
+## neither dropped (a softlock: the sim's completion never fires twice) nor taken by a downed Envoy.
+func test_a_pending_revival_defers_the_completion_to_the_revival_tick() -> void:
+	for order: Array in [["floor_complete", "fall"], ["fall", "floor_complete"]]:
+		var arena: Node3D = _boot()
+		_deliver(arena, order)
+		assert_eq(arena.expedition.phase, Expedition.PHASE_EXPLORING, "%s: no descent while down" % [order])
+		assert_true(arena._floor_complete_pending, "%s: the completion is held, not dropped" % [order])
+		_idle(arena, _resync_delay(arena))
+		assert_eq(arena.expedition.phase, Expedition.PHASE_EXPLORING, "%s: still waiting" % [order])
+		_idle(arena, 1)
+		assert_true(arena.sim.is_active(_envoy(arena)), "%s" % [order])
+		assert_eq(arena.expedition.phase, Expedition.PHASE_DESCENDING, "%s: the descent begins on the revival tick" % [order])
+		assert_false(arena._run_summary.is_open())
+		_ride(arena)
+		assert_eq(arena.expedition.current_depth(), 2, "%s" % [order])
+		arena.free()
+
+
+func test_falling_twice_on_the_final_floor_is_recall_not_completion() -> void:
 	var arena: Node3D = _boot([1, 2] as Array[int])
 	_complete_the_floor(arena)
-	_deliver(arena, ["died"])
-	assert_true(arena._failure_overlay.visible)
-	# And a completion arriving after death changes nothing.
+	_spend_the_revival(arena)
+	_deliver(arena, ["fall"])
+	assert_true(arena.expedition.is_recalled)
+	# And a completion arriving after the Recall changes nothing.
+	_deliver(arena, ["floor_complete"])
+	_idle(arena, 5)
+	assert_false(arena.expedition.is_complete, "a recalled run is never also a completed one")
+	assert_eq(arena._run_summary.outcome(), RunSummaryOverlay.OUTCOME_RECALL)
+
+
+## FINALIZED ONCE, and nothing after it moves: no tick, no Command, no second outcome, no edit
+## to the summary.
+func test_a_recall_finalizes_once_and_stops_the_world() -> void:
+	var arena: Node3D = _boot()
+	_spend_the_revival(arena)
+	_deliver(arena, ["fall"])
+	var stopped_at: int = arena.sim.tick_count
+	var position: Vector3 = arena.sim.entities[_envoy(arena)]
+	var summary: String = arena._run_summary.text()
+	var health: float = _health(arena)
+	for i in 30:
+		_move(arena, Vector3(1, 0, 0))
+		arena._step([Command.new(arena.sim.tick_count, _envoy(arena), "attack", {"aim": Vector3(0, 0, -1), "phase": "pressed"})] as Array[Command], DT)
+	assert_eq(arena.sim.tick_count, stopped_at, "no further tick is simulated")
+	assert_eq(arena.sim.entities[_envoy(arena)], position, "and no Command is applied")
+	assert_eq(_health(arena), health)
+	assert_eq(arena.expedition.recall(arena.sim.tick_count), [] as Array[Event], "a second Recall is refused")
+	assert_eq(arena.expedition.complete_floor(arena.sim.tick_count), [] as Array[Event], "and so is a completion")
+	_deliver(arena, ["fall", "floor_complete"])
+	arena._finalize_run()
+	assert_eq(arena._run_summary.text(), summary, "the summary is a frozen snapshot")
+	assert_eq(arena._run_summary.outcome(), RunSummaryOverlay.OUTCOME_RECALL)
+
+
+## THE COLLAPSE IS A PICTURE (2026-10-20 playtest follow-up): it tips the model over on presentation
+## time and stands it back up on the sim's say-so. It never moves the body, never touches the sim,
+## and the revival lands on the sim's tick whether or not the fall has finished drawing.
+func test_the_fall_is_drawn_and_undone_without_touching_the_sim() -> void:
+	var arena: Node3D = _boot()
+	var model: Node3D = arena.envoy.get_node("Model")
+	var upright: Transform3D = model.transform
+	var scale_before: Vector3 = model.scale
+	_deliver(arena, ["fall"])
+	var where: Vector3 = arena.sim.entities[_envoy(arena)]
+	arena.envoy._process(arena.envoy.collapse_seconds * 0.5)
+	assert_ne(model.transform, upright, "it is falling")
+	arena.envoy._process(arena.envoy.collapse_seconds)
+	var down: Transform3D = model.transform
+	assert_lt(model.global_basis.y.dot(Vector3.UP), 0.1, "lying on the ground, not leaning")
+	assert_almost_eq(model.scale, scale_before, Vector3.ONE * 0.0001, "tipped over, never squashed")
+	arena.envoy._process(1.0)
+	assert_eq(model.transform, down, "and it stays down")
+	arena.envoy.collapse()
+	assert_eq(model.transform, down, "a repeated collapse does not restart the fall")
+	assert_eq(arena.sim.entities[_envoy(arena)], where, "the picture moved nothing in the sim")
+	assert_eq(arena.envoy.position, where, "nor the Envoy's own position")
+	# The revival does not wait for the drawing: a half-drawn fall still stands up on the sim's tick.
+	_idle(arena, _resync_delay(arena) + 1)
+	assert_true(arena.sim.is_active(_envoy(arena)))
+	assert_eq(model.transform, upright, "upright on the revival tick")
+
+
+func test_a_recall_leaves_the_body_down_under_the_summary() -> void:
+	var arena: Node3D = _boot()
+	_spend_the_revival(arena)
+	_deliver(arena, ["fall"])
+	assert_true(arena.expedition.is_recalled)
+	assert_true(arena.envoy.visible, "the body is still there")
+	assert_true(arena.envoy.is_collapsed(), "down, as the Recall takes over")
+	assert_false(arena._run_summary.is_summary_shown(), "the summary waits for its intro")
+
+
+func test_a_new_floor_always_begins_upright() -> void:
+	var arena: Node3D = _boot()
+	var model: Node3D = arena.envoy.get_node("Model")
+	var upright: Transform3D = model.transform
+	arena.envoy.collapse()
+	arena.envoy._process(1.0)
 	_complete_the_floor(arena)
-	assert_false(arena.expedition.is_complete, "a failed run is never also a completed one")
-	assert_false(arena._completion_overlay.visible)
+	assert_false(arena.envoy.is_collapsed())
+	assert_eq(model.transform, upright)
+
+
+## The Recall's world stops, so a shot drawn in flight would fly forever: it is put away instead.
+func test_a_recall_puts_away_tracers_in_flight() -> void:
+	var arena: Node3D = _boot()
+	var envoy_id: int = _envoy(arena)
+	_spend_the_revival(arena)
+	arena.sim._iframe_ticks_remaining[envoy_id] = 0
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "switch_weapon", {})] as Array[Command], DT)
+	arena._step([Command.new(arena.sim.tick_count, envoy_id, "attack", {"aim": Vector3(0, 0, -1)})] as Array[Command], DT)
+	assert_gt(arena._projectile_tracers.size(), 0, "sanity: a shot is drawn")
+	_deliver(arena, ["fall"])
+	assert_true(arena.expedition.is_recalled)
+	assert_eq(arena._projectile_tracers.size(), 0)
+
+
+# --- ONE FREE REVIVAL PER FLOOR: its scope -------------------------------------------------
+
+## Nothing short of a floor transition gives it back: not the console, not re-reporting, not a
+## resolution run again, not time.
+func test_same_floor_presentation_never_refreshes_the_revival() -> void:
+	var arena: Node3D = _boot()
+	_spend_the_revival(arena)
+	_read_console(arena)
+	arena._console_panel.close()
+	arena._report_events([] as Array[Event])
+	arena._resolve_recall()
+	arena._resolve_floor_complete()
+	_idle(arena, 30)
+	assert_eq(arena.sim._resyncs_used_on_floor[_envoy(arena)], 1, "still spent")
+	_deliver(arena, ["fall"])
+	assert_true(arena.expedition.is_recalled, "so the next fall is the last")
+
+
+func test_the_next_floor_brings_a_fresh_revival() -> void:
+	var arena: Node3D = _boot()
+	_spend_the_revival(arena)
+	_complete_the_floor(arena)
+	assert_eq(arena.expedition.current_depth(), 2, "sanity")
+	_deliver(arena, ["fall"])
+	assert_true(arena.sim.resync_pending(_envoy(arena)), "a new floor, a new revival")
+	assert_false(arena.expedition.is_over())
+
+
+## Unused revivals never bank: three floors untouched still leave exactly one on the fourth.
+func test_an_unused_revival_does_not_carry_forward() -> void:
+	var arena: Node3D = _boot()
+	for floor_index in 3:
+		_complete_the_floor(arena)
+	assert_eq(arena.expedition.current_depth(), 4, "sanity: the Foundry")
+	_spend_the_revival(arena)
+	_deliver(arena, ["fall"])
+	assert_true(arena.expedition.is_recalled, "one revival on this floor, however many went unused")
+
+
+## A Terminal revival is spent there and gone: the next floor's one is the next floor's.
+func test_the_terminal_grants_nothing_bankable() -> void:
+	var arena: Node3D = _boot()
+	_complete_the_floor(arena)
+	_complete_the_floor(arena)
+	assert_eq(arena.expedition.current_depth(), 3, "sanity: the Terminal")
+	_complete_the_floor(arena)
+	assert_eq(arena.sim._resyncs_used_on_floor.get(_envoy(arena), 0), 0)
+	_spend_the_revival(arena)
+	_deliver(arena, ["fall"])
+	assert_true(arena.expedition.is_recalled)
+
+
+func test_a_floor_is_installed_only_by_beginning_or_arriving() -> void:
+	var arena: Node3D = _boot()
+	var installed: FloorPlan = arena._current_plan
+	_spend_the_revival(arena)
+	_read_console(arena)
+	_idle(arena, 10)
+	assert_same(arena._current_plan, installed, "no reinstall on the same floor")
+	_complete_the_floor(arena)
+	assert_eq(arena._current_plan.depth, 2)
+
+
+# --- RUN SUMMARY ---------------------------------------------------------------------------
+
+func test_the_recall_summary_reports_only_real_run_data() -> void:
+	var arena: Node3D = _boot([1, 2] as Array[int])
+	_complete_the_floor(arena)
+	_spend_the_revival(arena)
+	_deliver(arena, ["fall"])
+	var summary: RunSummaryOverlay = arena._run_summary
+	assert_eq(summary.row_value("Floors cleared"), "1 of 2", "Floor 1 was cleared; Floor 2 was not")
+	assert_eq(summary.row_value("Deepest point"), "Depth 2 · %s" % arena._place_name(_plan(2)))
+	assert_true(summary.row_value("Seed").begins_with("%d " % arena.expedition.run_seed), summary.row_value("Seed"))
+	assert_eq(summary.row_value("Final blow"), "Environmental hazard (Force, 1000)", "the blow that ended it")
+	assert_true(summary.row_value("Damage taken").contains("health 2000"), "two falls, from the ledger: '%s'" % summary.row_value("Damage taken"))
+	for label: String in summary.row_labels():
+		assert_false(label.to_lower().contains("loot"), "no loot row until loot exists (ROADMAP)")
+
+
+func test_the_extraction_summary_is_distinct_and_complete() -> void:
+	var arena: Node3D = _boot([1, 2] as Array[int])
+	_complete_the_floor(arena)
+	_complete_the_floor(arena)
+	var summary: RunSummaryOverlay = arena._run_summary
+	assert_eq(summary.outcome(), RunSummaryOverlay.OUTCOME_EXTRACTION)
+	assert_true(summary.text().contains("EXTRACTION COMPLETE"), summary.text())
+	assert_false(summary.text().contains("RECALL"), "never both endings: '%s'" % summary.text())
+	assert_eq(summary.row_value("Floors cleared"), "2 of 2")
+	assert_eq(summary.row_value("Final blow"), "", "a run that was not lost has no final blow")
+	for label: String in summary.row_labels():
+		assert_false(label.to_lower().contains("loot"))
+
+
+## The extraction is a transmission at the exit pad, then the summary -- on presentation time,
+## after the outcome is already final.
+func test_extraction_transmits_the_envoy_out_before_the_summary() -> void:
+	var arena: Node3D = _boot([2] as Array[int])
+	_deliver(arena, ["floor_complete"])
+	assert_true(arena.expedition.is_complete)
+	assert_true(arena._transmission.is_showing(), "the pad is transmitting")
+	assert_almost_eq(arena._transmission.position, arena._floor_builder.exit_pad_centre(), Vector3.ONE * 0.001)
+	assert_true(arena._run_summary.is_open())
+	assert_false(arena._run_summary.is_summary_shown(), "the summary waits for the transmission")
+	arena._run_summary._process(arena._run_summary.intro_seconds + 0.01)
+	arena._process(0.0)
+	assert_true(arena._run_summary.is_summary_shown())
+	assert_false(arena.envoy.visible, "gone to light")
+
+
+# --- RESTART AFTER EITHER ENDING -----------------------------------------------------------
+
+func test_a_restart_after_recall_begins_with_a_full_revival() -> void:
+	var first: Node3D = _boot()
+	_spend_the_revival(first)
+	_deliver(first, ["fall"])
+	assert_true(first.expedition.is_recalled, "sanity")
+	first.free()
+	var second: Node3D = _boot()
+	assert_eq(second.expedition.phase, Expedition.PHASE_EXPLORING)
+	assert_false(second._run_summary.is_open())
+	assert_true(second.envoy.visible)
+	assert_eq(second.sim._resyncs_used_on_floor.size(), 0, "nothing spent")
+	_deliver(second, ["fall"])
+	assert_true(second.sim.resync_pending(_envoy(second)), "the new expedition's first fall is recoverable")
+
+
+func test_a_restart_after_extraction_begins_a_fresh_expedition() -> void:
+	var first: Node3D = _boot([2] as Array[int])
+	_deliver(first, ["floor_complete"])
+	assert_true(first.expedition.is_complete, "sanity")
+	first.free()
+	var second: Node3D = _boot()
+	assert_eq(second.expedition.position, 0)
+	assert_false(second.expedition.is_over())
+	assert_false(second._run_summary.is_open())
+	assert_false(second._transmission.is_showing())
+	assert_true(second.envoy.visible)
+	_deliver(second, ["fall"])
+	assert_true(second.sim.resync_pending(_envoy(second)))
 
 
 # --- COMPLETION ----------------------------------------------------------------------------
@@ -311,8 +649,7 @@ func test_completing_the_last_entry_completes_the_expedition() -> void:
 
 	assert_true(arena.expedition.is_complete)
 	assert_eq(arena.expedition.position, 1, "it ends on the floor it finished")
-	assert_true(arena._completion_overlay.visible, "the run says it is over")
-	assert_false(arena._failure_overlay.visible)
+	assert_eq(arena._run_summary.outcome(), RunSummaryOverlay.OUTCOME_EXTRACTION, "the run says it is over, and how")
 	assert_eq(arena._enemies.keys(), enemies_before, "no third floor was loaded")
 	assert_eq(arena.sim._patch_rects.size(), _plan(2).patches.size())
 
@@ -597,8 +934,8 @@ func test_a_whole_expedition_plays_from_floor_one_to_completion() -> void:
 		_move(arena, (final_exit - arena.sim.entities[envoy_id]).normalized())
 
 	assert_true(arena.expedition.is_complete, "standing on the Foundry's exit completes the expedition")
-	assert_true(arena._completion_overlay.visible)
-	assert_false(arena._failure_overlay.visible)
+	assert_eq(arena._run_summary.outcome(), RunSummaryOverlay.OUTCOME_EXTRACTION)
+	assert_false(arena.expedition.is_recalled)
 	var stopped_at: int = arena.sim.tick_count
 	_idle(arena, 30)
 	assert_eq(arena.sim.tick_count, stopped_at, "and the world stops with it")
@@ -801,9 +1138,12 @@ func test_the_final_floor_console_names_extraction_not_a_floor() -> void:
 	assert_true(arena.expedition.is_complete, "the last exit ends the run at once -- no ride to nowhere")
 	assert_eq(arena.expedition.phase, Expedition.PHASE_COMPLETE)
 	assert_false(arena._console_panel.is_open())
-	assert_false(arena._transmission.is_showing(), "no transmission for a ride that never starts")
+	# Re-baselined 2026-10-20 (Slice 2): no descent RIDE, but the extraction's own transmission at
+	# the pad, on presentation time, with the Envoy present as it begins.
+	assert_eq(arena.expedition.descent_ticks_remaining, 0, "no ride to nowhere")
+	assert_true(arena._transmission.is_showing(), "the extraction transmits from the pad")
 	assert_true(arena.envoy.visible)
-	assert_true(arena._completion_overlay.visible)
+	assert_eq(arena._run_summary.outcome(), RunSummaryOverlay.OUTCOME_EXTRACTION)
 
 
 ## Floors 1-4 each draw their console where the plan puts it, on the ground it stands on, and

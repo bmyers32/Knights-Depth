@@ -19,10 +19,10 @@ const _DIM_COLOR: Color = Color(0.60, 0.68, 0.70)
 const _BACKGROUND: Color = Color(0.05, 0.07, 0.09, 0.86)
 const _EDGE: Color = Color(0.55, 0.78, 0.82, 0.7)
 
-## The final floor's console. Names the destination without promising the Recall screen, which is
-## a later slice.
+## The final floor's console. Extraction only: Emergency Recall is the FAILURE ending (M2 Slice 2,
+## 2026-10-20), and a way out that named it would promise the wrong one.
 const EXTRACTION_HEADLINE: String = "Extraction"
-const EXTRACTION_BODY: String = "Emergency Recall\nThe expedition ends here."
+const EXTRACTION_BODY: String = "The expedition ends here."
 
 var _title: Label
 var _headline: Label

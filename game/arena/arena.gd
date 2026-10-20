@@ -12,9 +12,9 @@ extends Node3D
 @onready var _floor_builder: FloorBuilder = $FloorBuilder
 @onready var _camera: FollowCamera = $FollowCamera
 @onready var _seed_label: Label = $SeedHud/SeedLabel
-@onready var _failure_overlay: FailureOverlay = $FailureOverlay
+@onready var _resync_overlay: ResyncOverlay = $ResyncOverlay
 @onready var _arrival_card: ArrivalCard = $ArrivalCard
-@onready var _completion_overlay: ExpeditionCompleteOverlay = $ExpeditionCompleteOverlay
+@onready var _run_summary: RunSummaryOverlay = $RunSummaryOverlay
 @onready var _descent_overlay: DescentOverlay = $DescentOverlay
 @onready var _console_panel: ExitConsolePanel = $ExitConsolePanel
 @onready var _transmission: TransmissionField = $TransmissionField
@@ -172,12 +172,21 @@ var _windup_cues: Dictionary = {}
 ## _report_events never touches ContentDB. Stays Color.WHITE (never used) if no
 ## combo/charge weapon is in the loadout.
 var _charge_ready_tint_color: Color = Color.WHITE
-## Scene-owned run-ended flow flag (Phase D step 8, Phase 3) — presentation state,
-## not gameplay state; SimWorld's own health dict remains the sole dead/alive
-## authority (Prime Directive 1), this only gates whether the Envoy is still sent
-## Commands. Temporary scaffolding: no sim-side respawn, no Commons transition — the
-## real Emergency Recall/extraction flow is explicit M2 scope (GAME-RULES §5).
-var _envoy_alive: bool = true
+## RETIRED (M2 Slice 2): the scene-owned `_envoy_alive` flag. An Envoy can now fall and return, so
+## "in play" is asked of the sim every time (SimWorld.is_active) and "is the run over" of the
+## Expedition -- a second copy of either is exactly the duplicate ownership that drifts.
+##
+## A recovery_exhausted seen in the batch being reported, and the tick it happened on. Resolved
+## after the whole batch, like _floor_complete_pending, and BEFORE it: Recall wins a same-tick
+## completion (FAILURE WINS, generalized -- an incapacitation that can still recover is no longer
+## a failure).
+var _recall_pending: bool = false
+var _recall_tick: int = -1
+## The fatal blow, described from the ledger AT the exhausting tick, so the summary reports the
+## actual cause rather than whatever happened to be recorded last.
+var _final_blow: String = ""
+## The extraction's transmission is playing. Presentation only: the outcome is already final.
+var _extracting: bool = false
 
 
 func _ready() -> void:
@@ -202,6 +211,9 @@ func begin_expedition() -> void:
 	# The ONE actor that survives a floor transition. Everything else on a floor belongs to
 	# that floor (SimWorld.STATE_SCOPES).
 	sim.mark_run_persistent(envoy.actor_id)
+	# Emergency Resynchronization: one per floor, from content. A fresh SimWorld (a new expedition)
+	# starts with nothing spent; only load_floor ever forgets a spent one.
+	sim.register_resync(envoy.actor_id, envoy.stats.resyncs_per_floor, envoy.stats.resync_health_fraction, envoy.stats.resync_delay_ticks)
 
 	for weapon_id in loadout_weapon_ids:
 		ContentRegistrar.register_weapon(sim, weapon_id)
@@ -357,6 +369,7 @@ func _load_floor(plan: FloorPlan) -> FloorPlan:
 	# Whatever the last floor's console said, it said about the last floor.
 	_console_panel.close()
 	envoy.visible = true
+	envoy.stand()
 	return plan
 
 
@@ -485,7 +498,7 @@ func _physics_process(delta: float) -> void:
 	var commands: Array[Command] = []
 	# Only an EXPLORING expedition reads input: during a descent the floor is suspended and an
 	# input has no floor to act on, so none is built (and _step drops any that arrive anyway).
-	if _envoy_alive and expedition.phase == Expedition.PHASE_EXPLORING:
+	if sim.is_active(envoy.actor_id) and expedition.phase == Expedition.PHASE_EXPLORING:
 		_process_debug_weapon_cycle()  # stops along with every other Envoy input on death
 		_process_debug_burrow_trigger()
 		commands = envoy.build_commands(sim.tick_count)
@@ -497,11 +510,12 @@ func _physics_process(delta: float) -> void:
 ## Input singleton -- a test that calls sim.tick() directly skips reporting and transition,
 ## which are exactly the parts a descent lives in.
 func _step(commands: Array[Command], delta: float) -> void:
-	# A COMPLETED EXPEDITION IS OVER, so the world stops with it. Death deliberately keeps
-	# ticking (above); completion deliberately does not, or a surviving enemy could kill the
-	# Envoy on the completion screen and the run would end twice with opposite results.
-	# This is the END state only -- a descent never pauses the sim.
-	if expedition.is_complete:
+	# AN ENDED EXPEDITION IS OVER, so the world stops with it -- BOTH endings (M2 Slice 2). Death
+	# used to keep ticking only so in-flight shots could expire; the Recall now puts their tracers
+	# away itself (_finalize_run, the descent's own cleanup), and a frozen world is what makes the
+	# finalized outcome and summary immune to anything a later tick could do. END states only: a
+	# descent never pauses the sim, and neither does an Envoy who is merely incapacitated.
+	if expedition.is_over():
 		return
 	# A DESCENT SUSPENDS THE FLOOR (ruled 2026-10-18): the floor's SimWorld is not ticked, so no
 	# Command, attack, damage, AI or hazard advances, while the Expedition's own countdown does
@@ -522,7 +536,8 @@ func _step(commands: Array[Command], delta: float) -> void:
 	_project_carrying()
 	_project_console_panel()
 	_project_hazards()
-	_resolve_floor_complete()
+	_project_resync()
+	_resolve_transitions()
 	_advance_windup_cues()
 	if debug_show_attack_state:
 		var description: Dictionary = sim.debug_describe_melee_state(envoy.actor_id)
@@ -555,7 +570,7 @@ func _project_carrying() -> void:
 	if carried >= 0:
 		_floor_builder.place_carriable(carried, envoy.position + Vector3(0.0, _CARRIED_KEY_LIFT, 0.0))
 	var focus: Dictionary = {}
-	if _envoy_alive and not expedition.is_complete:
+	if sim.is_active(envoy.actor_id) and not expedition.is_over():
 		focus = sim.interaction_focus(envoy.actor_id, envoy.current_aim())
 	_floor_builder.show_interaction_focus(String(focus.get("kind", "")),
 		int(focus.get("carriable_id", -1)), int(focus.get("trigger_id", -1)))
@@ -564,7 +579,7 @@ func _project_carrying() -> void:
 ## The console's panel stays open only while the Envoy can still read it: walking away (or dying)
 ## closes it. The reach is the sim's own (exit_console_within_reach), never a second number here.
 func _project_console_panel() -> void:
-	if _console_panel.is_open() and not (_envoy_alive and sim.exit_console_within_reach(envoy.actor_id, _EXIT_CONSOLE_ID)):
+	if _console_panel.is_open() and not (sim.is_active(envoy.actor_id) and sim.exit_console_within_reach(envoy.actor_id, _EXIT_CONSOLE_ID)):
 		_console_panel.close()
 
 
@@ -590,22 +605,26 @@ func _project_hazards() -> void:
 ## Acts on a floor completion AFTER its whole event batch has been reported. The Expedition
 ## decides which of the two things happens; this node only carries it out.
 ##
-## FAILURE WINS (ruled, solo slice): if the Envoy died in the same tick the floor completed,
-## the run failed. A dead expedition does not descend and does not complete.
+## FAILURE WINS, generalized for revival (M2 Slice 2, approved 2026-10-20):
+##   recovery exhausted on the completing tick -> Emergency Recall. _resolve_recall runs first and
+##     ends the expedition, so the completion is dropped here (and the Expedition would refuse it).
+##   incapacitated WITH a revival pending -> the completion WAITS and resolves on the revival
+##     tick. The sim's completion is a one-shot standing fact; dropping it would strand a revived
+##     Envoy on a floor whose exit can never fire again.
 func _resolve_floor_complete() -> void:
 	if not _floor_complete_pending:
 		return
+	if not expedition.is_over() and not sim.is_active(envoy.actor_id) and sim.resync_pending(envoy.actor_id):
+		return
 	_floor_complete_pending = false
-	if not _envoy_alive:
+	if expedition.is_over():
 		return
 	# The Expedition decides; its Events say what it decided, through the same reporting path
 	# every sim Event takes.
 	_report_events(expedition.complete_floor(sim.tick_count))
 	_console_panel.close()
 	if expedition.is_complete:
-		_transmission.reset()
-		print(damage_ledger.summary())
-		_completion_overlay.show_complete()
+		_finalize_run()
 	elif expedition.phase == Expedition.PHASE_DESCENDING:
 		envoy.clear_charge_ready()
 		# The Envoy has left the floor's events behind: a shot still drawn in flight would fly on
@@ -617,6 +636,100 @@ func _resolve_floor_complete() -> void:
 		_transmission.begin(_floor_builder.exit_pad_centre())
 		_descent_overlay.begin()
 		_project_descent()
+
+
+## Every run transition a reported batch can ask for, IN PRIORITY ORDER: the Recall first, so a
+## completion on the exhausting tick finds the expedition already over (Recall wins). The one
+## place that order lives.
+func _resolve_transitions() -> void:
+	_resolve_recall()
+	_resolve_floor_complete()
+
+
+## Acts on recovery_exhausted AFTER its whole batch is reported. The Expedition decides (it accepts
+## a Recall only while exploring, and only once); this node carries it out.
+func _resolve_recall() -> void:
+	if not _recall_pending:
+		return
+	_recall_pending = false
+	_report_events(expedition.recall(_recall_tick))
+	if expedition.is_recalled:
+		_finalize_run()
+
+
+## THE ONE RUN-END, for both outcomes, run once at the authoritative boundary. The world stops on
+## the next step (_step), so everything gathered here is final: the summary is a frozen snapshot,
+## never a live view. The transmission is the extraction's own beat; a Recall has none -- the
+## Envoy already fell, and the screen goes to the summary.
+func _finalize_run() -> void:
+	if _run_summary.is_open():
+		return
+	_console_panel.close()
+	_resync_overlay.reset()
+	envoy.clear_charge_ready()
+	_floor_builder.show_interaction_focus("", -1, -1)
+	# The world will not tick again, so no terminal Event can ever put these away.
+	for projectile_id: int in _projectile_tracers.keys():
+		_despawn_tracer(projectile_id)
+	print(damage_ledger.summary())
+	if expedition.is_complete:
+		_transmission.begin(_floor_builder.exit_pad_centre())
+		_extracting = true
+		_run_summary.show_outcome(RunSummaryOverlay.OUTCOME_EXTRACTION, _summary_rows())
+	else:
+		_transmission.reset()
+		_run_summary.show_outcome(RunSummaryOverlay.OUTCOME_RECALL, _summary_rows())
+
+
+## The facts, from run state and the damage ledger only. No loot until loot exists (ROADMAP): its
+## rows are appended here when it does, and until then nothing stands in for it.
+func _summary_rows() -> Array:
+	var rows: Array = [
+		["Seed", "%d (%s)" % [expedition.run_seed, "authored layout" if _current_plan.authored_layout else "generated"]],
+		["Deepest point", "Depth %d · %s" % [expedition.current_depth(), _place_name(_current_plan)]],
+		["Floors cleared", "%d of %d" % [expedition.floors_cleared(), expedition.itinerary.size()]],
+		["Damage taken", "health %.0f · shield %.0f · status %.0f" % [
+			damage_ledger.health_damage, damage_ledger.shield_damage, damage_ledger.status_damage]],
+		["Shield breaks", "%d" % damage_ledger.shield_breaks],
+	]
+	if expedition.is_recalled and _final_blow != "":
+		rows.append(["Final blow", _final_blow])
+	return rows
+
+
+## What brought the Envoy down on `tick`, from the ledger row that tick recorded. Says only what the
+## row can truthfully supply: an actor by family, the environment as a hazard, a status by name.
+func _describe_final_blow(tick: int) -> String:
+	for index in range(damage_ledger.rows.size() - 1, -1, -1):
+		var row: Dictionary = damage_ledger.rows[index]
+		if int(row["tick"]) != tick:
+			break
+		match String(row["channel"]):
+			"health":
+				var damage: String = "%s, %.0f" % [String(row["damage_type"]).capitalize(), float(row["amount"])]
+				if String(row["source_kind"]) != "actor":
+					return "Environmental hazard (%s)" % damage
+				var family: StringName = sim.family_of(int(row["source_actor"]))
+				return "%s (%s)" % [String(family).capitalize() if family != &"" else "Unknown attacker", damage]
+			"status":
+				return "%s (%.0f)" % [String(row["status"]).capitalize(), float(row["amount"])]
+	return ""
+
+
+## The resynchronization countdown, as the sim reports it. Nothing here counts.
+func _project_resync() -> void:
+	if sim.resync_pending(envoy.actor_id):
+		_resync_overlay.show_countdown(sim.resync_ticks_remaining(envoy.actor_id), Engine.physics_ticks_per_second)
+
+
+## The extraction's transmission, drawn on presentation time against the summary's own intro, so
+## the Envoy goes to light before the summary appears. Decides nothing: the run already ended.
+func _process(_delta: float) -> void:
+	if not _extracting:
+		return
+	envoy.visible = _transmission.show_progress(_run_summary.intro_progress())
+	if _run_summary.is_summary_shown():
+		_extracting = false
 
 
 ## One sim-rate tick of a descent. The floor stays suspended; only the countdown moves. The tick
@@ -787,17 +900,20 @@ func _report_events(events: Array[Event]) -> void:
 			"died":
 				print("died: ", event.payload)
 				var actor_id: int = event.payload.get("actor_id")
-				if actor_id == envoy.actor_id and _envoy_alive:
-					# Guarded by _envoy_alive so a stray extra "died" Event (there
-					# shouldn't be one — a dead actor can't be re-hit — but this keeps
-					# the overlay a one-time transition regardless) can't show it twice.
-					_envoy_alive = false
-					# THE ONE MOMENT THE ATTRIBUTION IS WANTED. "I died too fast" is untunable;
-					# this turns it into a breakdown with a cause attached.
+				if actor_id == envoy.actor_id:
+					# INCAPACITATION, NOT THE END (M2 Slice 2): whether the Envoy returns is the
+					# sim's to say, in the resync_begun or recovery_exhausted that follows.
+					# THE MOMENT THE ATTRIBUTION IS WANTED. "I died too fast" is untunable; this
+					# turns it into a breakdown with a cause attached.
 					print(damage_ledger.summary())
 					for row in damage_ledger.rows:
 						print("   ", damage_ledger.describe(row))
-					_failure_overlay.show_failure()
+					# The body falls and STAYS in view, down where it fell, until the sim says
+					# otherwise -- or, out of recovery, until the Recall screen covers it.
+					envoy.collapse()
+					envoy.clear_charge_ready()
+					_console_panel.close()
+					_resync_overlay.show_failure()
 				elif _enemies.has(actor_id):
 					_enemies[actor_id].queue_free()
 					_enemies.erase(actor_id)
@@ -886,6 +1002,27 @@ func _report_events(events: Array[Event]) -> void:
 				_floor_builder.set_plate_visible(int(event.payload["trigger_id"]), true)
 			"envoys_restored":
 				print("ENVOYS RESTORED: ", event.payload)
+			"resync_begun":
+				print("RESYNC BEGUN: ", event.payload)
+			"resynchronized":
+				print("RESYNCHRONIZED: ", event.payload)
+				if int(event.payload["actor_id"]) == envoy.actor_id:
+					# Back where it fell, in the descent's arrival light: the same transmission
+					# language, so "returned" reads like "arrived".
+					var at: Vector3 = _grounded(sim.entities[envoy.actor_id])
+					envoy.sync_from_sim(at)
+					envoy.stand()
+					_transmission.arrive(at)
+					_resync_overlay.show_resynchronized()
+			"recovery_exhausted":
+				print("RECOVERY EXHAUSTED: ", event.payload)
+				# Noted, not acted on: see _recall_pending. The cause is read NOW, while the
+				# ledger's newest rows are the ones this tick produced.
+				_recall_pending = true
+				_recall_tick = event.tick
+				_final_blow = _describe_final_blow(event.tick)
+			"emergency_recall":
+				print("EMERGENCY RECALL: ", event.payload)
 			"floor_complete":
 				print("FLOOR COMPLETE: the expedition stood on the exit together")
 				# Noted, not acted on: see _floor_complete_pending.

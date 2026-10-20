@@ -87,7 +87,11 @@ teeth, because a beast has teeth.
 | **Temper** | Craft | Protocol: controlled exposure to Drift; power through discipline, not purity. Paired forge-verbs with Mend — deliberate. |
 | **the Pyre*** | Craft/Entropy | PROVISIONAL — Temper-path companion expression: a Drift engine fed by residue from defeated enemies, converting residual instability into controlled power. Pending: Temper-path art direction. If Drift's visual language ends up crystalline/static rather than ash/ritual, rename via amendment. |
 | **Companion** | Plain | The one companion slot; a synchronization anchor, not a pet. Protocols change what occupies it and how the relationship functions. Mechanics M4+ (see ROADMAP P7/P8). |
-| **Synchronization** | Resistance | The central fiction: explains expeditions, equipment profiles, depth strain, death (Synchronization Failure), respawn (**Emergency Recall**). NARRATIVE ONLY — not a gameplay meter unless a mechanic demands one later (adding is easier than removing). Exemplar of §6.1. |
+| **Synchronization** | Resistance | The central fiction: explains expeditions, equipment profiles, depth strain, incapacitation (Synchronization Failure), in-floor recovery (**Emergency Resynchronization**), and the failed run-end (**Emergency Recall**). NARRATIVE ONLY — not a gameplay meter unless a mechanic demands one later (adding is easier than removing). Exemplar of §6.1. |
+| **Synchronization Failure** | Resistance | An Envoy reaching zero health: INCAPACITATION, a potential recovery event — not by itself the end of the expedition. |
+| **Emergency Resynchronization** | Resistance | (2026-10-20) The Envoy's in-floor recovery after a Synchronization Failure: returns to play where it fell. Today: one free per Envoy per floor, full health. Code: `resync_*`, `resynchronized`. Never called "respawn" or "revive" in player-facing text. |
+| **Emergency Recall** | Resistance | (Narrowed 2026-10-20) The expedition ENDING IN FAILURE: the party's recovery is exhausted and the Envoys are pulled back to the Commons. NEVER the successful ending, never the in-floor recovery. Code: `emergency_recall`, `recovery_exhausted`, `PHASE_RECALLED`. |
+| **Extraction** | Resistance | The expedition ending in SUCCESS: the final floor's exit, home to the Commons. Distinct from Emergency Recall in wording and presentation, even where they share a summary screen. |
 
 ### The Axiom's designations for the player (escalating)
 Deviation → Synchronization instability → **Conjecture** (unproven, being tested) →

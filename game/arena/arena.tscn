@@ -2,11 +2,11 @@
 
 [ext_resource type="Script" path="res://game/arena/arena.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://game/actors/envoy/envoy.tscn" id="2_envoy"]
-[ext_resource type="PackedScene" path="res://game/ui/failure_overlay.tscn" id="6_failure_overlay"]
+[ext_resource type="PackedScene" path="res://game/ui/resync_overlay.tscn" id="6_resync_overlay"]
 [ext_resource type="Script" path="res://game/arena/floor_builder.gd" id="7_floor_builder"]
 [ext_resource type="Script" path="res://game/arena/follow_camera.gd" id="8_follow_camera"]
 [ext_resource type="PackedScene" path="res://game/ui/arrival_card.tscn" id="9_arrival_card"]
-[ext_resource type="PackedScene" path="res://game/ui/expedition_complete_overlay.tscn" id="10_expedition_complete"]
+[ext_resource type="PackedScene" path="res://game/ui/run_summary_overlay.tscn" id="10_run_summary"]
 [ext_resource type="PackedScene" path="res://game/ui/descent_overlay.tscn" id="11_descent_overlay"]
 [ext_resource type="PackedScene" path="res://game/ui/exit_console_panel.tscn" id="12_exit_console_panel"]
 [ext_resource type="Script" path="res://game/arena/transmission_field.gd" id="13_transmission_field"]
@@ -37,11 +37,11 @@ offset_bottom = 34.0
 theme_override_font_sizes/font_size = 16
 text = "seed --"
 
-[node name="FailureOverlay" parent="." instance=ExtResource("6_failure_overlay")]
+[node name="ResyncOverlay" parent="." instance=ExtResource("6_resync_overlay")]
 
 [node name="ArrivalCard" parent="." instance=ExtResource("9_arrival_card")]
 
-[node name="ExpeditionCompleteOverlay" parent="." instance=ExtResource("10_expedition_complete")]
+[node name="RunSummaryOverlay" parent="." instance=ExtResource("10_run_summary")]
 
 [node name="DescentOverlay" parent="." instance=ExtResource("11_descent_overlay")]
 

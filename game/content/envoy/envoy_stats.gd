@@ -54,6 +54,19 @@ extends Resource
 ## new gameplay evidence; no compensating enemy damage/cadence/hazard-timing changes (ROADMAP P44).
 @export var iframe_ticks_on_hit: int = 90
 
+## EMERGENCY RESYNCHRONIZATION (M2 Slice 2, ruled 2026-10-20). The first incapacitation on a floor
+## is not the end: after `resync_delay_ticks` the Envoy returns IN PLACE at `resync_health_fraction`
+## of max health, with the shared post-hit window above (no separate revival immunity). A second
+## incapacitation on the same floor, with no charge left, is Emergency Recall. A new floor is a
+## fresh allowance; unused ones never carry.
+## FULL HEALTH IS A HUMAN DECISION (2026-10-20), not a provisional number: do not lower it without
+## playtest evidence. It is deliberately NOT the future assisted co-op revival's 50% -- those are
+## two different recoveries with different outcomes (ROADMAP).
+## CALIBRATION: delay 45 ticks (1.5 s) PROVISIONAL, unplaytested. Record feel + date at the playtest.
+@export var resyncs_per_floor: int = 1
+@export var resync_health_fraction: float = 1.0
+@export var resync_delay_ticks: int = 45
+
 ## CARRYING (Floor 4 Stage 2, 2026-10-16). A loose key is lifted by the primary attack press when
 ## it is within `pickup_reach`, inside the aim cone of `pickup_cone_half_angle_degrees`, and not
 ## under the Envoy's feet (`pickup_underfoot_radius`) -- SimWorld._resolve_interaction_target.

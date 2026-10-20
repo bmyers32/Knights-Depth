@@ -52,6 +52,10 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P43 | East-room far Fang: lane-dependent engagement | OBSERVATION — **recorded 2026-10-18, accepted non-blocking** | After the doorway fix (`834940d`) the Fang at (56,-40) does not join a north-wall entry (wakes 19.6 u off, past its 18 u leash). Encounter-tuning note only |
 | P44 | Envoy takes spike damage every active tick | SHIPPED — **HUMAN-ACCEPTED 2026-10-18** (`a27686b`) | ONE shared window `EnvoyStats.iframe_ticks_on_hit = 90` for every HP hit, any source: the accepted current baseline, not a lock. Hazard-only split REJECTED |
 | P45 | Descent asset preloading + loading readiness | PLANNED — **recorded 2026-10-20, NOT BUILT** | The 45-tick transmission is a MINIMUM presentation duration; future async floor/asset loading hides behind it and holds arrival until ready |
+| P46 | Loot gathered shown on the expedition run-end summary | REQUIREMENT — **recorded 2026-10-20, NOT BUILT** | Human decision: the run-end summary (Extraction AND Emergency Recall) must list loot gathered, once loot exists. Integration point only; loot mechanics, ownership and Recall retention undecided |
+| P47 | Assisted co-op revival (health sacrifice) | PROPOSED — **recorded 2026-10-20, M3+** | A living Envoy pays ~50% of OWN max HP to return a downed ally at 50% of THEIR max. Separate from the free per-floor revival (100%). Not built |
+| P48 | Co-op: downed Envoys carried through a floor transition | REQUIREMENT — **recorded 2026-10-20 (human direction), M3** | Living teammates may complete a floor while an Envoy is down; it travels with them and resynchronizes on arrival at 100%. Into a combat floor: spends THAT floor's free revival. Into a Terminal: full reset, no debt carried. Not built |
+| P49 | Death + resynchronization animation polish | DEFERRED POLISH — **recorded 2026-10-20, not a blocker** | The accepted greybox tip-over (Slice 2) could become a more dramatic failure/collapse and a stronger stand-up with coordinated transmission. Investigate the in-repo KayKit rig clips first. Presentation-only |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4268,6 +4272,82 @@ minimum duration has elapsed AND loading reports ready. The player never sees a 
 cached `_next_plan`; readiness is a presentation/driver fact and must never let a client stall or
 desync authoritative state (M3: the server decides when the floor changes; clients may hold their
 arrival visual locally). No async loading until a measured hitch exists.
+
+### P46 — Loot gathered shown on the expedition run-end summary
+**Status:** REQUIREMENT — recorded 2026-10-20 (human decision, M2 Slice 2). NOT BUILT: no loot system exists.
+**Deepens:** the run-end summary (`game/ui/run_summary_overlay.gd`, Slice 2) -- no new screen.
+**Requirement:** the expedition end screen shows the loot gathered during the run, for BOTH endings
+(Extraction and Emergency Recall).
+**Today:** the summary is an ordered list of [label, value] rows from authoritative run state and the
+damage ledger (`arena._summary_rows`). Loot is ABSENT -- deliberately no empty, zero or placeholder
+row standing in for a system that does not exist. A run-wide loot result appends as rows or its own
+section after the existing ones; the overlay is not rewritten.
+**Undecided (do NOT settle implicitly):** item records, quantities, who authoritatively owns a pickup
+(M3), and **what a Recall keeps vs loses** -- the summary shows whatever that rule decides.
+
+### P47 — Assisted co-op revival (health sacrifice)
+**Status:** PROPOSED — recorded 2026-10-20 (human interest, M2 Slice 2 design packet). M3+. NOT BUILT.
+**Deepens:** Emergency Resynchronization (Slice 2) -- a second recovery route into the same restore.
+**Proposal:** a living Envoy intentionally revives a downed ally. The rescuer pays ~50% of their OWN
+max HP; the ally returns at ~50% of THEIR max. The rescuer must survive the payment (current HP must
+strictly exceed the cost). It does not consume the ally's unused free revival.
+**Deliberately different from the free revival**, which restores 100% (ruled 2026-10-20): do not
+reuse `resync_health_fraction` for this.
+**What Slice 2 already leaves open (the genuine dependencies):** incapacitated = zero HP, so a downed
+Envoy without a charge stays in the world, not removed; `recovery_exhausted` is a PARTY predicate
+(`SimWorld._party_can_recover`), so one Envoy down is not the end of the run; a revival is "restore
+HP + the shared post-hit window", which an assisted revival can call. Party failure extends to "all
+down, none pending, no living rescuer able to pay".
+**Open design questions:** health conservation across different max-HP values (fraction of OWN max
+is the simpler fairness rule); revive loops (cap per rescuer per floor, or a rescuer cost beyond HP);
+interaction range, channel time, interruption by damage, targeting; whether the rescuer gets any
+window; encounter pressure while channelling. It needs a NEW Command kind, validated server-side
+(GAME-RULES §4.2) -- the attack button is already arbitrating five actions.
+
+### P48 — Co-op: downed Envoys carried through a floor transition
+**Status:** REQUIREMENT — human design direction recorded 2026-10-20 (M2 Slice 2 playtest), with the
+same-day Terminal correction. For M3 co-op. **NOT BUILT; do not implement in M2.**
+**Deepens:** Emergency Resynchronization (Slice 2) and the Expedition descent (Slice 1).
+**Rule:** an incapacitated Envoy does NOT block the surviving party from completing a floor. When the
+living party completes it, the downed Envoy travels with them and resynchronizes automatically ON
+ARRIVAL at **100% max HP** (the free revival's outcome -- not P47's 50%).
+- **Destination is a combat floor:** that arrival-resync CONSUMES the destination floor's free revival
+  allowance. The transition itself never awards a second one. Teammates keep their own allowances.
+- **Destination is a Terminal / rest floor (human correction, 2026-10-20):** the Terminal is a FULL
+  RECOVERY CHECKPOINT. The Envoy resynchronizes at 100% and the previous floor's penalty is CLEARED --
+  no revival debt survives a Terminal. Entering the next combat floor grants the normal allowance.
+  No persistent revival debt across Terminals, ever.
+- Encounter progress is preserved; no duplicate revival; no floor reload beyond the real transition.
+**Today (solo, Slice 2):** the opposite holds by construction -- `all_active_envoys_occupy` counts only
+LIVING Envoys and requires at least one, so a solo party cannot complete while down; a completion on a
+tick with a revival pending is deferred to the revival tick (arena `_resolve_floor_complete`). The
+allowance is `_resyncs_used_on_floor` (ACTOR_TRANSIENT, cleared by `load_floor`), which is what makes
+"Terminal clears it" free and what an arrival-resync must spend AFTER `load_floor`, not before.
+**To investigate at M3 kickoff (not decided):**
+- Exit quorum: which Envoys count (`all_active_envoys_occupy` already skips the downed), and the
+  minimum living party.
+- A pending timed revival vs a completion: does arrival-resync replace the pending one, and is its
+  charge (already committed on the old floor) refunded or simply cleared with the floor?
+- Arrival ordering: install the plan, then resync-and-spend -- never spend-then-`load_floor`, which
+  would erase the spend (the accidental-refresh exploit). Scene reloads and repeated installs must
+  not re-grant.
+- Final floor: a downed Envoy is extracted with the party (Extraction, not Recall).
+- All-party incapacitation stays `recovery_exhausted` -> Emergency Recall; P47 extends that predicate.
+- Must stay server-authoritative (§4.1): the server decides the transition and the resync tick.
+
+### P49 — Death + resynchronization animation polish
+**Status:** DEFERRED POLISH — recorded 2026-10-20 at the Slice 2 visual PASS. Not a Slice 2 blocker.
+**Deepens:** the Slice 2 downed presentation (`envoy.gd` collapse/stand, arena resync light).
+**Today (HUMAN-ACCEPTED 2026-10-20):** a procedural tip-over of the `Model` node (0.4 s, 88 deg) on
+`died`; the body stays down; it stands back up inside the arrival light on `resynchronized`.
+**Wanted:** a more dramatic synchronization-failure reaction and collapse; the body visibly
+incapacitated afterwards; a more satisfying Emergency Resynchronization with a stronger
+return-to-standing motion coordinated with the transmission effect.
+**First step:** investigate the in-repo KayKit `Rig_Medium_General.glb` clips (death / spawn / hit)
+and whether they retarget onto `Knight.glb` cleanly. Nothing plays rig animation yet, so this would
+be the FIRST skeletal-animation path -- size it as its own piece of work before replacing the tip-over.
+**Constraints:** presentation-owned; driven only by the existing `died` / `resynchronized` Events;
+never decides or delays recovery timing (45-tick delay and 90-tick window stay as accepted).
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

@@ -144,3 +144,51 @@ func test_descent_progress_runs_from_zero_to_one() -> void:
 	expedition.tick_descent(0)
 	expedition.tick_descent(0)
 	assert_almost_eq(expedition.descent_progress(), 0.75, 0.0001)
+
+
+# --- EMERGENCY RECALL (M2 Slice 2) ---------------------------------------------------------
+
+func test_a_recall_ends_the_expedition_as_a_failure_not_a_completion() -> void:
+	var expedition: Expedition = Expedition.new(0, [1, 2, 3] as Array[int], 1)
+	expedition.complete_floor(0)
+	expedition.tick_descent(1)
+	var events: Array[Event] = expedition.recall(7)
+	assert_eq(_kinds(events), ["emergency_recall"] as Array[String])
+	assert_eq(events[0].tick, 7)
+	assert_eq(events[0].payload, {"final_depth": 2, "position": 1, "floors_cleared": 1})
+	assert_true(expedition.is_recalled)
+	assert_false(expedition.is_complete, "Recall is never completion")
+	assert_true(expedition.is_over())
+	assert_eq(expedition.phase, Expedition.PHASE_RECALLED)
+
+
+func test_a_recall_happens_once_and_nothing_overturns_it() -> void:
+	var expedition: Expedition = Expedition.new(0, [1, 2] as Array[int], 1)
+	expedition.recall(0)
+	assert_eq(_kinds(expedition.recall(1)), [] as Array[String], "the end happens once")
+	assert_eq(_kinds(expedition.complete_floor(2)), [] as Array[String], "a later completion is refused")
+	assert_eq(_kinds(expedition.tick_descent(3)), [] as Array[String])
+	assert_false(expedition.is_complete)
+	assert_eq(expedition.floors_cleared(), 0)
+
+
+func test_a_recall_is_refused_mid_descent_and_after_completion() -> void:
+	var descending: Expedition = Expedition.new(0, [1, 2] as Array[int], 5)
+	descending.complete_floor(0)
+	assert_eq(_kinds(descending.recall(1)), [] as Array[String], "a suspended floor cannot fall")
+	assert_false(descending.is_recalled)
+	var done: Expedition = Expedition.new(0, [1] as Array[int], 1)
+	done.complete_floor(0)
+	assert_eq(_kinds(done.recall(1)), [] as Array[String], "an extracted expedition stays extracted")
+	assert_false(done.is_recalled)
+
+
+func test_floors_cleared_counts_finished_entries() -> void:
+	var expedition: Expedition = Expedition.new(0, [1, 2, 3] as Array[int], 1)
+	assert_eq(expedition.floors_cleared(), 0)
+	for i in 2:
+		expedition.complete_floor(0)
+		expedition.tick_descent(0)
+	assert_eq(expedition.floors_cleared(), 2, "two behind, standing on the third")
+	expedition.complete_floor(0)
+	assert_eq(expedition.floors_cleared(), 3, "extraction finishes the floor it ends on")

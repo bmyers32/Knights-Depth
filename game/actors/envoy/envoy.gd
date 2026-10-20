@@ -11,10 +11,48 @@ const AIM_RAYCAST_DISTANCE: float = 100.0
 var actor_id: int = 0
 var stats: EnvoyStats
 @onready var _telegraph: TelegraphIndicator = $TelegraphIndicator
+@onready var _model: Node3D = $Model
+
+## SYNCHRONIZATION FAILURE, DRAWN (M2 Slice 2 playtest follow-up, 2026-10-20). The body tips over
+## and stays down until the sim says it resynchronized. A tween of the model's own transform, not
+## a skeletal clip: the KayKit death clips are in the repo but nothing plays rig animation yet, and
+## the first animation path is its own piece of work. PRESENTATION ONLY: it starts on the `died`
+## Event and ends on `resynchronized` / a floor install, and the sim never waits on it.
+@export var collapse_seconds: float = 0.4
+## How far over the body falls, in degrees, away from the camera.
+@export var collapse_degrees: float = 88.0
+var _upright: Transform3D
+var _collapse_elapsed: float = -1.0
 
 
 func _ready() -> void:
 	stats = ContentDB.get_resource(&"envoy", &"default")
+	_upright = _model.transform
+
+
+## Starts the fall. Idempotent while already down, so a repeated call cannot restart it mid-way.
+func collapse() -> void:
+	if _collapse_elapsed >= 0.0:
+		return
+	_collapse_elapsed = 0.0
+
+
+## Back on its feet at once -- the resynchronization light covers the change.
+func stand() -> void:
+	_collapse_elapsed = -1.0
+	_model.transform = _upright
+
+
+func is_collapsed() -> bool:
+	return _collapse_elapsed >= 0.0
+
+
+func _process(delta: float) -> void:
+	if _collapse_elapsed < 0.0 or _collapse_elapsed >= collapse_seconds:
+		return
+	_collapse_elapsed = minf(_collapse_elapsed + delta, collapse_seconds)
+	var fall: float = smoothstep(0.0, 1.0, _collapse_elapsed / collapse_seconds)
+	_model.transform = _upright.rotated_local(Vector3.RIGHT, -deg_to_rad(collapse_degrees) * fall)
 
 
 ## Slice B charge-ready cue (manual-pass) -- a pure Event LISTENER, never a poll: the

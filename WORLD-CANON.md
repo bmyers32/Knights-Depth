@@ -40,8 +40,10 @@ One fiction explains many mechanics:
 | Expedition loop | Synchronize → descend → extract |
 | Equipment/loadout | Configured as part of the synchronization profile |
 | Depth difficulty | Deeper strata strain synchronization harder |
-| Death | Synchronization Failure |
-| Respawn / run-end | **Emergency Recall** to the Commons |
+| Incapacitation (zero health) | Synchronization Failure |
+| In-floor recovery | **Emergency Resynchronization** — the Envoy re-forms where it fell |
+| Failed run-end (recovery exhausted) | **Emergency Recall** to the Commons |
+| Successful run-end | **Extraction** to the Commons |
 | Companion | A synchronization anchor (not a pet) [M4+] |
 **Law:** Synchronization is narrative, NOT a gameplay meter. It explains existing
 systems. Promote it to a resource only if a concrete mechanic demands one — adding is

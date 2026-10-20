@@ -107,6 +107,19 @@ SK-like/MMO attempts. Treat them as if they cost us a codebase already.)
   non-terminal bands are half-open `[min, max)` and only the repertoire's outermost band
   includes its maximum. Selection commits at windup start and is never re-evaluated
   during that windup. Aim is sampled at the fire tick, not at action commitment.
+- **Recovery (M2 Slice 2).** Incapacitation occurs at zero health and does not, by itself,
+  terminate the expedition. Each Envoy has one free Emergency Resynchronization available per
+  combat floor. The allowance is committed when incapacitation triggers recovery, and
+  resynchronization occurs automatically after a content-authored delay, at the incapacitation
+  location, restoring full maximum health and granting the existing shared post-hit invulnerability
+  window. No separate revival immunity is introduced. The allowance replenishes through legitimate
+  floor progression or a new expedition and never accumulates; Terminal/rest floors are safe
+  recovery points, not additional bankable charges. While incapacitated, an Envoy cannot execute
+  gameplay Commands, and its status effects are cleared. When no party member remains active or
+  pending resynchronization, recovery is exhausted and the Expedition ends in Emergency Recall
+  (failure). Completing the final floor produces Extraction (success). Recovery exhaustion takes
+  precedence over same-tick floor completion; completion with a resynchronization pending is
+  deferred until recovery succeeds.
 - Knockback resolves inside the sim pipeline (hit → matrix → status → knockback →
   death/events), so M3 can replicate it; it is not a physics-engine impulse.
 - Every threshold ships with a calibration note: observed feel at default, and the
@@ -180,3 +193,4 @@ LEXICON.md. §6.1–.2 are hard gates; §6.6 is explicitly a tiebreaker, never a
 | (seed+7) | §3, CLAUDE.md M1 | M1 roster LOCKED: Fang/Ooze/Watcher (one weakness per specialized type — combat-slice validation) as Common/Drifted/Claimed respectively; Hollow moved to Archive (M2) debut with true-name reveal | Developer decision after QA review; combat validation beats compressed cosmology in an arena slice; reversal requires playtest evidence |
 | 2026-08-14 | §3 | P29 enemy repertoire amendment. Enemy AI authority widened narrowly from movement + attack timing to deterministic selection of an authored action by distance eligibility. Action shape remains content-owned. Added non-overlapping range-band semantics, windup-time action commitment, and fire-time aim sampling. | First consumer: Watcher `watcher_survey` |
 | 2026-08-18 | §3 | P17 channel-law amendment. Motion resolved into two channels: FAMILIES own BASELINE MOTION PATH (spatial), entity STATES own MOTION RHYTHM/COORDINATION (temporal). The channels are ORTHOGONAL BUT COMPOSABLE — "never merge" was considered and rejected as false to legitimate composition (a Drifted Fang is both channels composing). Added the binding content consequence that globally-phased family motion must carry a deterministic per-actor phase offset, normalized against its own period so actor identity shifts phase only. | First consumer: Fang authored approach weave (ROADMAP P17) |
+| 2026-10-20 | §3, LEXICON, WORLD-CANON | Recovery law established: one free Emergency Resynchronization per Envoy per combat floor, automatic recovery at full health with the shared post-hit protection window. Emergency Recall represents expedition failure after recovery exhaustion; Extraction represents successful completion. Recovery exhaustion wins same-tick completion conflicts, while pending resynchronization defers completion. | Human M2 Slice 2 design decisions |

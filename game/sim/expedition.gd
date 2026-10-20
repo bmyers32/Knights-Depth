@@ -22,11 +22,15 @@ extends RefCounted
 const PHASE_EXPLORING: StringName = &"exploring"
 const PHASE_DESCENDING: StringName = &"descending"
 const PHASE_COMPLETE: StringName = &"complete"
+## The expedition ENDED IN FAILURE: the party's recovery was exhausted (M2 Slice 2). A distinct end
+## state, never a flavour of COMPLETE -- extraction is success, Emergency Recall is not.
+const PHASE_RECALLED: StringName = &"recalled"
 
 var run_seed: int
 var itinerary: Array[int]
 var position: int = 0
 var is_complete: bool = false
+var is_recalled: bool = false
 var phase: StringName = PHASE_EXPLORING
 ## How long a descent lasts, in sim-rate ticks. Run configuration handed in by the driver.
 var descent_ticks: int
@@ -92,6 +96,31 @@ func complete_floor(tick: int) -> Array[Event]:
 		})]
 	advance()
 	return [Event.new(tick, "expedition_complete", {"final_depth": from_depth})]
+
+
+## THE ONE FAILURE RULE, called when the sim reports the party's recovery exhausted. Accepted only
+## while EXPLORING: a descending floor is suspended (nothing can fall) and an ended expedition stays
+## ended -- so it finalizes at most once, and complete_floor (which also requires EXPLORING) can
+## never overturn it afterwards.
+func recall(tick: int) -> Array[Event]:
+	if phase != PHASE_EXPLORING:
+		return []
+	is_recalled = true
+	phase = PHASE_RECALLED
+	return [Event.new(tick, "emergency_recall", {
+		"final_depth": current_depth(), "position": position, "floors_cleared": floors_cleared(),
+	})]
+
+
+## Either ending. Extraction (is_complete) and Recall (is_recalled) are never both true.
+func is_over() -> bool:
+	return is_complete or is_recalled
+
+
+## Itinerary entries finished. A completed expedition finished all of them, including the one it
+## ended on; a recalled one finished those before the floor it fell on.
+func floors_cleared() -> int:
+	return itinerary.size() if is_complete else position
 
 
 ## One sim-rate tick of the descent. The tick that exhausts the countdown moves the expedition

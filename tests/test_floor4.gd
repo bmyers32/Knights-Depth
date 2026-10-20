@@ -1240,7 +1240,7 @@ func _play_through(west_first: bool) -> void:
 			break
 		arena._step([Command.new(arena.sim.tick_count, envoy_id, "move", {"direction": (way_out - arena.sim.entities[envoy_id]).normalized()})] as Array[Command], DT)
 	assert_true(arena.expedition.is_complete, "the Foundry is the last floor: its exit ends the expedition")
-	assert_true(arena._completion_overlay.visible)
+	assert_eq(arena._run_summary.outcome(), RunSummaryOverlay.OUTCOME_EXTRACTION)
 
 
 ## A lane does what it says: standing in a band when it writes costs health.
