@@ -51,6 +51,8 @@ knight_depths/
 ├── game/
 │   ├── autoload/      # GameRoot, ContentDB, DebugOverlay (service locators — listed here only)
 │   ├── sim/           # SimWorld, Command, Event, combat resolution — NO Node imports
+│   ├── main/          # GameMain scene root: title → hubs → expedition → Commons (not an autoload)
+│   ├── hub/           # HubSpace: Home, Commons, Ready Room — own small SimWorld, never an expedition
 │   ├── actors/        # Node scenes: envoy, enemies — presentation + input → Commands
 │   ├── content/       # weapons/, enemies/, status/ as .tres resources
 │   ├── gen/           # seeded depth/floor generation — headless-runnable

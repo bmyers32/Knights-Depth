@@ -44,7 +44,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P31 | Reflected-projectile parry | PROPOSED | Breon design intent; must-reconnect + one-reflect-per-raise; needs its own fork review |
 | P35 | Floor-completion / transition presentation | PROPOSED | Winning a floor gives weaker feedback than dying — a `print()` vs an overlay. Audit existing exit vocabulary first |
 | P36 | Macro composition seam (families, missions, arcade) | HELD | Released only on a human Floor 2 PASS; topology vocabulary already homed in floor_layers.gd |
-| P38 | Pre-expedition ready room | PROPOSED — **direction captured 2026-10-10, NOT BUILT** | Party staging space before a descent; distinct from the Commons and from in-expedition safe terminals. Entry must stay separable from floor loading |
+| P38 | Pre-expedition ready room | **SKELETON SHIPPED 2026-10-22 (M2 Slice 3)** — party/loadout/route NOT BUILT | Party staging space before a descent; distinct from the Commons and from in-expedition safe terminals. Entry must stay separable from floor loading |
 | P39 | Foundry presentation pass + Floor 4 loot-room payoff | PROPOSED — **recorded 2026-10-15, NOT BUILT** | Architectural character for the Foundry after Stage 1 spatial PASS; the east loot room holds placeholder breakables awaiting a reward system |
 | P40 | Elevation as a floor-design tool | DIRECTION — **recorded 2026-10-16, NOT BUILT** | Human observation: Floor 4's elevation is minimal and near-cosmetic. Future floors use height for hierarchy, reveals and depth, in three capability tiers; no quota, no speculative height sim |
 | P41 | Timed-hazard pre-activation telegraph | **SHIPPED 2026-10-18 (`315ed5a`) — human gameplay PASS** | Spike pads warn before they write (50-tick lead, accelerating pulse, primed height), derived from the sim countdown; Floor 4 corridor re-authored as four alternating stepping stones |
@@ -56,6 +56,9 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P47 | Assisted co-op revival (health sacrifice) | PROPOSED — **recorded 2026-10-20, M3+** | A living Envoy pays ~50% of OWN max HP to return a downed ally at 50% of THEIR max. Separate from the free per-floor revival (100%). Not built |
 | P48 | Co-op: downed Envoys carried through a floor transition | REQUIREMENT — **recorded 2026-10-20 (human direction), M3** | Living teammates may complete a floor while an Envoy is down; it travels with them and resynchronizes on arrival at 100%. Into a combat floor: spends THAT floor's free revival. Into a Terminal: full reset, no debt carried. Not built |
 | P49 | Death + resynchronization animation polish | DEFERRED POLISH — **recorded 2026-10-20, not a blocker** | The accepted greybox tip-over (Slice 2) could become a more dramatic failure/collapse and a stronger stand-up with coordinated transmission. Investigate the in-repo KayKit rig clips first. Presentation-only |
+| P50 | Seed policy for deployments | PROPOSED — **recorded 2026-10-22** | Main fixes `run_seed = 0` (Slice 3 baseline). Once floors vary by seed: fresh seed per deployment by default, deliberate replay-by-seed, layout vs combat seed kept explicit |
+| P51 | Obstacle wall skirts on expedition floors | DEBT — **recorded 2026-10-22**, P39 presentation | FloorBuilder wraps every obstacle in 2.2-high walls pushed 0.3 outward; hubs switch it off (`draw_obstacle_faces`), expedition floors still draw it |
+| P52 | Commons spatial master plan | REQUIRED BEFORE ANY COMMONS REBUILD — **ruled 2026-10-21 (D5)** | Central plaza, connected districts, services/NPC sites, loops, crowd + camera; split build-now / M4 / deferred. Plan first, then review |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4348,6 +4351,33 @@ and whether they retarget onto `Knight.glb` cleanly. Nothing plays rig animation
 be the FIRST skeletal-animation path -- size it as its own piece of work before replacing the tip-over.
 **Constraints:** presentation-owned; driven only by the existing `died` / `resynchronized` Events;
 never decides or delays recovery timing (45-tick delay and 90-tick window stay as accepted).
+
+### P50 — Seed policy for deployments
+**Status:** PROPOSED — recorded 2026-10-22 at the M2 Slice 3 closeout (human ruling 2026-10-20 deferred it here).
+**Today:** `GameMain.run_seed = 0`, passed explicitly to every deployment; floors are authored, so the
+seed changes nothing spatial (SEED HONESTY). The Ready Room briefing prints the seed.
+**Wanted once floors vary by seed:** a fresh seed per deployment by default; a deliberate
+replay-by-seed entry; the layout seed (`derive_floor_seed`) and the combat seed kept explicitly
+separate. The seed stays visible on the debug overlay and in the log (Prime Directive 4).
+**Blocks:** procedural floors being visible to a player at all -- with a fixed seed every run is one floor.
+
+### P51 — Obstacle wall skirts on expedition floors
+**Status:** DEBT — recorded 2026-10-22, belongs with the P39 presentation pass.
+**Finding (Ready Room revision):** `FloorPlan.solid_segments()` emits each obstacle's four faces and
+`FloorBuilder.build_walls` draws every segment as a 2.2-high wall pushed outward -- so every block,
+whatever its authored `height`, reads as a wall-height box 0.3 wider than its gameplay footprint.
+That is why the first Ready Room counters and benches read as generic boxes.
+**Done for hubs only:** `FloorBuilder.draw_obstacle_faces = false` and `solid_raised_ground = true` in
+`hub_space.tscn`. Expedition floors are unchanged (human-accepted as they look).
+**When P39 runs:** decide whether floors also draw obstacles at their own height; shot obstruction
+is unaffected either way (it reads the same segments, never the meshes).
+
+### P52 — Commons spatial master plan
+**Status:** REQUIRED before any Commons rebuild (human ruling D5, 2026-10-21). Plan only.
+**Scope:** a central plaza; connected districts; service and NPC locations; loops; crowd and camera
+considerations at the hub framing (0, 9, 9). Separate what is built now, what is M4, and what is deferred.
+**Order:** after the Ready Room PASS (given 2026-10-22, provisional); review before any geometry.
+Home stays a temporary shell: do not lock customization or assert its future networking.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.

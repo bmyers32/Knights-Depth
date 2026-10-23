@@ -1238,3 +1238,18 @@ named test; time is lost diagnosing "why is this running so long"; mutation scor
 condition; mutation/CI drivers also get a per-run `timeout`.
 **Where else:** wait-for-tick helpers, walk-until-arrived drivers, poll-until-event loops, any
 `while` over sim state in tests or tools.
+
+### Check what the renderer draws before re-authoring the content
+**Incident (M2 Slice 3, Ready Room, 2026-10-21/22):** two Ready Room layouts were judged visually and
+rejected as "generic boxes". The authored data was not the cause: FloorBuilder drew every obstacle's
+solid faces as 2.2-high walls pushed outward, so a 0.8-high bench and a 3.5-high machine rendered the
+same, whatever `height` said. Content had been re-authored around a picture the content did not control.
+**Mechanism:** presentation derives meshes from gameplay data through rules of its own (here: every
+solid segment is a wall). When a visual verdict comes back, the obvious lever is the content, and the
+renderer's rule stays invisible because it is shared by every floor that already passed.
+**Failure if ignored:** layout passes that cannot move the verdict; the fix lands as content contortion
+(blocks resized or deleted to dodge a skirt) instead of one renderer switch.
+**Fix shape:** before re-authoring for a visual complaint, trace one authored record to the meshes it
+produces and confirm each visible property is the authored one. Fix a renderer rule behind a scoped switch
+when other consumers have already been accepted as they look.
+**Where else:** wall/ledge styles, surface colours, elevation lifts, plate prominence, any future dressing.
