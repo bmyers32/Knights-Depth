@@ -1,9 +1,10 @@
 # ADR-001 — Hybrid hierarchical procedural floor generation
 
 **Status:** APPROVED IN PRINCIPLE (owner, 2026-10-22) with the rulings and corrections recorded in §0.
-Implementation proceeds stage by stage; **only S0 is authorized** at the time of writing. Nothing in
-this document changes a GAME-RULES law, a milestone criterion, or the player-facing meaning of any
-existing acceptance item (§8).
+Implementation proceeds stage by stage: **S0 shipped** (`6631ed8`, reviewed and accepted 2026-10-23);
+**S1 built 2026-10-23 and awaiting its review gate** (§7, "as built"); **S2 and later are not
+authorized.** Nothing in this document changes a GAME-RULES law, a milestone criterion, or the
+player-facing meaning of any existing acceptance item (§8).
 
 Labels: **[C]** confirmed in the repository · **[R]** recommendation · **[M]** a value to be measured
 before it is chosen · **[O]** an owner decision, with its ruling.
@@ -99,19 +100,23 @@ prototype: authored floor skeletons with variable chapters (§7, F).
 ## 4. Data contracts (minimal)
 
 ```
-FloorPiece (.tres, game/content/floors/)
+FloorPiece (.tres, game/content/floors/pieces/)                      [built S1]
   piece_id: StringName
   role: StringName                      entry | landmark | objective | encounter | exit
   body: AuthoredLayout                  LOCAL coordinates; references nothing outside body
+                                        except `@<port key>` on a connection-layer effect (its own joint)
   footprint: Rect2                      reserved cells incl. walls; body rects ⊆ footprint
   allowed_transforms: Array[StringName] default [&"identity"]; &"mirror_x" opt-in (O6)
   ports: Array[PiecePort]
-  strata, depth_min, depth_max, weight, tags (tags consumed only by recipe slot filters)
+  lint(enemy_keys) -> findings          {rule, message, refs}; the stratum is body.stratum_id
+  DEFERRED TO S2 (no consumer before the caster): depth_min, depth_max, weight, tags
 
-PiecePort (one type; `kind` decides which fields are read)
+PiecePort (one type; `kind` decides which fields are read)         [built S1]
   key: StringName                        unique in the piece: &"in", &"out", &"side", ...
   kind: connector | gate | unlock | vantage | anchor
-  edge, offset, width, patch_key         connector/gate: where a joint aperture may sit
+  edge, offset, width, patch_key         connector/gate: where a joint aperture may sit; offset is
+                                         measured from the edge's min coordinate (x-min for north/south,
+                                         z-min for east/west); the patch must reach the edge across the span
   trigger_key / switch_key               unlock: the body record whose effects gain the cross-piece effect
   position: Vector3                      vantage (where the party can stand) / anchor (what must be seen)
 
@@ -127,6 +132,10 @@ FloorRecipe (.tres)
   budgets {candidates_per_piece, placements, reseeds}, fallback: AuthoredLayout
 
 FloorDraft (RefCounted, in memory only)  pieces placed + hallway rects + joints + the three edge sets
+  [built S1] place(piece, origin, transform) -> iNN · lay(rects, surface, boundary) -> hNN ·
+  bind(instance, port, hallway, overlap, flank) -> jNN; world = T(local) + origin, one mapping
+  (world_rect / world_point / world_edge / port_span). Edge sets arrive with the planner (S2/S3).
+DraftEmitter.emit(draft) -> EmitReport   [built S1] layout OR errors {kind, message, refs}; remap table
 GenerationReport (RefCounted, O2)         seed, attempts, rejections by reason, fallback flags, validators, time
 ```
 
@@ -357,6 +366,7 @@ console, a complete progression).
 |---|---|---|---|---|
 | **S0** (authorized) | `FloorPlan.violations()` beneath an unchanged `validate()`; `ProgressionValidator` + `ProgressionReport`; tests against Floors 1–4, the hubs, negative fixtures, and a real-sim replay | — | see §5.3 | "the state model cannot express the shipped floors" |
 | S1 | `FloorPiece`/`PiecePort`/`FloorDraft`/emitter/renumbering; a hand-written two-piece draft | S0 | emitted layout compiles; ids dense/unique; all five reference kinds remapped (mutant: skip `conceals_trigger_id` → caught); mirror swaps edge styles; hand draft ≡ hand-translated layout | "pieces cannot be composed through the unchanged compiler" |
+| **S1 as built** (2026-10-23, pending review) | `game/gen/piece_port.gd`, `floor_piece.gd`, `floor_draft.gd`, `draft_emitter.gd`; pieces `archive_entry_apron` (gate port, crate-hidden plate opens `@out`) and `archive_exit_gallery` (mirror opt-in; plate → sealing fight → revealed switch → revealed key → receiver → exit); baseline `tests/fixtures/floor_s1_baseline.tres` | S0 | `to_dict()` of the composed plan **equals the hand-authored baseline exactly** (B mirrored and placed by hand); S0 validator PASS with the authored route; real-SimWorld replay to `floor_complete`; every reference category remapped by layer, numeric and keyed, with a second piece whose local ids ≠ global ids; mirror reflects rects, points, ports and swaps east/west styles; gate joints need a gap; unintended adjacency, overlapping footprints, unbound ports, lint failures, role counts and stratum mismatch are structured errors with no layout; 17/17 mutants caught | **not falsified**: two pieces composed through the unchanged compiler. Found on the way: a joint's flank style must agree with the hallway's boundary where the aperture's sides coincide with the hallway's sides — `FloorPlan` refuses two styles on one span, so S2's profiles must carry one style for a hallway AND its joints |
 | S2 | profiles, leg enumeration, coupled search, fallback; a recipe with no gates | S1 | same seed → identical; N-seed sweep: 0 overlaps/unintended adjacencies, fallback rate, p99 time; diversity metrics | **the hard one:** do routed hallways read as a place? Human look at 3 seeds *before* S3 |
 | S3 | ports → effects, gates, shortcut, progression validator in the loop | S2, S0 | dependency holds / solvable on sweeps; mutant: remove the unlock effect → caught; headless walkthrough objective → gate → shortcut → exit | "cross-piece progression is unsafe" |
 | S4 | camera resource (O1), projection + occlusion, mandatory-vs-optional reveals | S2 | projection == real FollowCamera on Floor 2 within ε; a blocked reveal fails; an optional reveal never rejects | "reveals cannot be guaranteed geometrically" |

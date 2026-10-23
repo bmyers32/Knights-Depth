@@ -59,7 +59,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P50 | Seed policy for deployments | PROPOSED — **recorded 2026-10-22** | Main fixes `run_seed = 0` (Slice 3 baseline). Once floors vary by seed: fresh seed per deployment by default, deliberate replay-by-seed, layout vs combat seed kept explicit |
 | P51 | Obstacle wall skirts on expedition floors | DEBT — **recorded 2026-10-22**, P39 presentation | FloorBuilder wraps every obstacle in 2.2-high walls pushed 0.3 outward; hubs switch it off (`draw_obstacle_faces`), expedition floors still draw it |
 | P52 | Commons spatial master plan | REQUIRED BEFORE ANY COMMONS REBUILD — **ruled 2026-10-21 (D5)** | Central plaza, connected districts, services/NPC sites, loops, crowd + camera; split build-now / M4 / deferred. Plan first, then review |
-| P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 BUILT, S1+ NOT AUTHORIZED** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
+| P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 SHIPPED `6631ed8`; S1 BUILT 2026-10-23 (pending review gate); S2+ NOT AUTHORIZED** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4382,8 +4382,8 @@ Home stays a temporary shell: do not lock customization or assert its future net
 
 ### P53 — Procedural floors: hybrid hierarchical composition (ADR-001)
 **Status:** APPROVED IN PRINCIPLE by the owner 2026-10-22, with rulings O1–O7 and corrections recorded in
-`ADR-001-PROCEDURAL-FLOORS.md` §0. Stages S0–S5 are authorized one at a time; **S0 is built**, nothing
-beyond it is authorized.
+`ADR-001-PROCEDURAL-FLOORS.md` §0. Stages S0–S5 are authorized one at a time; **S0 shipped** (`6631ed8`),
+**S1 built 2026-10-23 and awaiting its review gate**; nothing beyond S1 is authorized.
 **What it is:** a generated experience graph with three distinct edge sets (physical, visibility,
 dependency), assembled from authored cycle templates, casting authored **FloorPieces** for landmarks,
 objectives, encounters, entry and exit; connective ground routed from five **TraversalProfiles** with
@@ -4396,7 +4396,16 @@ untouched; GAME-RULES §5 wording untouched (FloorPieces are NOT automatically "
 `game/gen/progression_validator.gd` searches a FloorPlan over legal body-centre ground and the plan's own
 trigger/effect semantics, answering PASS / FAIL / UNSUPPORTED with action traces and record references,
 proved on Floors 1-4 (each route replays through a real SimWorld) and on negative fixtures.
-**Next (needs separate authorization):** S1 FloorPiece/FloorDraft/emitter with a hand-written draft.
+**S1 (built, pending review):** `FloorPiece` + `PiecePort` (a piece is an `AuthoredLayout` body in local
+coordinates plus footprint, allowed transforms and ports; `lint()` returns findings), `FloorDraft` (in-memory
+placements, one hallway fragment, joints), `DraftEmitter.emit(draft) -> EmitReport` (table-driven renumbering
+through the compiler's own effect/trigger layer tables, `@port` -> joint connection, mirror_x by opt-in,
+structural failures as errors and never a layout). Two shipped pieces under `game/content/floors/pieces/`;
+the hand-constructed two-piece draft compiles through the unchanged `LayoutCompiler` to a `FloorPlan` whose
+`to_dict()` equals a separately hand-authored baseline EXACTLY, passes the S0 validator, and replays in a
+real SimWorld. Not on any itinerary. Mutants 17/17.
+**Next (needs separate authorization):** S2 -- TraversalProfiles, leg enumeration, the coupled placement +
+routing search, a gateless recipe; human look at three seeds before S3.
 **Open owner numbers (O4):** fallback rate, diversity floor, safe screen band, grid cell, profile bands --
 measured before any is locked. Seed policy is P50 (O3), scheduled with S5.
 

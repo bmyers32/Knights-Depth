@@ -1270,3 +1270,19 @@ floor; both were seen in one afternoon.
 strip two adjoining cells cover together -- and search THAT. State the pairwise limit as a limitation.
 **Where else:** visibility stand-points, placement validity in the generator, any future navmesh or
 pathfinding, enemy territory fit, spawn placement.
+
+### An aperture's flanks are the hallway's own edges where they coincide
+**Incident (ADR-001 S1, 2026-10-23):** the first composed floor joined a ledge-rimmed hallway to a piece
+through a gate whose joint was authored `flank_style = wall`. Both compiled; `solid_segments()` then
+refused the plan: over the overlap span the aperture's side and the hallway's side are the SAME exterior
+line, and FloorPlan has no precedence rule for two styles on one span (ruled 2026-09-02) -- it fails loudly.
+**Mechanism:** a connection's aperture overlaps both patches it joins, so wherever the aperture is exactly
+as wide as the hallway, its sides lie on the hallway's edges. The flank style is therefore not a property
+of the doorway alone; it is a claim about the ground beside it, and two records are making that claim.
+**Failure if ignored:** a generator that assigns flank styles per joint and boundary styles per hallway
+independently produces floors that fail structural validation on every seed -- or, if the check were ever
+softened, walls that exist for one consumer and not the other (the P34 failure, again).
+**Fix shape:** one style per connective space, carried by the profile and written to BOTH the hallway rects
+and their joints; a joint may differ only where the hallway is wider than the port span.
+**Where else:** every S2 TraversalProfile; junction mouths; any future doorway dressing that reads flank
+style; hand-authored floors joining a rimmed corridor to a walled room.

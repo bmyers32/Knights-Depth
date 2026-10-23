@@ -33,21 +33,21 @@ picked by DEPTH (authored; the seed changes nothing spatial). Four goldens uncha
 **NOT recorded as human-checked:** travel-HUD hiding during departure (built after the last look); a full-loop
 pass of Extraction/Recall -> Commons under Main. Home = temporary shell; Commons = placeholder (P52).
 
-## ADR-001 PROCEDURAL FLOORS — APPROVED IN PRINCIPLE 2026-10-22 (O1–O7); S0 BUILT (this commit)
-- `ADR-001-PROCEDURAL-FLOORS.md` is the design of record (ROADMAP P53, LEXICON O7 terms). Stages S0–S5
-  are authorized ONE AT A TIME; **S1+ (FloorPiece, FloorDraft, placement, routing, content) is NOT authorized.**
-- **S0:** `FloorPlan.violations()` (same rules as `validate()`, returned with rule/message/refs; validate()
-  now reports through it, messages unchanged) and `game/gen/progression_validator.gd` + `progression_report.gd`:
-  a pure search over legal BODY-CENTRE ground (cells cut at regions/blockers/obstacles, eroded by the
-  body, plus exact two-cell strips) and the plan's own trigger/effect semantics. Verdicts PASS / FAIL /
-  UNSUPPORTED (ranged switch, thin ground, unknown effect, state budget), action trace, refs, standing
-  limitations printed, progression-neutral records listed. Rules (body/attack/pickup reach) are passed in
-  from content by the caller; nothing in gen/ reaches an autoload. NOT wired into `generate()` (S3).
-- Proved: Floors 1–4 + Terminal + Ready Room PASS (≤ a few hundred states); each route REPLAYS through a
-  real SimWorld to `floor_complete`; crate/wave-3/one-key removals FAIL with the right refs; fixtures for
-  one-way softlock, key left behind, plate skirted vs corridor crossed, sliver, hidden plate under feet. Mutants 17/17.
+## ADR-001 PROCEDURAL FLOORS — S0 SHIPPED `6631ed8`; S1 BUILT 2026-10-23, UNCOMMITTED, AWAITING ITS REVIEW GATE
+- `ADR-001-PROCEDURAL-FLOORS.md` is the design of record (ROADMAP P53). Stages are authorized ONE AT A TIME;
+  **S2+ (profiles, placement/routing search, recipes, cross-piece wiring, visibility) is NOT authorized.**
+- **S0:** `FloorPlan.violations()` + `ProgressionValidator` (PASS / FAIL / UNSUPPORTED over legal body-centre ground).
+- **S1:** `piece_port.gd`, `floor_piece.gd` (body = an AuthoredLayout in LOCAL coords + footprint + allowed
+  transforms + ports; `lint()` -> findings; `@<port>` on a connection effect means "my own joint"), `floor_draft.gd`
+  (place / lay / bind -> iNN / hNN / jNN; world = T(local) + origin, ONE mapping), `draft_emitter.gd`
+  (`emit(draft) -> EmitReport`: one dense counter per layer, every reference rewritten BY TARGET LAYER through the
+  compiler's own tables, structural errors and NO layout on any fault). Pieces `game/content/floors/pieces/
+  archive_entry_apron.tres` (gate port) + `archive_exit_gallery.tres` (mirror opt-in). The composed draft equals
+  `tests/fixtures/floor_s1_baseline.tres` on `to_dict()` EXACTLY; S0 PASS; real-SimWorld replay. Mutants 17/17.
+- **Found:** a joint's flank style must equal the hallway's boundary where the aperture's sides coincide with the
+  hallway's sides (FloorPlan refuses two styles on one span) -- S2 profiles carry ONE style for hallway + joints.
 ## Next action
-1. Owner review of S0 → authorize S1 (hand-written two-piece draft + emitter + renumbering) or not.
+1. Owner S1 review gate -> commit (feat(gen) S1 + docs, two commits) or corrections. S2 is NOT started.
 2. Commons master plan (P52) — paper only. 3. Triage melee-through-walls (unverified audit claim).
 **Deferred (ROADMAP, do NOT build in M2 slices):** P46 loot on summary · P49 death/resync animation ·
 P45 descent preloading · P47/P48 co-op revival + carry-through · P38 party/loadout/route · P51 skirts.
@@ -89,7 +89,7 @@ P45 descent preloading · P47/P48 co-op revival + carry-through · P38 party/loa
   A Bash `cd` into a subfolder breaks the `scripts/guard.py` pre-edit hook -- cd back to root.
 
 ## Commands
-- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1177, ~2 min,
+- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1217, ~2 min,
   35 orphans is the baseline). Headless sim CI: `-gselect=test_sim_world
   -gunit_test_name=test_ticks_1000_times_headless`. Boot: `--headless --path . --quit-after 300`.
 - Guard: `python -I scripts/guard.py --scan` (2 pre-existing `knight` warnings). Goldens:

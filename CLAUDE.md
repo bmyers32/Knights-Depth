@@ -54,7 +54,7 @@ knight_depths/
 │   ├── main/          # GameMain scene root: title → hubs → expedition → Commons (not an autoload)
 │   ├── hub/           # HubSpace: Home, Commons, Ready Room — own small SimWorld, never an expedition
 │   ├── actors/        # Node scenes: envoy, enemies — presentation + input → Commands
-│   ├── content/       # weapons/, enemies/, status/ as .tres resources
+│   ├── content/       # weapons/, enemies/, status/, floors/pieces/ (FloorPiece bodies, ADR-001) as .tres
 │   ├── gen/           # seeded depth/floor generation — headless-runnable
 │   ├── net/           # M3+: sync, prediction, server entry point
 │   └── ui/            # HUD, menus
