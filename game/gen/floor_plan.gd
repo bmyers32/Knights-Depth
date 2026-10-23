@@ -509,34 +509,58 @@ func _snap(value: float) -> float:
 ## `body_radii` maps an enemy key to its authored combat radius. Supplied by the producer, so
 ## this class never reaches for the ContentDB autoload; omit it and the clearance guard simply
 ## does not run, which keeps every hand-built test fixture working unchanged.
+##
+## REPORTS, exactly as before: every violation is a push_error. The rules themselves live in
+## violations() so a producer that must DECIDE on a plan (a generator rejecting a candidate,
+## ADR-001 S0) reads the same findings instead of a second copy of the rules that could drift.
 func validate(body_radii: Dictionary = {}) -> void:
-	_reject_unnamed_connection_patches()
-	_reject_bypassable_gates()
-	_reject_impassable_apertures(body_radii)
-	_reject_obstructed_controls()
-	_reject_high_durability_props()
-	_reject_props_off_floor()
-	_reject_unusable_receivers()
+	for violation: Dictionary in violations(body_radii):
+		push_error(violation["message"])
+
+
+## THE SAME RULES AS validate(), RETURNED. One record per finding:
+##   rule      StringName naming the guard (stable; tests and generators key on it)
+##   message   the sentence validate() reports -- the one human-readable truth, not a second one
+##   refs      {layer: id, ...} the records involved, by the plan's own numeric ids
+## Empty means the plan passed every structural guard. Detection only, never repair.
+func violations(body_radii: Dictionary = {}) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	_check_unnamed_connection_patches(out)
+	_check_bypassable_gates(out)
+	_check_impassable_apertures(body_radii, out)
+	_check_obstructed_controls(out)
+	_check_high_durability_props(out)
+	_check_props_off_floor(out)
+	_check_unusable_receivers(out)
+	return out
+
+
+static func _violation(rule: StringName, message: String, refs: Dictionary) -> Dictionary:
+	return {"rule": rule, "message": message, "refs": refs}
 
 
 ## A connection that does not name the patches it joins cannot be checked by anything above,
 ## and presentation reads the same field to place its corridor slab at the right elevation --
 ## an unnamed connection silently draws at y=0, so a ramp's corridor floats or sinks.
-func _reject_unnamed_connection_patches() -> void:
+func _check_unnamed_connection_patches(out: Array[Dictionary]) -> void:
 	for connection in connections:
 		for patch_id: int in [connection.patch_ids.x, connection.patch_ids.y]:
 			if patch_by_id(patch_id) == null:
-				push_error(("FloorPlan: connection %d names patch %d, which does not exist. A connection must "
+				out.append(_violation(&"unnamed_connection_patch",
+					("FloorPlan: connection %d names patch %d, which does not exist. A connection must "
 					+ "declare the two patches it joins: every structural check above reads that field, and so "
-					+ "does the corridor's elevation.") % [connection.connection_id, patch_id])
+					+ "does the corridor's elevation.") % [connection.connection_id, patch_id],
+					{"connection": connection.connection_id, "patch": patch_id}))
 				break
 		if patch_by_id(connection.patch_ids.x) == null or patch_by_id(connection.patch_ids.y) == null:
 			continue
 		for patch_id: int in [connection.patch_ids.x, connection.patch_ids.y]:
 			if connection.aperture.intersection(patch_by_id(patch_id).rect).get_area() <= 0.0:
-				push_error(("FloorPlan: aperture %d only abuts patch %d rather than overlapping it. A zero-area "
+				out.append(_violation(&"abutting_aperture",
+					("FloorPlan: aperture %d only abuts patch %d rather than overlapping it. A zero-area "
 					+ "junction makes the threshold a discontinuity the clamp cannot reason about.")
-					% [connection.connection_id, patch_id])
+					% [connection.connection_id, patch_id],
+					{"connection": connection.connection_id, "patch": patch_id}))
 
 
 ## THE CLOSED-GATE INTEGRITY LAW (added 2026-09-02, after Floor 2's human replay).
@@ -561,7 +585,7 @@ func _reject_unnamed_connection_patches() -> void:
 ##
 ## APPLIES TO EVERY CLOSABLE CONNECTION, not merely those that start shut: a one-way commitment
 ## starts open and is blocked later, and a commitment that seals nothing is the same defect.
-func _reject_bypassable_gates() -> void:
+func _check_bypassable_gates(out: Array[Dictionary]) -> void:
 	for connection in connections:
 		if not _is_closable(connection.connection_id):
 			continue
@@ -571,11 +595,13 @@ func _reject_bypassable_gates() -> void:
 			continue  # already reported above
 		if not _touches(a.rect, b.rect):
 			continue
-		push_error(("FloorPlan: connection %d can be closed, but patches %d and %d touch directly at %s -- "
+		out.append(_violation(&"bypassable_gate",
+			("FloorPlan: connection %d can be closed, but patches %d and %d touch directly at %s -- "
 			+ "so the walkable union spans their seam whether the gate is open or shut and the gate separates "
 			+ "nothing. Patches joined by a closable connection must be DISJOINT, with the aperture as the only "
 			+ "thing bridging them.") % [connection.connection_id, a.patch_id, b.patch_id,
-			str(a.rect.intersection(b.rect)) if a.rect.intersects(b.rect) else "their shared edge"])
+			str(a.rect.intersection(b.rect)) if a.rect.intersects(b.rect) else "their shared edge"],
+			{"connection": connection.connection_id, "patch": a.patch_id, "other_patch": b.patch_id}))
 
 
 ## Can this connection ever be shut? Either it starts that way, or some authored effect blocks it.
@@ -625,7 +651,7 @@ static func _touches(a: Rect2, b: Rect2) -> bool:
 ##
 ## THE FIX IS THE FLOOR'S, NOT THE CONTENT'S. This never suggests shrinking an actor: a doorway
 ## too small for a shipped body is an authoring error in the doorway.
-func _reject_impassable_apertures(body_radii: Dictionary) -> void:
+func _check_impassable_apertures(body_radii: Dictionary, out: Array[Dictionary]) -> void:
 	if body_radii.is_empty():
 		return
 	var widest: float = 0.0
@@ -652,11 +678,13 @@ func _reject_impassable_apertures(body_radii: Dictionary) -> void:
 			continue
 		var across: float = connection.aperture.size.y if apart_on_x else connection.aperture.size.x
 		if across - widest * 2.0 <= 0.0:
-			push_error(("FloorPlan: connection %d is %.1f wide across travel, but the widest body authored "
+			out.append(_violation(&"impassable_aperture",
+				("FloorPlan: connection %d is %.1f wide across travel, but the widest body authored "
 				+ "on this floor (%s, radius %.2f) needs more than %.1f. That opening is visible, walkable "
 				+ "for the Envoy, and impassable for an actor the floor itself places. Widen the aperture; "
 				+ "never shrink the actor.")
-				% [connection.connection_id, across, widest_key, widest, widest * 2.0])
+				% [connection.connection_id, across, widest_key, widest, widest * 2.0],
+				{"connection": connection.connection_id}))
 
 
 ## A CONTROL MUST NOT SIT UNDER PERMANENT GEOMETRY (ruled 2026-09-04).
@@ -670,22 +698,26 @@ func _reject_impassable_apertures(body_radii: Dictionary) -> void:
 ## Blocking destructibles are deliberately EXEMPT: hiding a control behind something the player
 ## can clear is the intended vocabulary, and refusing it here would forbid the good case along
 ## with the bad one.
-func _reject_obstructed_controls() -> void:
+func _check_obstructed_controls(out: Array[Dictionary]) -> void:
 	for trigger in triggers:
 		if not trigger.renders_as_plate or trigger.region.get_area() <= 0.0:
 			continue
 		for obstacle in obstacles:
 			if obstacle.rect.intersection(trigger.region).get_area() > 0.0:
-				push_error(("FloorPlan: trigger %d is drawn as a plate at %s but overlaps permanent obstacle %d "
+				out.append(_violation(&"obstructed_plate",
+					("FloorPlan: trigger %d is drawn as a plate at %s but overlaps permanent obstacle %d "
 					+ "at %s. A control is either plainly visible or hidden behind something REMOVABLE -- "
 					+ "clipping under solid geometry reads as an authoring accident, because it is one.")
-					% [trigger.trigger_id, str(trigger.region), obstacle.obstacle_id, str(obstacle.rect)])
+					% [trigger.trigger_id, str(trigger.region), obstacle.obstacle_id, str(obstacle.rect)],
+					{"trigger": trigger.trigger_id, "obstacle": obstacle.obstacle_id}))
 	for hit_switch in hit_switches:
 		for obstacle in obstacles:
 			if WalkableBounds.contains(obstacle.rect, hit_switch.position.x, hit_switch.position.z):
-				push_error(("FloorPlan: hit-switch %d stands inside permanent obstacle %d. Concealment must be "
+				out.append(_violation(&"obstructed_switch",
+					("FloorPlan: hit-switch %d stands inside permanent obstacle %d. Concealment must be "
 					+ "removable; a switch buried in a column is unhittable, not hidden.")
-					% [hit_switch.switch_id, obstacle.obstacle_id])
+					% [hit_switch.switch_id, obstacle.obstacle_id],
+					{"switch": hit_switch.switch_id, "obstacle": obstacle.obstacle_id}))
 
 
 ## AN AUTHORED GAMEPLAY PROP STANDS ON AUTHORED FLOOR (ruled 2026-09-08).
@@ -701,27 +733,33 @@ func _reject_obstructed_controls() -> void:
 ## floor's route blockers lives in exactly that position. Presentation-only decoration is not a
 ## BreakablePlan and is therefore out of scope by construction -- this rule is about objects the
 ## player can target and destroy.
-func _reject_props_off_floor() -> void:
+func _check_props_off_floor(out: Array[Dictionary]) -> void:
 	for breakable in breakables:
 		var x: float = breakable.position.x
 		var z: float = breakable.position.z
 		if not _on_floor(x, z):
-			push_error(("FloorPlan: breakable %d stands at (%.1f, %.1f), which is on no patch and in no "
+			out.append(_violation(&"prop_off_floor",
+				("FloorPlan: breakable %d stands at (%.1f, %.1f), which is on no patch and in no "
 				+ "aperture. A prop the player can target must stand on ground the player can reach -- "
 				+ "this is what a room moving out from under its own contents looks like.")
-				% [breakable.breakable_id, x, z])
+				% [breakable.breakable_id, x, z],
+				{"breakable": breakable.breakable_id}))
 	# A KEY IS HELD TO THE SAME LAW, and more strictly: it must be liftable, so it may not stand
 	# inside permanent geometry either. Progression that needs it would otherwise be unwinnable.
 	for carriable in carriables:
 		var x: float = carriable.position.x
 		var z: float = carriable.position.z
 		if not _on_floor(x, z):
-			push_error("FloorPlan: carriable %d stands at (%.1f, %.1f), on no patch and in no aperture."
-				% [carriable.carriable_id, x, z])
+			out.append(_violation(&"carriable_off_floor",
+				"FloorPlan: carriable %d stands at (%.1f, %.1f), on no patch and in no aperture."
+				% [carriable.carriable_id, x, z],
+				{"carriable": carriable.carriable_id}))
 		for obstacle in obstacles:
 			if WalkableBounds.contains(obstacle.rect, x, z):
-				push_error("FloorPlan: carriable %d stands inside permanent obstacle %d and can never be lifted."
-					% [carriable.carriable_id, obstacle.obstacle_id])
+				out.append(_violation(&"carriable_in_obstacle",
+					"FloorPlan: carriable %d stands inside permanent obstacle %d and can never be lifted."
+					% [carriable.carriable_id, obstacle.obstacle_id],
+					{"carriable": carriable.carriable_id, "obstacle": obstacle.obstacle_id}))
 
 
 func _on_floor(x: float, z: float) -> bool:
@@ -738,14 +776,18 @@ func _on_floor(x: float, z: float) -> bool:
 ## the Envoy standing in the region, so a zero-area receiver could never be used; and filling is
 ## recorded as the trigger having fired, so a receiver that could fire again would swallow a
 ## second key while its gate was already open -- a key lost for nothing.
-func _reject_unusable_receivers() -> void:
+func _check_unusable_receivers(out: Array[Dictionary]) -> void:
 	for trigger in triggers:
 		if trigger.kind != FloorLayers.TRIGGER_CARRIABLE_INSERTED:
 			continue
 		if trigger.region.get_area() <= 0.0:
-			push_error("FloorPlan: receiver trigger %d has no region to stand in." % trigger.trigger_id)
+			out.append(_violation(&"receiver_without_region",
+				"FloorPlan: receiver trigger %d has no region to stand in." % trigger.trigger_id,
+				{"trigger": trigger.trigger_id}))
 		if not trigger.once:
-			push_error("FloorPlan: receiver trigger %d is not `once`; a receiver accepts exactly one delivery." % trigger.trigger_id)
+			out.append(_violation(&"receiver_not_once",
+				"FloorPlan: receiver trigger %d is not `once`; a receiver accepts exactly one delivery." % trigger.trigger_id,
+				{"trigger": trigger.trigger_id}))
 
 
 ## EVERY ENVIRONMENTAL PROP BREAKS IN ONE HIT (ruled 2026-09-04).
@@ -758,10 +800,12 @@ func _reject_unusable_receivers() -> void:
 ## THE ALTERNATIVE IS EXPLICITNESS, not a bigger number: something the player must NOT be able to
 ## remove is an OBSTACLE, which is unbreakable by construction and says so. A high-HP prop is a
 ## permanent object wearing a destructible's clothes.
-func _reject_high_durability_props() -> void:
+func _check_high_durability_props(out: Array[Dictionary]) -> void:
 	for breakable in breakables:
 		if breakable.durability > 1.0:
-			push_error(("FloorPlan: breakable %d has durability %.1f. Every environmental prop breaks in ONE "
+			out.append(_violation(&"high_durability_prop",
+				("FloorPlan: breakable %d has durability %.1f. Every environmental prop breaks in ONE "
 				+ "hit -- challenge comes from positioning and consequence, not from hit points. If it is "
 				+ "meant to be permanent, author it as an ObstaclePlan, which cannot be broken at all.")
-				% [breakable.breakable_id, breakable.durability])
+				% [breakable.breakable_id, breakable.durability],
+				{"breakable": breakable.breakable_id}))
