@@ -28,6 +28,7 @@ var _title: Label
 var _headline: Label
 var _place: Label
 var _expected: Label
+var _detail: Label
 var _hint: Label
 
 
@@ -56,6 +57,8 @@ func _ready() -> void:
 	_headline = _label(column, depth_font_size, _TEXT_COLOR)
 	_place = _label(column, body_font_size, _TEXT_COLOR)
 	_expected = _label(column, body_font_size, _TEXT_COLOR)
+	_detail = _label(column, hint_font_size, _DIM_COLOR)
+	_detail.visible = false
 	_hint = _label(column, hint_font_size, _DIM_COLOR)
 	_hint.text = "Attack again, Esc, or walk away to close"
 	visible = false
@@ -63,14 +66,18 @@ func _ready() -> void:
 
 ## `preview` is the driver's next_floor_preview(): {depth, place, stratum, families}. Empty means
 ## there is no next floor, and the console says so rather than inventing one.
-func open(preview: Dictionary) -> void:
+## `title` and `detail` let a second reader of a plan (the Ready Room's Floor 1 briefing, M2 Slice 3)
+## use the same panel; the exit console passes neither.
+func open(preview: Dictionary, title: String = "DESCENT", detail: String = "") -> void:
+	_detail.text = detail
+	_detail.visible = detail != ""
 	if preview.is_empty():
 		_title.text = "WAY OUT"
 		_headline.text = EXTRACTION_HEADLINE
 		_place.text = EXTRACTION_BODY
 		_expected.visible = false
 	else:
-		_title.text = "DESCENT"
+		_title.text = title
 		_headline.text = "Depth %d" % int(preview["depth"])
 		var place: String = preview["place"]
 		var stratum: String = preview["stratum"]
@@ -80,6 +87,16 @@ func open(preview: Dictionary) -> void:
 			names.append(String(family).capitalize())
 		_expected.text = "Expected: " + (", ".join(names) if not names.is_empty() else "no hostiles")
 		_expected.visible = true
+	visible = true
+
+
+## A console that describes a PLACE rather than a floor ahead (the Commons notice, M2 Slice 3).
+func open_notice(title: String, headline: String, body: String) -> void:
+	_title.text = title
+	_headline.text = headline
+	_place.text = body
+	_expected.visible = false
+	_detail.visible = false
 	visible = true
 
 
@@ -94,7 +111,7 @@ func is_open() -> bool:
 ## Everything the panel currently says, top to bottom -- what a reader of the screen would read.
 func text() -> String:
 	var lines: PackedStringArray = []
-	for label: Label in [_title, _headline, _place, _expected]:
+	for label: Label in [_title, _headline, _place, _expected, _detail]:
 		if label.visible:
 			lines.append(label.text)
 	return "\n".join(lines)

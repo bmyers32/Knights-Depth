@@ -1,0 +1,262 @@
+[gd_resource type="Resource" script_class="AuthoredLayout" format=3]
+
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="1_patch"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="2_obst"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="3_layout"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="4_trig"]
+
+[sub_resource type="Resource" id="Resource_p_arrival"]
+script = ExtResource("1_patch")
+key = &"P_ARRIVAL"
+patch_id = 0
+rect = Rect2(-8, 2, 16, 4)
+surface = &"arena"
+boundary_east = &"ledge"
+boundary_west = &"ledge"
+
+[sub_resource type="Resource" id="Resource_p_neck"]
+script = ExtResource("1_patch")
+key = &"P_NECK"
+patch_id = 1
+rect = Rect2(-4, -2, 8, 4)
+surface = &"arena"
+
+[sub_resource type="Resource" id="Resource_p_step_w"]
+script = ExtResource("1_patch")
+key = &"P_STEP_W"
+patch_id = 2
+rect = Rect2(-13, -2, 9, 4)
+elevation = 0.2
+surface = &"ramp"
+boundary_north = &"ledge"
+boundary_west = &"ledge"
+
+[sub_resource type="Resource" id="Resource_p_step_e"]
+script = ExtResource("1_patch")
+key = &"P_STEP_E"
+patch_id = 3
+rect = Rect2(4, -2, 9, 4)
+elevation = 0.2
+surface = &"ramp"
+boundary_north = &"ledge"
+boundary_east = &"ledge"
+
+[sub_resource type="Resource" id="Resource_p_landing"]
+script = ExtResource("1_patch")
+key = &"P_LANDING"
+patch_id = 4
+rect = Rect2(-13, -6, 26, 4)
+elevation = 0.4
+boundary_east = &"ledge"
+boundary_west = &"ledge"
+
+[sub_resource type="Resource" id="Resource_p_floor"]
+script = ExtResource("1_patch")
+key = &"P_FLOOR"
+patch_id = 5
+rect = Rect2(-14, -18, 30, 12)
+elevation = 0.4
+boundary_north = &"ledge"
+
+[sub_resource type="Resource" id="Resource_p_stall"]
+script = ExtResource("1_patch")
+key = &"P_STALL"
+patch_id = 6
+rect = Rect2(-22, -18, 8, 8)
+elevation = 0.4
+surface = &"ramp"
+
+[sub_resource type="Resource" id="Resource_p_floor_west"]
+script = ExtResource("1_patch")
+key = &"P_FLOOR_WEST"
+patch_id = 7
+rect = Rect2(-22, -10, 8, 4)
+elevation = 0.4
+boundary_north = &"ledge"
+
+[sub_resource type="Resource" id="Resource_p_service"]
+script = ExtResource("1_patch")
+key = &"P_SERVICE"
+patch_id = 8
+rect = Rect2(16, -18, 6, 12)
+elevation = 0.4
+surface = &"high"
+boundary_north = &"ledge"
+
+[sub_resource type="Resource" id="Resource_p_gate"]
+script = ExtResource("1_patch")
+key = &"P_GATE"
+patch_id = 9
+rect = Rect2(-6, -28, 12, 10)
+elevation = 0.4
+surface = &"arena"
+
+[sub_resource type="Resource" id="Resource_o_side_w"]
+script = ExtResource("2_obst")
+key = &"O_SIDE_W"
+obstacle_id = 0
+rect = Rect2(-22, -6, 9, 12)
+height = 0.9
+
+[sub_resource type="Resource" id="Resource_o_side_w_inner"]
+script = ExtResource("2_obst")
+key = &"O_SIDE_W_INNER"
+obstacle_id = 1
+rect = Rect2(-13, 2, 5, 4)
+height = 0.9
+
+[sub_resource type="Resource" id="Resource_o_side_e"]
+script = ExtResource("2_obst")
+key = &"O_SIDE_E"
+obstacle_id = 2
+rect = Rect2(13, -6, 9, 12)
+height = 0.9
+
+[sub_resource type="Resource" id="Resource_o_side_e_inner"]
+script = ExtResource("2_obst")
+key = &"O_SIDE_E_INNER"
+obstacle_id = 3
+rect = Rect2(8, 2, 5, 4)
+height = 0.9
+
+[sub_resource type="Resource" id="Resource_o_console_screens"]
+script = ExtResource("2_obst")
+key = &"O_CONSOLE_SCREENS"
+obstacle_id = 4
+rect = Rect2(-4, -6, 8, 1)
+height = 2.4
+
+[sub_resource type="Resource" id="Resource_o_console_core"]
+script = ExtResource("2_obst")
+key = &"O_CONSOLE_CORE"
+obstacle_id = 5
+rect = Rect2(-3, -5, 6, 1.8)
+height = 1.6
+
+[sub_resource type="Resource" id="Resource_o_console_desk"]
+script = ExtResource("2_obst")
+key = &"O_CONSOLE_DESK"
+obstacle_id = 6
+rect = Rect2(-2.5, -3.2, 5, 1.2)
+height = 1
+
+[sub_resource type="Resource" id="Resource_o_frame_w"]
+script = ExtResource("2_obst")
+key = &"O_FRAME_W"
+obstacle_id = 7
+rect = Rect2(-6, -19.5, 1.5, 1.5)
+height = 3
+
+[sub_resource type="Resource" id="Resource_o_frame_e"]
+script = ExtResource("2_obst")
+key = &"O_FRAME_E"
+obstacle_id = 8
+rect = Rect2(4.5, -19.5, 1.5, 1.5)
+height = 3
+
+[sub_resource type="Resource" id="Resource_o_gate_machine_w"]
+script = ExtResource("2_obst")
+key = &"O_GATE_MACHINE_W"
+obstacle_id = 9
+rect = Rect2(-11, -18, 4, 1.5)
+height = 3.5
+
+[sub_resource type="Resource" id="Resource_o_gate_machine_e"]
+script = ExtResource("2_obst")
+key = &"O_GATE_MACHINE_E"
+obstacle_id = 10
+rect = Rect2(7, -18, 4, 1.5)
+height = 3.5
+
+[sub_resource type="Resource" id="Resource_o_stall_shelf_w"]
+script = ExtResource("2_obst")
+key = &"O_STALL_SHELF_W"
+obstacle_id = 11
+rect = Rect2(-22, -17, 0.8, 4)
+height = 1.8
+
+[sub_resource type="Resource" id="Resource_o_stall_shelf_n"]
+script = ExtResource("2_obst")
+key = &"O_STALL_SHELF_N"
+obstacle_id = 12
+rect = Rect2(-21, -18, 2.5, 0.8)
+height = 1.8
+
+[sub_resource type="Resource" id="Resource_o_counter_s"]
+script = ExtResource("2_obst")
+key = &"O_COUNTER_S"
+obstacle_id = 13
+rect = Rect2(-22, -12.5, 5.2, 0.8)
+height = 1
+
+[sub_resource type="Resource" id="Resource_o_stall_post"]
+script = ExtResource("2_obst")
+key = &"O_STALL_POST"
+obstacle_id = 14
+rect = Rect2(-16.8, -12.5, 0.8, 0.8)
+height = 2.6
+
+[sub_resource type="Resource" id="Resource_o_counter_e"]
+script = ExtResource("2_obst")
+key = &"O_COUNTER_E"
+obstacle_id = 15
+rect = Rect2(-16.8, -15.5, 0.8, 3)
+height = 1
+
+[sub_resource type="Resource" id="Resource_o_rack_n"]
+script = ExtResource("2_obst")
+key = &"O_RACK_N"
+obstacle_id = 16
+rect = Rect2(21.2, -17.5, 0.8, 2.5)
+height = 2.2
+
+[sub_resource type="Resource" id="Resource_o_rack_s"]
+script = ExtResource("2_obst")
+key = &"O_RACK_S"
+obstacle_id = 17
+rect = Rect2(21.2, -14.5, 0.8, 2.5)
+height = 2.2
+
+[sub_resource type="Resource" id="Resource_o_armory_bench"]
+script = ExtResource("2_obst")
+key = &"O_ARMORY_BENCH"
+obstacle_id = 18
+rect = Rect2(17, -18, 3, 0.8)
+height = 0.8
+
+[sub_resource type="Resource" id="Resource_o_crafter"]
+script = ExtResource("2_obst")
+key = &"O_CRAFTER"
+obstacle_id = 19
+rect = Rect2(19.5, -10.5, 2.5, 2.5)
+height = 1.8
+
+[sub_resource type="Resource" id="Resource_o_craft_plinth"]
+script = ExtResource("2_obst")
+key = &"O_CRAFT_PLINTH"
+obstacle_id = 20
+rect = Rect2(17.5, -10, 1.5, 1.5)
+height = 0.5
+
+[sub_resource type="Resource" id="Resource_t_deploy"]
+script = ExtResource("4_trig")
+key = &"T_DEPLOY"
+trigger_id = 0
+kind = &"group_occupancy"
+region = Rect2(-2, -25, 4, 4)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"complete_floor",
+"target_id": -1
+}])
+
+[resource]
+script = ExtResource("3_layout")
+layout_id = &"ready_room"
+place_label = "Ready Room"
+patches = Array[ExtResource("1_patch")]([SubResource("Resource_p_arrival"), SubResource("Resource_p_neck"), SubResource("Resource_p_step_w"), SubResource("Resource_p_step_e"), SubResource("Resource_p_landing"), SubResource("Resource_p_floor"), SubResource("Resource_p_stall"), SubResource("Resource_p_floor_west"), SubResource("Resource_p_service"), SubResource("Resource_p_gate")])
+triggers = Array[ExtResource("4_trig")]([SubResource("Resource_t_deploy")])
+obstacles = Array[ExtResource("2_obst")]([SubResource("Resource_o_side_w"), SubResource("Resource_o_side_w_inner"), SubResource("Resource_o_side_e"), SubResource("Resource_o_side_e_inner"), SubResource("Resource_o_console_screens"), SubResource("Resource_o_console_core"), SubResource("Resource_o_console_desk"), SubResource("Resource_o_frame_w"), SubResource("Resource_o_frame_e"), SubResource("Resource_o_gate_machine_w"), SubResource("Resource_o_gate_machine_e"), SubResource("Resource_o_stall_shelf_w"), SubResource("Resource_o_stall_shelf_n"), SubResource("Resource_o_counter_s"), SubResource("Resource_o_stall_post"), SubResource("Resource_o_counter_e"), SubResource("Resource_o_rack_n"), SubResource("Resource_o_rack_s"), SubResource("Resource_o_armory_bench"), SubResource("Resource_o_crafter"), SubResource("Resource_o_craft_plinth")])
+entry_point = Vector3(0, 0, 4)
+end_marker = Vector3(0, 0, -23)
+exit_console = Vector3(0, 0, -1.3)

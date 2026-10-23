@@ -58,6 +58,20 @@ const PROJECTILE_TRACER_FALLBACK_COLOR: Color = Color(0.55, 0.85, 1.0)
 ## a floor is the last, is the Expedition's to say, never this node's. A one-entry itinerary is
 ## how a test (or a human) boots a single floor.
 @export var itinerary: Array[int] = [1, 2, 3, 4]
+## LAUNCH CONTEXT, stated by whoever builds this node rather than inferred from the scene tree (M2
+## Slice 3). true = the arena IS the program: a test, F6, a mechanic-iteration session -- R reloads
+## the scene and the summary says so. false = the game loop (GameMain) deployed it: R is inert, the
+## summary offers the way home, and leaving is GameMain's to perform when this node asks.
+@export var standalone: bool = true
+## THE FLOOR 1 PROMISE (M2 Slice 3). When the Ready Room briefed the party on a plan, that plan --
+## the same object -- is what begin_expedition installs, exactly as a descent installs the plan its
+## exit previewed. Null means "generate it", which is what every direct launch does.
+var prepared_first_plan: FloorPlan = null
+## DEPLOYED BY TRANSMISSION (human review 2026-10-22): the Ready Room pad played the departure, so
+## Floor 1 is arrived on exactly as a descent arrives on every later floor -- the arrival light on
+## the Envoy, the screen clearing from dark, the arrival card. Presentation only: the expedition
+## starts on Floor 1, EXPLORING, as it always does; nothing was completed to get here.
+var arrives_by_transmission: bool = false
 ## How long a descent between floors lasts, in sim-rate ticks -- run configuration beside the
 ## itinerary, handed to the Expedition, which owns the countdown. PROVISIONAL: 45 (1.5 s at
 ## 30 Hz) awaits the expedition-transition playtest; no calibration date yet.
@@ -189,15 +203,29 @@ var _final_blow: String = ""
 var _extracting: bool = false
 
 
+## The player chose to go home from the run summary. Signals up: GameMain performs the return.
+signal return_to_commons_requested
+
+const RETURN_TO_COMMONS: String = "Return to Commons"
+
+
 func _ready() -> void:
+	_run_summary.action_requested.connect(func() -> void: return_to_commons_requested.emit())
 	begin_expedition()
+
+
+## Stops this arena for good -- no tick, no input, no presentation step -- ahead of GameMain removing
+## it. The outcome is already final; this only guarantees nothing runs while the screen fades.
+func freeze() -> void:
+	set_physics_process(false)
+	set_process(false)
 
 
 ## EXPEDITION ENTRY -- distinct from floor loading on purpose (ROADMAP P38). This starts a fresh
 ## run: its itinerary, its seed, and the Envoy's starting state. _load_floor() only ever
 ## installs "the expedition's current floor" and is what a descent reuses; nothing in here
-## runs again mid-run. Booting the scene is today's only caller, and a restart reaches it by
-## reloading the scene -- a title screen, ready room or Gate calls this same function later.
+## runs again mid-run. It runs once per Arena instance, from _ready: GameMain deploys a fresh
+## instance from the Ready Room, and a standalone launch reaches it again only by reloading the scene.
 func begin_expedition() -> void:
 	expedition = Expedition.new(run_seed, itinerary, descent_ticks)
 	sim.seed_combat_rng(expedition.run_seed)
@@ -257,7 +285,16 @@ func begin_expedition() -> void:
 	sim.register_shield(envoy.actor_id, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance, shield.bump_padding, shield.bump_distance, shield.bump_slide_ticks, shield.bump_cooldown_ticks, shield.parry_window_ticks, shield.parry_exposure_ticks, shield.parry_damage_multiplier)
 
 	# LAST: every RUN-scoped registration above must exist before a floor is loaded into it.
-	_load_floor(DepthGenerator.generate(expedition.run_seed, expedition.current_depth()))
+	var first_plan: FloorPlan = prepared_first_plan
+	if first_plan == null:
+		first_plan = DepthGenerator.generate(expedition.run_seed, expedition.current_depth())
+	assert(first_plan.run_seed == expedition.run_seed, "a prepared plan for seed %d handed to a run with seed %d" % [first_plan.run_seed, expedition.run_seed])
+	_load_floor(first_plan)
+	if arrives_by_transmission:
+		# Picks up where the departure left the screen: fully dark, as a descent's last tick leaves it.
+		_descent_overlay.begin()
+		_descent_overlay.show_progress(1.0)
+		_present_arrival(first_plan)
 
 
 ## Resolves tracer speed/colour for any GunStats in the given ids. Colour comes from the
@@ -380,19 +417,7 @@ func _load_floor(plan: FloorPlan) -> FloorPlan:
 func next_floor_preview() -> Dictionary:
 	if _next_plan == null:
 		return {}
-	var counts: Dictionary = {}
-	for spawn: Dictionary in _next_plan.all_spawns():
-		var stats: Resource = ContentDB.get_resource(&"enemy", spawn["enemy_key"])
-		var family: StringName = stats.family if stats != null else StringName(spawn["enemy_key"])
-		counts[family] = int(counts.get(family, 0)) + 1
-	var families: Array = counts.keys()
-	# Ties broken by name so the line never depends on Dictionary order.
-	families.sort_custom(func(a: StringName, b: StringName) -> bool:
-		return counts[a] > counts[b] or (counts[a] == counts[b] and String(a) < String(b)))
-	return {
-		"depth": _next_plan.depth, "place": _place_name(_next_plan),
-		"stratum": String(_next_plan.stratum_id).capitalize(), "families": families,
-	}
+	return FloorPreview.of(_next_plan)
 
 
 ## Unpacks the four floor LAYERS into the sim. The driver does the unpacking so sim/ never
@@ -451,7 +476,7 @@ var _seed_provenance: String = ""
 
 ## A place with a name of its own is shown by it; every other floor is known by its stratum.
 func _place_name(plan: FloorPlan) -> String:
-	return plan.place_label if plan.place_label != "" else String(plan.stratum_id).capitalize()
+	return FloorPreview.place_name(plan)
 
 
 ## Read from the sim every step and never stored: the sim's health is the only health.
@@ -487,7 +512,10 @@ func _physics_process(delta: float) -> void:
 	# instrumentation and not behind a debug_* export, because an export defaulting to off would
 	# be unavailable in exactly the gate-state build a playtest runs. Combat behaviour is
 	# untouched.
-	if Input.is_action_just_pressed("restart"):
+	#
+	# STANDALONE ONLY (M2 Slice 3): under the game loop a reload would restart the whole program
+	# into the title, and a run is left only through its summary.
+	if _restart_requested():
 		get_tree().reload_current_scene()
 		return
 	# Once dead, the Envoy sends no further Commands (movement/attack/block/switch
@@ -503,6 +531,10 @@ func _physics_process(delta: float) -> void:
 		_process_debug_burrow_trigger()
 		commands = envoy.build_commands(sim.tick_count)
 	_step(commands, delta)
+
+
+func _restart_requested() -> bool:
+	return standalone and Input.is_action_just_pressed("restart")
 
 
 ## One driver step: tick the sim, mirror it, report its events, then resolve any floor
@@ -672,13 +704,15 @@ func _finalize_run() -> void:
 	for projectile_id: int in _projectile_tracers.keys():
 		_despawn_tracer(projectile_id)
 	print(damage_ledger.summary())
+	# Standalone keeps the R hint; the game loop offers the way home instead.
+	var action: String = "" if standalone else RETURN_TO_COMMONS
 	if expedition.is_complete:
 		_transmission.begin(_floor_builder.exit_pad_centre())
 		_extracting = true
-		_run_summary.show_outcome(RunSummaryOverlay.OUTCOME_EXTRACTION, _summary_rows())
+		_run_summary.show_outcome(RunSummaryOverlay.OUTCOME_EXTRACTION, _summary_rows(), action)
 	else:
 		_transmission.reset()
-		_run_summary.show_outcome(RunSummaryOverlay.OUTCOME_RECALL, _summary_rows())
+		_run_summary.show_outcome(RunSummaryOverlay.OUTCOME_RECALL, _summary_rows(), action)
 
 
 ## The facts, from run state and the damage ledger only. No loot until loot exists (ROADMAP): its
@@ -742,7 +776,11 @@ func _advance_descent() -> void:
 		return
 	# DESCENT ENDED: same SimWorld, same Envoy. load_floor keeps what belongs to the run and
 	# drops what belonged to the floor (SimWorld.STATE_SCOPES) -- nothing is copied here.
-	var plan: FloorPlan = _load_floor(_next_plan)
+	_present_arrival(_load_floor(_next_plan))
+
+
+## The arrival picture on a floor that is already live: shared by every descent and by deployment.
+func _present_arrival(plan: FloorPlan) -> void:
 	_transmission.arrive(_grounded(plan.entry_point))
 	_descent_overlay.arrive()
 	_arrival_card.show_arrival(plan.depth, _place_name(plan))

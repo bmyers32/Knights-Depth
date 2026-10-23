@@ -1,0 +1,108 @@
+[gd_resource type="Resource" script_class="AuthoredLayout" format=3]
+
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="1_patch"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="2_obst"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="3_layout"]
+
+[sub_resource type="Resource" id="Resource_p_plaza"]
+script = ExtResource("1_patch")
+key = &"P_PLAZA"
+patch_id = 0
+rect = Rect2(-14, -32, 28, 26)
+
+[sub_resource type="Resource" id="Resource_p_arrival"]
+script = ExtResource("1_patch")
+key = &"P_ARRIVAL"
+patch_id = 1
+rect = Rect2(-6, -7, 12, 7)
+
+[sub_resource type="Resource" id="Resource_p_west_mouth"]
+script = ExtResource("1_patch")
+key = &"P_WEST_MOUTH"
+patch_id = 2
+rect = Rect2(-17, -22, 4, 6)
+
+[sub_resource type="Resource" id="Resource_p_west_bay"]
+script = ExtResource("1_patch")
+key = &"P_WEST_BAY"
+patch_id = 3
+rect = Rect2(-30, -28, 14, 18)
+surface = &"high"
+
+[sub_resource type="Resource" id="Resource_p_east_mouth"]
+script = ExtResource("1_patch")
+key = &"P_EAST_MOUTH"
+patch_id = 4
+rect = Rect2(13, -22, 4, 6)
+
+[sub_resource type="Resource" id="Resource_p_east_bay"]
+script = ExtResource("1_patch")
+key = &"P_EAST_BAY"
+patch_id = 5
+rect = Rect2(16, -28, 14, 18)
+surface = &"ramp"
+
+[sub_resource type="Resource" id="Resource_p_north_mouth"]
+script = ExtResource("1_patch")
+key = &"P_NORTH_MOUTH"
+patch_id = 6
+rect = Rect2(-3, -35, 6, 4)
+
+[sub_resource type="Resource" id="Resource_p_north_bay"]
+script = ExtResource("1_patch")
+key = &"P_NORTH_BAY"
+patch_id = 7
+rect = Rect2(-9, -44, 18, 10)
+surface = &"arena"
+
+[sub_resource type="Resource" id="Resource_o_plaza_nw"]
+script = ExtResource("2_obst")
+key = &"O_PLAZA_COLUMN_NW"
+obstacle_id = 0
+rect = Rect2(-10, -28, 2, 2)
+
+[sub_resource type="Resource" id="Resource_o_plaza_ne"]
+script = ExtResource("2_obst")
+key = &"O_PLAZA_COLUMN_NE"
+obstacle_id = 1
+rect = Rect2(8, -28, 2, 2)
+
+[sub_resource type="Resource" id="Resource_o_plaza_sw"]
+script = ExtResource("2_obst")
+key = &"O_PLAZA_COLUMN_SW"
+obstacle_id = 2
+rect = Rect2(-10, -14, 2, 2)
+
+[sub_resource type="Resource" id="Resource_o_plaza_se"]
+script = ExtResource("2_obst")
+key = &"O_PLAZA_COLUMN_SE"
+obstacle_id = 3
+rect = Rect2(8, -14, 2, 2)
+
+[sub_resource type="Resource" id="Resource_o_monument"]
+script = ExtResource("2_obst")
+key = &"O_PLAZA_MONUMENT"
+obstacle_id = 4
+rect = Rect2(-1.5, -22.5, 3, 3)
+
+[sub_resource type="Resource" id="Resource_o_north_w"]
+script = ExtResource("2_obst")
+key = &"O_NORTH_COLUMN_W"
+obstacle_id = 5
+rect = Rect2(-6, -41, 2, 2)
+
+[sub_resource type="Resource" id="Resource_o_north_e"]
+script = ExtResource("2_obst")
+key = &"O_NORTH_COLUMN_E"
+obstacle_id = 6
+rect = Rect2(4, -41, 2, 2)
+
+[resource]
+script = ExtResource("3_layout")
+layout_id = &"commons"
+place_label = "The Commons"
+patches = Array[ExtResource("1_patch")]([SubResource("Resource_p_plaza"), SubResource("Resource_p_arrival"), SubResource("Resource_p_west_mouth"), SubResource("Resource_p_west_bay"), SubResource("Resource_p_east_mouth"), SubResource("Resource_p_east_bay"), SubResource("Resource_p_north_mouth"), SubResource("Resource_p_north_bay")])
+obstacles = Array[ExtResource("2_obst")]([SubResource("Resource_o_plaza_nw"), SubResource("Resource_o_plaza_ne"), SubResource("Resource_o_plaza_sw"), SubResource("Resource_o_plaza_se"), SubResource("Resource_o_monument"), SubResource("Resource_o_north_w"), SubResource("Resource_o_north_e")])
+entry_point = Vector3(0, 0, -3)
+end_marker = Vector3(0, 0, -11)
+exit_console = Vector3(0, 0, -11)

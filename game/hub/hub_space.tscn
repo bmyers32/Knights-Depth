@@ -1,0 +1,65 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://game/hub/hub_space.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://game/actors/envoy/envoy.tscn" id="2_envoy"]
+[ext_resource type="Script" path="res://game/arena/floor_builder.gd" id="3_floor_builder"]
+[ext_resource type="Script" path="res://game/arena/follow_camera.gd" id="4_follow_camera"]
+[ext_resource type="PackedScene" path="res://game/ui/exit_console_panel.tscn" id="5_console_panel"]
+[ext_resource type="Script" path="res://game/arena/transmission_field.gd" id="6_transmission"]
+[ext_resource type="PackedScene" path="res://game/ui/descent_overlay.tscn" id="7_descent_overlay"]
+
+[node name="HubSpace" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="FloorBuilder" type="Node3D" parent="."]
+script = ExtResource("3_floor_builder")
+draw_obstacle_faces = false
+solid_raised_ground = true
+
+[node name="Envoy" parent="." instance=ExtResource("2_envoy")]
+
+[node name="FollowCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 9, 9)
+current = true
+script = ExtResource("4_follow_camera")
+offset = Vector3(0, 9, 9)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.8660254, 0.38302222, -0.32139382, 0, 0.64278764, 0.76604444, 0.5, -0.66341394, 0.5566704, 0, 0, 0)
+light_energy = 1.25
+
+[node name="ExitConsolePanel" parent="." instance=ExtResource("5_console_panel")]
+
+[node name="HubPrompt" type="CanvasLayer" parent="."]
+
+[node name="PlaceLabel" type="Label" parent="HubPrompt"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 600.0
+offset_bottom = 44.0
+theme_override_font_sizes/font_size = 22
+text = "--"
+
+[node name="Travel" type="VBoxContainer" parent="HubPrompt"]
+offset_left = 16.0
+offset_top = 50.0
+offset_right = 300.0
+offset_bottom = 160.0
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Hint" type="Label" parent="HubPrompt/Travel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 15
+text = "--"
+
+[node name="Options" type="VBoxContainer" parent="HubPrompt/Travel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="TransmissionField" type="Node3D" parent="."]
+script = ExtResource("6_transmission")
+
+[node name="DescentOverlay" parent="." instance=ExtResource("7_descent_overlay")]

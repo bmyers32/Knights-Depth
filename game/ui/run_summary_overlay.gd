@@ -31,6 +31,10 @@ const _COPY: Dictionary = {
 }
 const RESTART_HINT: String = "Press R to redeploy"
 
+## The way out of the summary under the game loop (M2 Slice 3): the one deliberate action that
+## leaves a finished run. Signals up -- the driver forwards it; nothing here navigates.
+signal action_requested
+
 @export var title_font_size: int = 18
 @export var headline_font_size: int = 40
 @export var body_font_size: int = 20
@@ -53,6 +57,10 @@ var _headline: Label
 var _line: Label
 var _rows_box: VBoxContainer
 var _hint: Label
+var _action: Button
+## The action is offered at most once per summary and fires at most once.
+var _action_text: String = ""
+var _action_spent: bool = false
 var _outcome: StringName = &""
 var _rows: Array = []
 var _intro_elapsed: float = 0.0
@@ -91,13 +99,20 @@ func _ready() -> void:
 	column.add_child(_rows_box)
 	_hint = _label(column, hint_font_size, _DIM_COLOR)
 	_hint.text = RESTART_HINT
+	_action = Button.new()
+	_action.add_theme_font_size_override("font_size", body_font_size)
+	_action.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_action.pressed.connect(_on_action_pressed)
+	_action.visible = false
+	column.add_child(_action)
 	_panel.visible = false
 	visible = false
 
 
 ## Shown ONCE per expedition: a second call is refused, so a late duplicate can never swap the
 ## outcome on screen or rewrite the facts under it.
-func show_outcome(outcome: StringName, rows: Array) -> void:
+## `action_text` empty = the standalone arena's summary (R hint, no button), exactly as before.
+func show_outcome(outcome: StringName, rows: Array, action_text: String = "") -> void:
 	if is_open():
 		return
 	assert(_COPY.has(outcome), "unknown run outcome '%s'" % outcome)
@@ -114,6 +129,11 @@ func show_outcome(outcome: StringName, rows: Array) -> void:
 	for row: Array in _rows:
 		var label: Label = _label(_rows_box, body_font_size, _TEXT_COLOR)
 		label.text = "%s:  %s" % [row[0], row[1]]
+	_action_text = action_text
+	_action_spent = false
+	_action.text = action_text
+	_hint.visible = action_text == ""
+	_action.visible = false
 	_intro_elapsed = 0.0
 	_shade.color.a = 0.0
 	_panel.visible = false
@@ -145,7 +165,7 @@ func text() -> String:
 	var lines: PackedStringArray = [_title.text, _headline.text, _line.text]
 	for row: Array in _rows:
 		lines.append("%s:  %s" % [row[0], row[1]])
-	lines.append(_hint.text)
+	lines.append(_hint.text if _action_text == "" else _action_text)
 	return "\n".join(lines)
 
 
@@ -169,6 +189,30 @@ func _process(delta: float) -> void:
 	_shade.color.a = max_darkness * smoothstep(0.35, 1.0, progress)
 	if progress >= 1.0:
 		_panel.visible = true
+		# NOT BEFORE THE FACTS ARE READABLE: the action appears with the panel, never during the
+		# intro, so no press can leave a run whose result has not been shown yet.
+		if _action_text != "":
+			_action.visible = true
+			_action.grab_focus()
+
+
+## True once the summary offers its action (game loop only).
+func is_action_available() -> bool:
+	return _action_text != "" and _panel.visible and not _action_spent
+
+
+## The one way the action fires: the button (click, or Enter/Space while it holds focus). Refused
+## before the panel is shown and after the first time.
+func request_action() -> void:
+	if not is_action_available():
+		return
+	_action_spent = true
+	_action.disabled = true
+	action_requested.emit()
+
+
+func _on_action_pressed() -> void:
+	request_action()
 
 
 func _label(parent: Control, font_size: int, color: Color) -> Label:

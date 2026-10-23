@@ -140,6 +140,19 @@ var _exit_console_screen: MeshInstance3D = null
 var _exit_console_focused: bool = false
 ## rect -> elevation, so an actor's transform can be lifted onto raised ground.
 var _elevation_rects: Array = []
+## Rects of this floor's obstacles, so their faces can be told apart from the floor's own walls.
+var _obstacle_rects: Array[Rect2] = []
+
+## OBSTACLE SKIRTS. solid_segments() includes every obstacle's four faces, and build_walls draws
+## each as a full-height wall pushed OUTSIDE the obstacle -- so every mass reads as wall-height and
+## looks bigger than the rect that blocks bodies. Expedition floors keep it (their accepted look;
+## a P39 renderer debt). A hub turns it off so a counter can be counter-height. Picture only: the
+## segments still reach the sim unchanged.
+@export var draw_obstacle_faces: bool = true
+## RAISED GROUND AS SOLID MASS. A raised patch is otherwise a thin slab floating at its elevation,
+## so a step of more than one slab's thickness shows a gap of void beneath it. On, the slab reaches
+## down to the ground plane. Picture only, like all elevation here.
+@export var solid_raised_ground: bool = false
 
 
 ## Clears the previous floor and builds this one. Returns one record per spawned actor:
@@ -164,6 +177,7 @@ func build(plan: FloorPlan, first_actor_id: int, gate_barriers: Dictionary = {})
 		_build_hit_switch(hit_switch)
 	for obstacle in plan.obstacles:
 		_build_obstacle(obstacle)
+		_obstacle_rects.append(obstacle.rect)
 	for pad in plan.spike_pads:
 		_build_spike_pad(pad)
 	for carriable in plan.carriables:
@@ -225,6 +239,7 @@ func clear_floor() -> void:
 	_exit_console_screen = null
 	_exit_console_focused = false
 	_elevation_rects.clear()
+	_obstacle_rects.clear()
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -325,9 +340,12 @@ func _build_patch(patch: WalkablePatch) -> void:
 	var rect: Rect2 = patch.rect
 	var lift := Vector3(0.0, patch.elevation, 0.0)
 	var centre := Vector3(rect.position.x + rect.size.x * 0.5, 0.0, rect.position.y + rect.size.y * 0.5) + lift
+	var thickness: float = _FLOOR_THICKNESS
+	if solid_raised_ground and patch.elevation > 0.0:
+		thickness += patch.elevation
 	_add_box(
-		Vector3(rect.size.x, _FLOOR_THICKNESS, rect.size.y),
-		centre + Vector3(0.0, -_FLOOR_THICKNESS * 0.5, 0.0),
+		Vector3(rect.size.x, thickness, rect.size.y),
+		centre + Vector3(0.0, -thickness * 0.5, 0.0),
 		_SURFACE_COLORS.get(patch.surface, _CORRIDOR_COLOR),
 	)
 
@@ -352,6 +370,8 @@ func _build_patch(patch: WalkablePatch) -> void:
 ## truth and never re-decides where a wall belongs.
 func build_walls(plan: FloorPlan) -> void:
 	for segment in plan.solid_segments():
+		if not draw_obstacle_faces and _is_obstacle_face(segment):
+			continue
 		_build_wall_segment(segment)
 	# THE OPEN EDGES GET A LIP (2026-09-02). Without one, `ledge` draws nothing at all, so an
 	# authored open edge and an unbuilt wall are the same picture -- Floor 2's Vault read as an
@@ -362,6 +382,21 @@ func build_walls(plan: FloorPlan) -> void:
 	# a rim rather than as cover the player might expect to crouch behind.
 	for segment in plan.open_edge_segments():
 		_build_ledge_lip(segment)
+
+
+## A segment lying wholly along one obstacle's edge. A face merged with a collinear floor wall
+## extends past the obstacle and is kept -- that wall is the floor's own.
+func _is_obstacle_face(segment: Dictionary) -> bool:
+	var at: float = float(segment["at"])
+	for rect in _obstacle_rects:
+		var vertical: bool = segment["axis"] == &"x"
+		var edges: Array = [rect.position.x, rect.end.x] if vertical else [rect.position.y, rect.end.y]
+		var low: float = rect.position.y if vertical else rect.position.x
+		var high: float = rect.end.y if vertical else rect.end.x
+		for edge: float in edges:
+			if absf(at - edge) < 0.0001 and float(segment["min"]) >= low - 0.0001 and float(segment["max"]) <= high + 0.0001:
+				return true
+	return false
 
 
 func _build_ledge_lip(segment: Dictionary) -> void:
@@ -668,9 +703,7 @@ func _build_exit_console(plan: FloorPlan) -> void:
 	_exit_console = Node3D.new()
 	_exit_console.position = Vector3(at.x, ground, at.z)
 	add_child(_exit_console)
-	var facing := Vector3(_exit_pad_centre.x - at.x, 0.0, _exit_pad_centre.z - at.z)
-	if facing.length_squared() > 0.0001:
-		_exit_console.rotation.y = atan2(-facing.x, -facing.z)
+	turn_exit_console_toward(_exit_pad_centre)
 	var stand := _add_box(_CONSOLE_STAND_SIZE, Vector3(0.0, _CONSOLE_STAND_SIZE.y * 0.5, 0.0), _CONSOLE_COLOR)
 	stand.reparent(_exit_console, false)
 	_exit_console_screen = _add_box(_CONSOLE_SCREEN_SIZE, Vector3(0.0, _CONSOLE_STAND_SIZE.y + 0.06, -0.04), _CONSOLE_SCREEN_COLOR)
@@ -679,6 +712,16 @@ func _build_exit_console(plan: FloorPlan) -> void:
 	_exit_console_screen.material_override.emission_enabled = true
 	_exit_console_screen.material_override.emission = _CONSOLE_SCREEN_COLOR
 	_exit_console_screen.material_override.emission_energy_multiplier = _CONSOLE_IDLE_GLOW
+
+
+## Turns the console's screen toward a point. On a floor that is its pad; a hub, where the console
+## is the first thing an arriving Envoy walks up to, turns it toward the arrival.
+func turn_exit_console_toward(point: Vector3) -> void:
+	if _exit_console == null:
+		return
+	var facing := Vector3(point.x - _exit_console.position.x, 0.0, point.z - _exit_console.position.z)
+	if facing.length_squared() > 0.0001:
+		_exit_console.rotation.y = atan2(-facing.x, -facing.z)
 
 
 func exit_console_node() -> Node3D:

@@ -1,0 +1,59 @@
+[gd_resource type="Resource" script_class="AuthoredLayout" format=3]
+
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="1_patch"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="2_obst"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="3_layout"]
+
+[sub_resource type="Resource" id="Resource_p_hall"]
+script = ExtResource("1_patch")
+key = &"P_HALL"
+patch_id = 0
+rect = Rect2(-11, -20, 22, 18)
+
+[sub_resource type="Resource" id="Resource_p_west"]
+script = ExtResource("1_patch")
+key = &"P_WEST_GALLERY"
+patch_id = 1
+rect = Rect2(-17, -15, 7, 8)
+surface = &"high"
+
+[sub_resource type="Resource" id="Resource_p_east"]
+script = ExtResource("1_patch")
+key = &"P_EAST_GALLERY"
+patch_id = 2
+rect = Rect2(10, -15, 7, 8)
+surface = &"high"
+
+[sub_resource type="Resource" id="Resource_o_nw"]
+script = ExtResource("2_obst")
+key = &"O_COLUMN_NW"
+obstacle_id = 0
+rect = Rect2(-7, -16, 2, 2)
+
+[sub_resource type="Resource" id="Resource_o_ne"]
+script = ExtResource("2_obst")
+key = &"O_COLUMN_NE"
+obstacle_id = 1
+rect = Rect2(5, -16, 2, 2)
+
+[sub_resource type="Resource" id="Resource_o_sw"]
+script = ExtResource("2_obst")
+key = &"O_COLUMN_SW"
+obstacle_id = 2
+rect = Rect2(-7, -9, 2, 2)
+
+[sub_resource type="Resource" id="Resource_o_se"]
+script = ExtResource("2_obst")
+key = &"O_COLUMN_SE"
+obstacle_id = 3
+rect = Rect2(5, -9, 2, 2)
+
+[resource]
+script = ExtResource("3_layout")
+layout_id = &"home"
+place_label = "Home"
+patches = Array[ExtResource("1_patch")]([SubResource("Resource_p_hall"), SubResource("Resource_p_west"), SubResource("Resource_p_east")])
+obstacles = Array[ExtResource("2_obst")]([SubResource("Resource_o_nw"), SubResource("Resource_o_ne"), SubResource("Resource_o_sw"), SubResource("Resource_o_se")])
+entry_point = Vector3(0, 0, -5)
+end_marker = Vector3(0, 0, -17)
+exit_console = Vector3(0, 0, -17)
