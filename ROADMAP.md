@@ -59,7 +59,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P50 | Seed policy for deployments | PROPOSED — **recorded 2026-10-22** | Main fixes `run_seed = 0` (Slice 3 baseline). Once floors vary by seed: fresh seed per deployment by default, deliberate replay-by-seed, layout vs combat seed kept explicit |
 | P51 | Obstacle wall skirts on expedition floors | DEBT — **recorded 2026-10-22**, P39 presentation | FloorBuilder wraps every obstacle in 2.2-high walls pushed 0.3 outward; hubs switch it off (`draw_obstacle_faces`), expedition floors still draw it |
 | P52 | Commons spatial master plan | REQUIRED BEFORE ANY COMMONS REBUILD — **ruled 2026-10-21 (D5)** | Central plaza, connected districts, services/NPC sites, loops, crowd + camera; split build-now / M4 / deferred. Plan first, then review |
-| P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 SHIPPED `6631ed8`; S1 BUILT 2026-10-23 (pending review gate); S2+ NOT AUTHORIZED** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
+| P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 `6631ed8`, S1 `5b588c6` SHIPPED; S2 `a4f87dd` TECHNICAL PASS 2026-10-23 (human look at 3 seeds OPEN, not performed); S3+ NOT AUTHORIZED** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4403,9 +4403,18 @@ through the compiler's own effect/trigger layer tables, `@port` -> joint connect
 structural failures as errors and never a layout). Two shipped pieces under `game/content/floors/pieces/`;
 the hand-constructed two-piece draft compiles through the unchanged `LayoutCompiler` to a `FloorPlan` whose
 `to_dict()` equals a separately hand-authored baseline EXACTLY, passes the S0 validator, and replays in a
-real SimWorld. Not on any itinerary. Mutants 17/17.
-**Next (needs separate authorization):** S2 -- TraversalProfiles, leg enumeration, the coupled placement +
-routing search, a gateless recipe; human look at three seeds before S3.
+real SimWorld. Not on any itinerary. Mutants 17/17. Shipped `5b588c6`.
+**S2 (technical PASS 2026-10-23, `a4f87dd`; human gate OPEN):** `TraversalProfile` + `FloorRecipe` content (measured values,
+`ADR-001-S2-MEASUREMENTS.md`), `FloorComposer.compose(recipe, floor_seed, depth) -> ComposeResult` with a
+`GenerationReport` (O2): deterministic cast (sorted, weighted-shuffled by an isolated stream), positions
+from the route (straight / L / Z legs on the grid, ring start from the place stream), one coupled
+depth-first search with undo-by-mark backtracking, cycle-closing routes (I / L / Z / U), counted budgets,
+reseeds, an authored fallback reported apart. Eight pieces, four profiles, recipe `proto_archive` (a
+fork-and-rejoin loop; gates stay inside their pieces). 200-seed sweep: 200 composed, 0 fallback, p99 55 ms,
+every floor PASSes the S0 validator. Tools: sweep, SVG diagrams, a debug-playable scene (not on the itinerary).
+**Human S2 gate (not performed):** three seeds, one question -- hallways: architecture, or trench/filler?
+**Next (needs separate authorization):** S3 -- ports -> cross-piece effects, gates/shortcut wiring,
+progression validator in the loop.
 **Open owner numbers (O4):** fallback rate, diversity floor, safe screen band, grid cell, profile bands --
 measured before any is locked. Seed policy is P50 (O3), scheduled with S5.
 

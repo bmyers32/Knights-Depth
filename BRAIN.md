@@ -1286,3 +1286,19 @@ softened, walls that exist for one consumer and not the other (the P34 failure, 
 and their joints; a joint may differ only where the hallway is wider than the port span.
 **Where else:** every S2 TraversalProfile; junction mouths; any future doorway dressing that reads flank
 style; hand-authored floors joining a rimmed corridor to a walled room.
+
+### Prove a fixture impossible for the search before asserting that it fails
+**Incident (ADR-001 S2, 2026-10-23):** a test narrowed the floor extent to 40 and asserted the composer
+would fall back, reasoning that the objective hangs off the landmark's side and could not fit. The
+composer jogged the approach eight units west, placed the landmark against one edge and the objective
+against the other, and composed a valid floor. The test was red; the code was right.
+**Mechanism:** a search with backtracking explores the author's blind spots by construction. "I cannot
+see a way" is a statement about the author, not about the configuration space; a negative test built
+on it asserts the author's limits.
+**Failure if ignored:** a red test that gets "fixed" by weakening the search, or a budget raised to make
+a possible case look impossible -- the opposite of what the test claimed to protect.
+**Fix shape:** derive the impossibility from a bound the search cannot beat (here: the narrowest
+landmark plus objective side by side span 34, so a width of 24 is impossible while the main line still
+fits), state the bound in the test, and assert the failure diagnostics, not just the failure.
+**Where else:** any negative test of a planner, router, solver or validator; "unsolvable" progression
+fixtures (S0 showed the mirror image: a fixture the author thought solvable that the sim refused).

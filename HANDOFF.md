@@ -30,31 +30,31 @@ picked by DEPTH (authored; the seed changes nothing spatial). Four goldens uncha
   `freeze()`; `FloorPreview` extracted. `begin_expedition()` is still the one run entry, once per instance.
 - Tests: navigation 31, ready_room_space 16, hub_layouts 6. Mutants: Ready Room 12/13 (survivor legitimate), deployment 9/9.
 
-**NOT recorded as human-checked:** travel-HUD hiding during departure (built after the last look); a full-loop
-pass of Extraction/Recall -> Commons under Main. Home = temporary shell; Commons = placeholder (P52).
+**NOT human-checked:** travel-HUD hiding during departure; a full Extraction/Recall -> Commons loop under Main. Home = shell; Commons = placeholder (P52).
 
-## ADR-001 PROCEDURAL FLOORS — S0 SHIPPED `6631ed8`; S1 BUILT 2026-10-23, UNCOMMITTED, AWAITING ITS REVIEW GATE
+## ADR-001 PROCEDURAL FLOORS — S0 `6631ed8`, S1 `5b588c6`, S2 `a4f87dd` (TECHNICAL PASS 2026-10-23; HUMAN GATE OPEN)
 - `ADR-001-PROCEDURAL-FLOORS.md` is the design of record (ROADMAP P53). Stages are authorized ONE AT A TIME;
-  **S2+ (profiles, placement/routing search, recipes, cross-piece wiring, visibility) is NOT authorized.**
-- **S0:** `FloorPlan.violations()` + `ProgressionValidator` (PASS / FAIL / UNSUPPORTED over legal body-centre ground).
-- **S1:** `piece_port.gd`, `floor_piece.gd` (body = an AuthoredLayout in LOCAL coords + footprint + allowed
-  transforms + ports; `lint()` -> findings; `@<port>` on a connection effect means "my own joint"), `floor_draft.gd`
-  (place / lay / bind -> iNN / hNN / jNN; world = T(local) + origin, ONE mapping), `draft_emitter.gd`
-  (`emit(draft) -> EmitReport`: one dense counter per layer, every reference rewritten BY TARGET LAYER through the
-  compiler's own tables, structural errors and NO layout on any fault). Pieces `game/content/floors/pieces/
-  archive_entry_apron.tres` (gate port) + `archive_exit_gallery.tres` (mirror opt-in). The composed draft equals
-  `tests/fixtures/floor_s1_baseline.tres` on `to_dict()` EXACTLY; S0 PASS; real-SimWorld replay. Mutants 17/17.
-- **Found:** a joint's flank style must equal the hallway's boundary where the aperture's sides coincide with the
-  hallway's sides (FloorPlan refuses two styles on one span) -- S2 profiles carry ONE style for hallway + joints.
+  **S3+ (cross-piece wiring, visibility, population, itinerary slot) is NOT authorized.** Numbers: `ADR-001-S2-MEASUREMENTS.md`.
+- **S0/S1:** `FloorPlan.violations()`, `ProgressionValidator`; `FloorPiece`/`PiecePort`/`FloorDraft`/`DraftEmitter` (S1).
+- **S2:** `seed_mix.gd` (pinned derivation, autoload-free; `DepthGenerator.derive_floor_seed` delegates -- a `-s` tool
+  cannot compile anything reaching ContentDB), `traversal_profile.gd`, `floor_recipe.gd` (explicit node order + edges,
+  pool, budgets, extent, fallback), `generation_report.gd` (O2), `floor_composer.gd` (`compose(recipe, floor_seed,
+  depth, radii)`: cast sorted-then-weighted by an isolated stream; positions FROM THE ROUTE (I/L/Z legs on the grid,
+  ring start from the place stream, lazy cursor per frame); depth-first with `mark()/rewind()`; cycle-closing I/L/Z/U;
+  counted budgets; reseeds; fallback reported APART). 4 profiles, 8 pieces, recipe `proto_archive` (fork-and-rejoin
+  loop; gates stay inside pieces). Tools: `tools/compose_floor_sweep.gd` (-s), `draw_composed_floor.gd` (SVG ->
+  build/composed/), `composed_floor_playground.tscn` (debug-playable `--seed=N`; NOT on the itinerary). 200 seeds:
+  200 composed, 0 fallback, 13 reseeded, all PASS S0, p50 15.5 / p99 55 ms. **Human look at 3 seeds NOT performed.**
+- **Found:** mirror_x is never reached on the prototype (identity + a jog always fits first); the main line is a
+  straight column of rooms + straight LINKs -- the "four boxes" risk is REAL and is the human's call, not a validator's.
 ## Next action
-1. Owner S1 review gate -> commit (feat(gen) S1 + docs, two commits) or corrections. S2 is NOT started.
-2. Commons master plan (P52) — paper only. 3. Triage melee-through-walls (unverified audit claim).
+1. HUMAN S2 GATE (owner): `.\tools\play_composed_floor.ps1 -Seed 7 -Diagram` (also 1, 42): place, or corridors
+   between arenas? Then rule on the straight main column BEFORE S3 (S3 NOT started). 2. Commons plan (P52). 3. Melee-through-walls.
 **Deferred (ROADMAP, do NOT build in M2 slices):** P46 loot on summary · P49 death/resync animation ·
 P45 descent preloading · P47/P48 co-op revival + carry-through · P38 party/loadout/route · P51 skirts.
 
 ## Accepted partials / flags
-- **M3:** `aim` LENGTH is behavioural (P42); `GameMain.go_to(EXPEDITION)` is the seam a server-side
-  "request deployment" replaces; hub sims local; pad deployment is SOLO, not a ready-up protocol.
+- **M3:** `aim` LENGTH is behavioural (P42); `GameMain.go_to(EXPEDITION)` is the seam a server "request deployment" replaces; hub sims local; pad deployment is SOLO, not ready-up.
 - **Owed docs (wording not approved):** LEXICON **Ready Room** + **Home**; CLAUDE.md lists nonexistent
   `GameRoot`/`DebugOverlay` autoloads; `arena.gd:53` RNG comment stale. `_TERMINAL_DEPTH = 3` /
   `_FOUNDRY_DEPTH = 4`; §6.3 Foundry rule OPEN; Terminal greybox. **NEVER commit `KNIGHTS-DEPTH-EXPLORATION-*`.**
@@ -89,14 +89,13 @@ P45 descent preloading · P47/P48 co-op revival + carry-through · P38 party/loa
   A Bash `cd` into a subfolder breaks the `scripts/guard.py` pre-edit hook -- cd back to root.
 
 ## Commands
-- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1217, ~2 min,
+- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1234, ~3 min,
   35 orphans is the baseline). Headless sim CI: `-gselect=test_sim_world
   -gunit_test_name=test_ticks_1000_times_headless`. Boot: `--headless --path . --quit-after 300`.
 - Guard: `python -I scripts/guard.py --scan` (2 pre-existing `knight` warnings). Goldens:
   `-s tools/record_floor_plan_golden.gd` (deliberate re-baseline only, dated note).
-- Mutation check: scratchpad script backs up, mutates one anchor (assert unique), runs `-gselect`,
-  restores + sha-compares; give each run a `timeout`. ONE Godot at a time -- a background batch was killed
-  for memory (2026-10-22); tests index findings through a guarded helper so a catch is an assertion, not a crash.
+- Mutation check: scratchpad script mutates one anchor (assert unique), runs `-gselect`, restores + sha-compares, with a
+  `timeout`. ONE Godot at a time (a background batch was killed for memory 2026-10-22); guarded test reads, not crashes.
 
 ## Concepts introduced (learning ledger)
 Sim tick vs frame · Command/Event plain-data boundary · service-locator autoload · seeded RNG streams · fixed
@@ -117,4 +116,5 @@ cached plan as a promise (identity, not equality) · contextual press arbitratio
 zero health as the downed state · commit-at-incapacitation · party predicate vs per-actor fact · outcome
 finalized once at the run boundary · transition priority in one function · **scene root vs autoload for
 navigation** · **latched one-shot requests** · **remove_child before queue_free** · **GUI focus vs gameplay
-input** · **a cut under an already-dark screen** · **renderer rules hidden behind content**.
+input** · **a cut under an already-dark screen** · **renderer rules hidden behind content** · **positions from the
+route, not the route from positions** · **undo by mark** · **a fixture proved impossible, not assumed**.
