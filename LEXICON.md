@@ -114,6 +114,15 @@ VULNERABLE is about *what reactions a hit can trigger*; PARRY EXPOSED is about *
 much damage a hit deals*. An actor may be either, both, or neither, and neither one
 implies the other. Do not introduce a shared "vulnerability" identifier covering both.
 
+### Floor-generation technical terms (ADR-001, owner ruling O7, 2026-10-22)
+Code identifiers and design-document vocabulary only; none is player-facing, and none renames a
+GAME-RULES §5 acceptance item (a FloorPiece is not automatically a "segment").
+| Term | Meaning |
+|---|---|
+| **FloorPiece** | An authored, self-contained fragment of a floor (an `AuthoredLayout` in local coordinates plus its ports), cast into a generated experience graph by role: entry, landmark, objective, encounter, exit. Code: `FloorPiece`, `piece_id`. |
+| **TraversalProfile** | A content-authored shape for generated connective ground between pieces — width, length band, turns, flank style — never a literal in code. Five in the first slice: APPROACH, LINK, DETOUR, SHORTCUT, JUNCTION. Code: `TraversalProfile`. |
+| **Junction** | A TraversalProfile that is a node rather than a path: a small open space where three or more routes meet, with nothing in it (BRAIN 12's hallway with three mouths). Code: `junction`. |
+
 ## Visual / Motion Language (channel law — GAME-RULES §3)
 Damage types own telegraphs and hit effects. Entity STATES own **silhouette and
 motion**:

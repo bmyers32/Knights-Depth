@@ -1253,3 +1253,20 @@ renderer's rule stays invisible because it is shared by every floor that already
 produces and confirm each visible property is the authored one. Fix a renderer rule behind a scoped switch
 when other consumers have already been accepted as they look.
 **Where else:** wall/ledge styles, surface colours, elevation lifts, plate prominence, any future dressing.
+
+### A floor check walks where the body's centre may be, not where the floor is
+**Incident (ADR-001 S0, 2026-10-22):** the first progression validator searched the floor's rects as
+a point. A fixture cut a 0.3-wide strip beside a one-way line and the search walked down it, bypassing
+the commitment -- a route the sim's body-aware `fits()` refuses, so the validator would have passed a
+floor the player cannot play that way. A per-cell "is it wide enough" patch then over-corrected: it
+declared Floor 4 UNSUPPORTED (a cut strip the real body crosses because the neighbouring ground covers
+it), and still let the sliver through near a side door where it was briefly standable.
+**Mechanism:** legality is a property of the body's CENTRE against the UNION of ground (Minkowski), not
+of the ground itself. Any check phrased on the ground's rects -- cell width, seam length, point
+containment -- answers a different question and is wrong in one direction or the other.
+**Failure if ignored:** a false PASS (a bypass the sim forbids) or a false FAIL/UNSUPPORTED on a shipped
+floor; both were seen in one afternoon.
+**Fix shape:** build the configuration space explicitly -- each cell eroded by the radius plus the exact
+strip two adjoining cells cover together -- and search THAT. State the pairwise limit as a limitation.
+**Where else:** visibility stand-points, placement validity in the generator, any future navmesh or
+pathfinding, enemy territory fit, spawn placement.

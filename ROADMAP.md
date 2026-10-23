@@ -59,6 +59,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P50 | Seed policy for deployments | PROPOSED — **recorded 2026-10-22** | Main fixes `run_seed = 0` (Slice 3 baseline). Once floors vary by seed: fresh seed per deployment by default, deliberate replay-by-seed, layout vs combat seed kept explicit |
 | P51 | Obstacle wall skirts on expedition floors | DEBT — **recorded 2026-10-22**, P39 presentation | FloorBuilder wraps every obstacle in 2.2-high walls pushed 0.3 outward; hubs switch it off (`draw_obstacle_faces`), expedition floors still draw it |
 | P52 | Commons spatial master plan | REQUIRED BEFORE ANY COMMONS REBUILD — **ruled 2026-10-21 (D5)** | Central plaza, connected districts, services/NPC sites, loops, crowd + camera; split build-now / M4 / deferred. Plan first, then review |
+| P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 BUILT, S1+ NOT AUTHORIZED** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4378,6 +4379,26 @@ is unaffected either way (it reads the same segments, never the meshes).
 considerations at the hub framing (0, 9, 9). Separate what is built now, what is M4, and what is deferred.
 **Order:** after the Ready Room PASS (given 2026-10-22, provisional); review before any geometry.
 Home stays a temporary shell: do not lock customization or assert its future networking.
+
+### P53 — Procedural floors: hybrid hierarchical composition (ADR-001)
+**Status:** APPROVED IN PRINCIPLE by the owner 2026-10-22, with rulings O1–O7 and corrections recorded in
+`ADR-001-PROCEDURAL-FLOORS.md` §0. Stages S0–S5 are authorized one at a time; **S0 is built**, nothing
+beyond it is authorized.
+**What it is:** a generated experience graph with three distinct edge sets (physical, visibility,
+dependency), assembled from authored cycle templates, casting authored **FloorPieces** for landmarks,
+objectives, encounters, entry and exit; connective ground routed from five **TraversalProfiles** with
+**Junctions** where routes meet; dependencies wired across pieces through symbolic ports; lowered through
+a `FloorDraft` to an ordinary `AuthoredLayout` -> the unchanged `LayoutCompiler` -> `FloorPlan`.
+**Hard guarantees:** `DepthGenerator.generate(seed, depth)` unchanged; prepared-plan identity for briefing
+and deployment unchanged; flat sim; one wall truth; no parallel gameplay system; goldens for depths 1-4
+untouched; GAME-RULES §5 wording untouched (FloorPieces are NOT automatically "segments").
+**S0 (built):** `FloorPlan.violations()` returns the same findings `validate()` reports;
+`game/gen/progression_validator.gd` searches a FloorPlan over legal body-centre ground and the plan's own
+trigger/effect semantics, answering PASS / FAIL / UNSUPPORTED with action traces and record references,
+proved on Floors 1-4 (each route replays through a real SimWorld) and on negative fixtures.
+**Next (needs separate authorization):** S1 FloorPiece/FloorDraft/emitter with a hand-written draft.
+**Open owner numbers (O4):** fallback rate, diversity floor, safe screen band, grid cell, profile bands --
+measured before any is locked. Seed policy is P50 (O3), scheduled with S5.
 
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
