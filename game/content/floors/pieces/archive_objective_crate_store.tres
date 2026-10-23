@@ -1,0 +1,95 @@
+[gd_resource type="Resource" script_class="FloorPiece" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/piece_port.gd" id="port"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="layout"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="patch"]
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="conn"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="trig"]
+[ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="enc"]
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="brk"]
+[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="sw"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="obs"]
+[ext_resource type="Script" path="res://game/gen/carriable_plan.gd" id="car"]
+
+[sub_resource type="Resource" id="patch_p_store"]
+script = ExtResource("patch")
+key = &"P_STORE"
+patch_id = 0
+rect = Rect2(-6, -14, 12, 14)
+
+[sub_resource type="Resource" id="trig_t_watch"]
+script = ExtResource("trig")
+key = &"T_WATCH"
+trigger_id = 0
+kind = &"breakable_destroyed"
+source_key = &"B_CRATE_1"
+effects = Array[Dictionary]([{
+"kind": &"enable_trigger",
+"target_key": &"T_HIDDEN"
+}])
+
+[sub_resource type="Resource" id="trig_t_hidden"]
+script = ExtResource("trig")
+key = &"T_HIDDEN"
+trigger_id = 1
+region = Rect2(1, -8, 2, 2)
+starts_enabled = false
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"@out"
+}])
+
+[sub_resource type="Resource" id="brk_b_crate_1"]
+script = ExtResource("brk")
+key = &"B_CRATE_1"
+breakable_id = 0
+position = Vector3(2, 0, -7)
+conceals_trigger_id = 1
+
+[sub_resource type="Resource" id="brk_b_crate_2"]
+script = ExtResource("brk")
+key = &"B_CRATE_2"
+breakable_id = 1
+position = Vector3(-3, 0, -5)
+
+[sub_resource type="Resource" id="brk_b_crate_3"]
+script = ExtResource("brk")
+key = &"B_CRATE_3"
+breakable_id = 2
+position = Vector3(-3, 0, -10)
+
+[sub_resource type="Resource" id="body"]
+script = ExtResource("layout")
+layout_id = &"archive_objective_crate_store"
+patches = Array[ExtResource("patch")]([SubResource("patch_p_store")])
+triggers = Array[ExtResource("trig")]([SubResource("trig_t_watch"), SubResource("trig_t_hidden")])
+breakables = Array[ExtResource("brk")]([SubResource("brk_b_crate_1"), SubResource("brk_b_crate_2"), SubResource("brk_b_crate_3")])
+
+[sub_resource type="Resource" id="port_in"]
+script = ExtResource("port")
+key = &"in"
+kind = &"connector"
+edge = &"north"
+offset = 5
+width = 6
+patch_key = &"P_STORE"
+
+[sub_resource type="Resource" id="port_out"]
+script = ExtResource("port")
+key = &"out"
+kind = &"gate"
+edge = &"south"
+offset = 5
+width = 6
+patch_key = &"P_STORE"
+
+[resource]
+script = ExtResource("piece")
+piece_id = &"archive_objective_crate_store"
+role = &"objective"
+body = SubResource("body")
+footprint = Rect2(-8, -14, 16, 14)
+allowed_transforms = Array[StringName]([&"identity"])
+ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_out")])

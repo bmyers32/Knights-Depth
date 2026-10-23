@@ -1,0 +1,85 @@
+[gd_resource type="Resource" script_class="FloorPiece" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/piece_port.gd" id="port"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="layout"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="patch"]
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="conn"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="trig"]
+[ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="enc"]
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="brk"]
+[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="sw"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="obs"]
+[ext_resource type="Script" path="res://game/gen/carriable_plan.gd" id="car"]
+
+[sub_resource type="Resource" id="patch_p_lane"]
+script = ExtResource("patch")
+key = &"P_LANE"
+patch_id = 0
+rect = Rect2(-4, -24, 10, 24)
+
+[sub_resource type="Resource" id="enc_e_ambient"]
+script = ExtResource("enc")
+key = &"E_AMBIENT"
+encounter_id = 0
+regions = Array[Rect2]([Rect2(-4, -24, 10, 24)])
+role = &"ambient"
+confines_player = false
+spawn_at_floor_load = true
+roster = Array[Dictionary]([{
+"enemy_key": &"ooze",
+"position": Vector3(2, 0, -7)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(-1, 0, -18)
+}])
+
+[sub_resource type="Resource" id="obs_o_rail"]
+script = ExtResource("obs")
+key = &"O_RAIL"
+obstacle_id = 0
+rect = Rect2(-4, -13, 2, 1)
+
+[sub_resource type="Resource" id="body"]
+script = ExtResource("layout")
+layout_id = &"archive_encounter_lane"
+patches = Array[ExtResource("patch")]([SubResource("patch_p_lane")])
+encounters = Array[ExtResource("enc")]([SubResource("enc_e_ambient")])
+obstacles = Array[ExtResource("obs")]([SubResource("obs_o_rail")])
+
+[sub_resource type="Resource" id="port_in"]
+script = ExtResource("port")
+key = &"in"
+kind = &"connector"
+edge = &"north"
+offset = 3
+width = 6
+patch_key = &"P_LANE"
+
+[sub_resource type="Resource" id="port_out"]
+script = ExtResource("port")
+key = &"out"
+kind = &"connector"
+edge = &"south"
+offset = 3
+width = 6
+patch_key = &"P_LANE"
+
+[sub_resource type="Resource" id="port_side"]
+script = ExtResource("port")
+key = &"side"
+kind = &"connector"
+edge = &"east"
+offset = 9
+width = 6
+patch_key = &"P_LANE"
+
+[resource]
+script = ExtResource("piece")
+piece_id = &"archive_encounter_lane"
+role = &"encounter"
+body = SubResource("body")
+footprint = Rect2(-6, -24, 12, 24)
+allowed_transforms = Array[StringName]([&"identity", &"mirror_x"])
+ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_out"), SubResource("port_side")])
+tags = Array[StringName]([&"ambient"])

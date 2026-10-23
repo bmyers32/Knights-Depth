@@ -1,0 +1,108 @@
+[gd_resource type="Resource" script_class="FloorPiece" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/piece_port.gd" id="port"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="layout"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="patch"]
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="conn"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="trig"]
+[ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="enc"]
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="brk"]
+[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="sw"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="obs"]
+[ext_resource type="Script" path="res://game/gen/carriable_plan.gd" id="car"]
+
+[sub_resource type="Resource" id="patch_p_pit"]
+script = ExtResource("patch")
+key = &"P_PIT"
+patch_id = 0
+rect = Rect2(-7, -18, 16, 18)
+
+[sub_resource type="Resource" id="trig_t_plate"]
+script = ExtResource("trig")
+key = &"T_PLATE"
+trigger_id = 0
+region = Rect2(-1, -10, 2, 2)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_PIT"
+}])
+
+[sub_resource type="Resource" id="trig_t_clear"]
+script = ExtResource("trig")
+key = &"T_CLEAR"
+trigger_id = 1
+kind = &"encounter_cleared"
+source_key = &"E_PIT"
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"@out"
+}])
+
+[sub_resource type="Resource" id="enc_e_pit"]
+script = ExtResource("enc")
+key = &"E_PIT"
+encounter_id = 0
+regions = Array[Rect2]([Rect2(-7, -18, 16, 18)])
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(3, 0, -5)
+}, {
+"enemy_key": &"fang",
+"position": Vector3(-3, 0, -13)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(5, 0, -14)
+}])
+
+[sub_resource type="Resource" id="brk_b_rubble"]
+script = ExtResource("brk")
+key = &"B_RUBBLE"
+breakable_id = 0
+position = Vector3(-5, 0, -3)
+
+[sub_resource type="Resource" id="body"]
+script = ExtResource("layout")
+layout_id = &"archive_encounter_pit"
+patches = Array[ExtResource("patch")]([SubResource("patch_p_pit")])
+triggers = Array[ExtResource("trig")]([SubResource("trig_t_plate"), SubResource("trig_t_clear")])
+encounters = Array[ExtResource("enc")]([SubResource("enc_e_pit")])
+breakables = Array[ExtResource("brk")]([SubResource("brk_b_rubble")])
+
+[sub_resource type="Resource" id="port_in"]
+script = ExtResource("port")
+key = &"in"
+kind = &"connector"
+edge = &"north"
+offset = 6
+width = 6
+patch_key = &"P_PIT"
+
+[sub_resource type="Resource" id="port_out"]
+script = ExtResource("port")
+key = &"out"
+kind = &"gate"
+edge = &"south"
+offset = 6
+width = 6
+patch_key = &"P_PIT"
+
+[sub_resource type="Resource" id="port_side"]
+script = ExtResource("port")
+key = &"side"
+kind = &"connector"
+edge = &"east"
+offset = 6
+width = 6
+patch_key = &"P_PIT"
+
+[resource]
+script = ExtResource("piece")
+piece_id = &"archive_encounter_pit"
+role = &"encounter"
+body = SubResource("body")
+footprint = Rect2(-9, -18, 18, 18)
+allowed_transforms = Array[StringName]([&"identity", &"mirror_x"])
+ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_out"), SubResource("port_side")])
+tags = Array[StringName]([&"sealing"])

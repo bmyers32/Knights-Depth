@@ -24,14 +24,6 @@ const _LAYOUT_FOUNDRY: String = "res://game/content/layouts/foundry_assembly.tre
 ## WHERE THE FIRST FOUNDRY FLOOR SITS -- content placement, exactly as the Terminal's depth is.
 const _FOUNDRY_DEPTH: int = 4
 
-## 64-bit odd constants (PCG's multiplier and increment). Chosen over String.hash() on purpose:
-## hash() is stable within an engine version but NOT guaranteed across them, and GAME-RULES §5's
-## golden-seed gate has to survive a Godot patch bump. GDScript ints are int64 and multiplication
-## overflow wraps two's-complement, which is deterministic.
-const _SEED_MIX_A: int = 6364136223846793005
-const _SEED_MIX_B: int = 1442695040888963407
-
-
 static func generate(seed: int, depth: int) -> FloorPlan:
 	# THE STRATUM FOLLOWS THE LAYOUT (2026-10-13): the generator selects a floor by depth and the
 	# floor says which stratum it belongs to. One selection, not two that could disagree.
@@ -88,10 +80,8 @@ static func _authored_body_radii(plan: FloorPlan) -> Dictionary:
 
 ## Derives this floor's seed from the run seed and the depth. Unused by the authored layout but
 ## kept live and tested: it is the one piece of the procedural path whose determinism must not
-## silently rot while assembly is switched off.
+## silently rot while assembly is switched off. The arithmetic lives in SeedMix (ADR-001 S2) so
+## the composer can derive its streams without this class's ContentDB dependency; this is the
+## pinned name, and it is the same function.
 static func derive_floor_seed(run_seed: int, depth: int) -> int:
-	var mixed: int = run_seed * _SEED_MIX_A + depth * _SEED_MIX_B
-	mixed ^= mixed >> 31
-	mixed = mixed * _SEED_MIX_A
-	mixed ^= mixed >> 29
-	return mixed
+	return SeedMix.derive(run_seed, depth)

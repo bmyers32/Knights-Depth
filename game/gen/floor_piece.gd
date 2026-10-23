@@ -53,6 +53,25 @@ const LAYERS: Array[StringName] = [&"patch", &"connection", &"trigger", &"encoun
 @export var allowed_transforms: Array[StringName] = [TRANSFORM_IDENTITY]
 @export var ports: Array[PiecePort] = []
 
+## SELECTION METADATA (S2; consumed by FloorComposer's caster and nowhere else). A recipe node
+## casts a piece by role, by the depth band, and by tags the node demands; among the eligible,
+## `weight` biases the seeded draw. `depth_max` 0 means no upper bound.
+@export var depth_min: int = 1
+@export var depth_max: int = 0
+@export var weight: float = 1.0
+@export var tags: Array[StringName] = []
+
+
+func eligible_at(depth: int) -> bool:
+	return depth >= depth_min and (depth_max == 0 or depth <= depth_max)
+
+
+func carries(wanted: Array[StringName]) -> bool:
+	for tag: StringName in wanted:
+		if not tag in tags:
+			return false
+	return true
+
 
 func port(wanted: StringName) -> PiecePort:
 	for candidate: PiecePort in ports:
@@ -83,6 +102,9 @@ func lint(enemy_keys: Array[StringName] = []) -> Array[Dictionary]:
 	if footprint.get_area() <= 0.0:
 		_finding(out, &"footprint_empty", "FloorPiece '%s': footprint %s has no area" % [piece_id, footprint], {})
 	_check_transforms(out)
+	if depth_min < 1 or (depth_max != 0 and depth_max < depth_min) or weight <= 0.0:
+		_finding(out, &"selection_band_invalid", "FloorPiece '%s': depth [%d, %d] and weight %s are not a usable selection band"
+			% [piece_id, depth_min, depth_max, weight], {"depth_min": depth_min, "depth_max": depth_max, "weight": weight})
 	_check_identities(out)
 	_check_body_inside_footprint(out)
 	_check_references(out)

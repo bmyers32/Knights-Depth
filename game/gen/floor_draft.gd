@@ -53,6 +53,10 @@ class Joint:
 	var hallway_id: StringName = &""
 	var overlap: float = 0.0
 	var flank_style: StringName = &"wall"
+	## WHICH RECT OF THE HALLWAY THE PORT ENTERS. -1 lets the emitter find the one rect that faces
+	## the port -- and refuse the joint if more than one does (S2 ruling: never an arbitrary match).
+	## A composer that laid the hallway knows the rect and says so.
+	var rect_index: int = -1
 
 
 var draft_id: StringName = &""
@@ -83,7 +87,7 @@ func lay(rects: Array[Rect2], surface: StringName, boundary_style: StringName) -
 	return hallway.hallway_id
 
 
-func bind(instance_id: StringName, port_key: StringName, hallway_id: StringName, overlap: float, flank_style: StringName) -> StringName:
+func bind(instance_id: StringName, port_key: StringName, hallway_id: StringName, overlap: float, flank_style: StringName, rect_index: int = -1) -> StringName:
 	var joint := Joint.new()
 	joint.joint_id = StringName("j%02d" % joints.size())
 	joint.instance_id = instance_id
@@ -91,8 +95,23 @@ func bind(instance_id: StringName, port_key: StringName, hallway_id: StringName,
 	joint.hallway_id = hallway_id
 	joint.overlap = overlap
 	joint.flank_style = flank_style
+	joint.rect_index = rect_index
 	joints.append(joint)
 	return joint.joint_id
+
+
+## UNDO TO A MARK. The search places, routes, binds -- and takes it all back when a child cannot
+## be placed. Ids are allocated from array sizes, so what is truncated away is re-allocated
+## identically by the next attempt: the draft after an undo is byte-for-byte the draft before
+## the commit.
+func mark() -> Dictionary:
+	return {"instances": instances.size(), "hallways": hallways.size(), "joints": joints.size()}
+
+
+func rewind(to: Dictionary) -> void:
+	instances.resize(int(to["instances"]))
+	hallways.resize(int(to["hallways"]))
+	joints.resize(int(to["joints"]))
 
 
 func instance_of(instance_id: StringName) -> PieceInstance:

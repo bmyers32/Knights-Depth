@@ -241,9 +241,14 @@ static func _resolve_joints(draft: FloorDraft, report: EmitReport) -> Dictionary
 		var along_x: bool = PiecePort.runs_along_x(FloorDraft.world_edge(instance, port.edge))
 		var outward: float = float(span["outward"])
 		var at: float = float(span["at"])
-		var best_index: int = -1
-		var best_gap: float = INF
+		# THE RECT A PORT ENTERS IS NAMED OR UNIQUE, never the nearest of several (S2 ruling): a
+		# joint that names no rect binds the ONE rect that faces its port, and two facing rects
+		# are an ambiguity the emitter refuses rather than resolves.
+		var facing: Array[int] = []
+		var gaps: Dictionary = {}
 		for index: int in hallway.rects.size():
+			if joint.rect_index >= 0 and index != joint.rect_index:
+				continue
 			var rect: Rect2 = hallway.rects[index]
 			var covers: bool
 			var gap: float
@@ -253,14 +258,25 @@ static func _resolve_joints(draft: FloorDraft, report: EmitReport) -> Dictionary
 			else:
 				covers = rect.position.y <= float(span["from"]) + _EPSILON and rect.end.y >= float(span["to"]) - _EPSILON
 				gap = (rect.position.x - at) if outward > 0.0 else (at - rect.end.x)
-			if covers and gap >= -_EPSILON and gap < best_gap:
-				best_index = index
-				best_gap = maxf(gap, 0.0)
-		if best_index < 0:
+			if covers and gap >= -_EPSILON:
+				facing.append(index)
+				gaps[index] = maxf(gap, 0.0)
+		if joint.rect_index >= hallway.rects.size():
+			_error(report, &"joint_rect_unknown", "DraftEmitter: joint '%s' names rect %d of hallway '%s', which has %d" % [joint.joint_id, joint.rect_index, joint.hallway_id, hallway.rects.size()],
+				{"joint": joint.joint_id, "hallway": joint.hallway_id, "rect_index": joint.rect_index})
+			continue
+		if facing.is_empty():
 			_error(report, &"joint_unmet", "DraftEmitter: joint '%s': no rect of hallway '%s' lies beyond port '%s' of '%s' (%s edge at %s, span [%s, %s]) and covers it"
 				% [joint.joint_id, joint.hallway_id, joint.port_key, joint.instance_id, FloorDraft.world_edge(instance, port.edge), at, span["from"], span["to"]],
 				{"joint": joint.joint_id, "port": joint.port_key, "hallway": joint.hallway_id})
 			continue
+		if facing.size() > 1:
+			_error(report, &"joint_ambiguous", "DraftEmitter: joint '%s': rects %s of hallway '%s' all face port '%s' of '%s'; name one with rect_index"
+				% [joint.joint_id, facing, joint.hallway_id, joint.port_key, joint.instance_id],
+				{"joint": joint.joint_id, "hallway": joint.hallway_id, "rects": facing})
+			continue
+		var best_index: int = facing[0]
+		var best_gap: float = float(gaps[best_index])
 		if port.kind == PiecePort.KIND_GATE and best_gap <= _EPSILON:
 			# A closable connection between touching patches separates nothing (the closed-gate
 			# integrity law, FloorPlan). The gap is what makes the gate real.

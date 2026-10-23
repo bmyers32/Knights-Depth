@@ -1,0 +1,69 @@
+[gd_resource type="Resource" script_class="FloorPiece" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/piece_port.gd" id="port"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="layout"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="patch"]
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="conn"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="trig"]
+[ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="enc"]
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="brk"]
+[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="sw"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="obs"]
+[ext_resource type="Script" path="res://game/gen/carriable_plan.gd" id="car"]
+
+[sub_resource type="Resource" id="patch_p_vault"]
+script = ExtResource("patch")
+key = &"P_VAULT"
+patch_id = 0
+rect = Rect2(-6, -16, 12, 16)
+
+[sub_resource type="Resource" id="sw_s_lever"]
+script = ExtResource("sw")
+key = &"S_LEVER"
+switch_id = 0
+position = Vector3(-5, 0, -8)
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"@out"
+}])
+
+[sub_resource type="Resource" id="obs_o_altar"]
+script = ExtResource("obs")
+key = &"O_ALTAR"
+obstacle_id = 0
+rect = Rect2(-1.5, -9, 3, 3)
+
+[sub_resource type="Resource" id="body"]
+script = ExtResource("layout")
+layout_id = &"archive_objective_switch_vault"
+patches = Array[ExtResource("patch")]([SubResource("patch_p_vault")])
+hit_switches = Array[ExtResource("sw")]([SubResource("sw_s_lever")])
+obstacles = Array[ExtResource("obs")]([SubResource("obs_o_altar")])
+
+[sub_resource type="Resource" id="port_in"]
+script = ExtResource("port")
+key = &"in"
+kind = &"connector"
+edge = &"north"
+offset = 5
+width = 6
+patch_key = &"P_VAULT"
+
+[sub_resource type="Resource" id="port_out"]
+script = ExtResource("port")
+key = &"out"
+kind = &"gate"
+edge = &"south"
+offset = 5
+width = 6
+patch_key = &"P_VAULT"
+
+[resource]
+script = ExtResource("piece")
+piece_id = &"archive_objective_switch_vault"
+role = &"objective"
+body = SubResource("body")
+footprint = Rect2(-8, -16, 16, 16)
+allowed_transforms = Array[StringName]([&"identity", &"mirror_x"])
+ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_out")])
