@@ -1,0 +1,233 @@
+[gd_resource type="Resource" script_class="AuthoredLayout" format=3]
+
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="layout"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="patch"]
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="conn"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="trig"]
+[ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="enc"]
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="brk"]
+[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="sw"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="obs"]
+[ext_resource type="Script" path="res://game/gen/carriable_plan.gd" id="car"]
+
+[sub_resource type="Resource" id="patch_p_apron"]
+script = ExtResource("patch")
+key = &"P_APRON"
+patch_id = 0
+rect = Rect2(-6, -4, 12, 6)
+
+[sub_resource type="Resource" id="patch_p_hall"]
+script = ExtResource("patch")
+key = &"P_HALL"
+patch_id = 1
+rect = Rect2(-6, -12, 12, 6)
+
+[sub_resource type="Resource" id="patch_p_gallery"]
+script = ExtResource("patch")
+key = &"P_GALLERY"
+patch_id = 2
+rect = Rect2(-6, -34, 12, 8)
+boundary_west = &"ledge"
+
+[sub_resource type="Resource" id="patch_p_exit_bay"]
+script = ExtResource("patch")
+key = &"P_EXIT_BAY"
+patch_id = 3
+rect = Rect2(-4, -40, 8, 4)
+
+[sub_resource type="Resource" id="patch_h_spine"]
+script = ExtResource("patch")
+key = &"H_SPINE"
+patch_id = 4
+rect = Rect2(-2.5, -24, 5, 10)
+boundary_style = &"ledge"
+
+[sub_resource type="Resource" id="conn_c_in"]
+script = ExtResource("conn")
+key = &"C_IN"
+connection_id = 0
+near_key = &"P_APRON"
+far_key = &"P_HALL"
+aperture = Rect2(-2.5, -7.5, 5, 5)
+has_barrier = false
+
+[sub_resource type="Resource" id="conn_c_bay"]
+script = ExtResource("conn")
+key = &"C_BAY"
+connection_id = 1
+near_key = &"P_GALLERY"
+far_key = &"P_EXIT_BAY"
+aperture = Rect2(-2, -37.5, 4, 5)
+starts_open = false
+
+[sub_resource type="Resource" id="conn_c_gate"]
+script = ExtResource("conn")
+key = &"C_GATE"
+connection_id = 2
+near_key = &"P_HALL"
+far_key = &"H_SPINE"
+aperture = Rect2(-2.5, -15.5, 5, 5)
+starts_open = false
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="conn_c_arrive"]
+script = ExtResource("conn")
+key = &"C_ARRIVE"
+connection_id = 3
+near_key = &"P_GALLERY"
+far_key = &"H_SPINE"
+aperture = Rect2(-2.5, -27.5, 5, 5)
+has_barrier = false
+flank_style = &"ledge"
+
+[sub_resource type="Resource" id="trig_t_crate_watch"]
+script = ExtResource("trig")
+key = &"T_CRATE_WATCH"
+trigger_id = 0
+kind = &"breakable_destroyed"
+source_key = &"B_CRATE"
+effects = Array[Dictionary]([{
+"kind": &"enable_trigger",
+"target_key": &"T_HIDDEN"
+}])
+
+[sub_resource type="Resource" id="trig_t_hidden"]
+script = ExtResource("trig")
+key = &"T_HIDDEN"
+trigger_id = 1
+region = Rect2(2, -10, 2, 2)
+starts_enabled = false
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_GATE"
+}])
+
+[sub_resource type="Resource" id="trig_t_plate"]
+script = ExtResource("trig")
+key = &"T_PLATE"
+trigger_id = 2
+region = Rect2(-1, -31, 2, 2)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"activate_encounter",
+"target_key": &"E_GUARD"
+}])
+
+[sub_resource type="Resource" id="trig_t_cleared"]
+script = ExtResource("trig")
+key = &"T_CLEARED"
+trigger_id = 3
+kind = &"encounter_cleared"
+source_key = &"E_GUARD"
+effects = Array[Dictionary]([{
+"kind": &"reveal_switch",
+"target_key": &"S_VENT"
+}])
+
+[sub_resource type="Resource" id="trig_t_socket"]
+script = ExtResource("trig")
+key = &"T_SOCKET"
+trigger_id = 4
+kind = &"carriable_inserted"
+region = Rect2(-5, -34, 2, 2)
+starts_enabled = false
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"C_BAY"
+}])
+
+[sub_resource type="Resource" id="trig_t_lifted"]
+script = ExtResource("trig")
+key = &"T_LIFTED"
+trigger_id = 5
+kind = &"carriable_lifted"
+source_key = &"K_SEAL"
+effects = Array[Dictionary]([{
+"kind": &"enable_trigger",
+"target_key": &"T_SOCKET"
+}])
+
+[sub_resource type="Resource" id="trig_t_exit"]
+script = ExtResource("trig")
+key = &"T_EXIT"
+trigger_id = 6
+kind = &"group_occupancy"
+region = Rect2(-2, -39.5, 4, 3)
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"complete_floor",
+"target_id": -1
+}])
+
+[sub_resource type="Resource" id="enc_e_guard"]
+script = ExtResource("enc")
+key = &"E_GUARD"
+encounter_id = 0
+regions = Array[Rect2]([Rect2(-6, -34, 12, 8)])
+roster = Array[Dictionary]([{
+"enemy_key": &"fang",
+"position": Vector3(-2, 0, -30)
+}, {
+"enemy_key": &"ooze",
+"position": Vector3(2, 0, -31)
+}])
+
+[sub_resource type="Resource" id="brk_b_crate"]
+script = ExtResource("brk")
+key = &"B_CRATE"
+breakable_id = 0
+position = Vector3(3, 0, -9)
+conceals_trigger_id = 1
+
+[sub_resource type="Resource" id="brk_b_urn"]
+script = ExtResource("brk")
+key = &"B_URN"
+breakable_id = 1
+position = Vector3(-4.5, 0, -28.5)
+
+[sub_resource type="Resource" id="sw_s_vent"]
+script = ExtResource("sw")
+key = &"S_VENT"
+switch_id = 0
+position = Vector3(-5.2, 0, -27)
+starts_hidden = true
+effects = Array[Dictionary]([{
+"kind": &"reveal_carriable",
+"target_key": &"K_SEAL"
+}])
+
+[sub_resource type="Resource" id="obs_o_column"]
+script = ExtResource("obs")
+key = &"O_COLUMN"
+obstacle_id = 0
+rect = Rect2(-5, -10, 1.5, 1.5)
+
+[sub_resource type="Resource" id="obs_o_plinth"]
+script = ExtResource("obs")
+key = &"O_PLINTH"
+obstacle_id = 1
+rect = Rect2(4.5, -34, 1.5, 1.5)
+
+[sub_resource type="Resource" id="car_k_seal"]
+script = ExtResource("car")
+key = &"K_SEAL"
+carriable_id = 0
+position = Vector3(5, 0, -27.5)
+starts_hidden = true
+
+[resource]
+script = ExtResource("layout")
+layout_id = &"s1_baseline"
+place_label = "Composition Test"
+patches = Array[ExtResource("patch")]([SubResource("patch_p_apron"), SubResource("patch_p_hall"), SubResource("patch_p_gallery"), SubResource("patch_p_exit_bay"), SubResource("patch_h_spine")])
+connections = Array[ExtResource("conn")]([SubResource("conn_c_in"), SubResource("conn_c_bay"), SubResource("conn_c_gate"), SubResource("conn_c_arrive")])
+triggers = Array[ExtResource("trig")]([SubResource("trig_t_crate_watch"), SubResource("trig_t_hidden"), SubResource("trig_t_plate"), SubResource("trig_t_cleared"), SubResource("trig_t_socket"), SubResource("trig_t_lifted"), SubResource("trig_t_exit")])
+encounters = Array[ExtResource("enc")]([SubResource("enc_e_guard")])
+breakables = Array[ExtResource("brk")]([SubResource("brk_b_crate"), SubResource("brk_b_urn")])
+hit_switches = Array[ExtResource("sw")]([SubResource("sw_s_vent")])
+obstacles = Array[ExtResource("obs")]([SubResource("obs_o_column"), SubResource("obs_o_plinth")])
+carriables = Array[ExtResource("car")]([SubResource("car_k_seal")])
+entry_point = Vector3(0, 0, -1)
+end_marker = Vector3(0, 0, -38)
+exit_console = Vector3(-3.5, 0, -38.5)

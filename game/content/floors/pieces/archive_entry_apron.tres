@@ -1,0 +1,98 @@
+[gd_resource type="Resource" script_class="FloorPiece" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/piece_port.gd" id="port"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="layout"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="patch"]
+[ext_resource type="Script" path="res://game/gen/traversal_connection.gd" id="conn"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="trig"]
+[ext_resource type="Script" path="res://game/gen/encounter_site.gd" id="enc"]
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="brk"]
+[ext_resource type="Script" path="res://game/gen/hit_switch_plan.gd" id="sw"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="obs"]
+[ext_resource type="Script" path="res://game/gen/carriable_plan.gd" id="car"]
+
+[sub_resource type="Resource" id="patch_p_apron"]
+script = ExtResource("patch")
+key = &"P_APRON"
+patch_id = 0
+rect = Rect2(-6, -4, 12, 6)
+
+[sub_resource type="Resource" id="patch_p_hall"]
+script = ExtResource("patch")
+key = &"P_HALL"
+patch_id = 1
+rect = Rect2(-6, -12, 12, 6)
+
+[sub_resource type="Resource" id="conn_c_in"]
+script = ExtResource("conn")
+key = &"C_IN"
+connection_id = 0
+near_key = &"P_APRON"
+far_key = &"P_HALL"
+aperture = Rect2(-2.5, -7.5, 5, 5)
+has_barrier = false
+
+[sub_resource type="Resource" id="trig_t_crate_watch"]
+script = ExtResource("trig")
+key = &"T_CRATE_WATCH"
+trigger_id = 0
+kind = &"breakable_destroyed"
+source_key = &"B_CRATE"
+effects = Array[Dictionary]([{
+"kind": &"enable_trigger",
+"target_key": &"T_HIDDEN"
+}])
+
+[sub_resource type="Resource" id="trig_t_hidden"]
+script = ExtResource("trig")
+key = &"T_HIDDEN"
+trigger_id = 1
+region = Rect2(2, -10, 2, 2)
+starts_enabled = false
+renders_as_plate = true
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"@out"
+}])
+
+[sub_resource type="Resource" id="brk_b_crate"]
+script = ExtResource("brk")
+key = &"B_CRATE"
+breakable_id = 0
+position = Vector3(3, 0, -9)
+conceals_trigger_id = 1
+
+[sub_resource type="Resource" id="obs_o_column"]
+script = ExtResource("obs")
+key = &"O_COLUMN"
+obstacle_id = 0
+rect = Rect2(-5, -10, 1.5, 1.5)
+
+[sub_resource type="Resource" id="body"]
+script = ExtResource("layout")
+layout_id = &"archive_entry_apron"
+patches = Array[ExtResource("patch")]([SubResource("patch_p_apron"), SubResource("patch_p_hall")])
+connections = Array[ExtResource("conn")]([SubResource("conn_c_in")])
+triggers = Array[ExtResource("trig")]([SubResource("trig_t_crate_watch"), SubResource("trig_t_hidden")])
+breakables = Array[ExtResource("brk")]([SubResource("brk_b_crate")])
+obstacles = Array[ExtResource("obs")]([SubResource("obs_o_column")])
+entry_point = Vector3(0, 0, -1)
+
+[sub_resource type="Resource" id="port_out"]
+script = ExtResource("port")
+key = &"out"
+kind = &"gate"
+edge = &"south"
+offset = 5.5
+width = 5
+patch_key = &"P_HALL"
+
+[resource]
+script = ExtResource("piece")
+piece_id = &"archive_entry_apron"
+role = &"entry"
+body = SubResource("body")
+footprint = Rect2(-8, -12, 16, 14)
+allowed_transforms = Array[StringName]([&"identity"])
+ports = Array[ExtResource("port")]([SubResource("port_out")])
