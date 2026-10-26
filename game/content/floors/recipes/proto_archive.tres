@@ -6,7 +6,7 @@
 [ext_resource type="Resource" path="res://game/content/strata/archive.tres" id="stratum"]
 [ext_resource type="Resource" path="res://game/content/layouts/archive_prototype.tres" id="fallback"]
 [ext_resource type="Resource" path="res://game/content/floors/pieces/archive_entry_apron.tres" id="pc_archive_entry_apron"]
-[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_exit_gallery.tres" id="pc_archive_exit_gallery"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_exit_landing.tres" id="pc_archive_exit_landing"]
 [ext_resource type="Resource" path="res://game/content/floors/pieces/archive_landmark_rotunda.tres" id="pc_archive_landmark_rotunda"]
 [ext_resource type="Resource" path="res://game/content/floors/pieces/archive_landmark_gallery.tres" id="pc_archive_landmark_gallery"]
 [ext_resource type="Resource" path="res://game/content/floors/pieces/archive_encounter_pit.tres" id="pc_archive_encounter_pit"]
@@ -23,7 +23,7 @@ script = ExtResource("recipe")
 recipe_id = &"proto_archive"
 place_label = ""
 stratum = ExtResource("stratum")
-pieces = Array[ExtResource("piece")]([ExtResource("pc_archive_entry_apron"), ExtResource("pc_archive_exit_gallery"), ExtResource("pc_archive_landmark_rotunda"), ExtResource("pc_archive_landmark_gallery"), ExtResource("pc_archive_encounter_pit"), ExtResource("pc_archive_encounter_lane"), ExtResource("pc_archive_objective_crate_store"), ExtResource("pc_archive_objective_switch_vault")])
+pieces = Array[ExtResource("piece")]([ExtResource("pc_archive_entry_apron"), ExtResource("pc_archive_exit_landing"), ExtResource("pc_archive_landmark_rotunda"), ExtResource("pc_archive_landmark_gallery"), ExtResource("pc_archive_encounter_pit"), ExtResource("pc_archive_encounter_lane"), ExtResource("pc_archive_objective_crate_store"), ExtResource("pc_archive_objective_switch_vault")])
 profiles = Array[ExtResource("profile")]([ExtResource("pf_approach"), ExtResource("pf_link"), ExtResource("pf_detour"), ExtResource("pf_shortcut")])
 nodes = Array[Dictionary]([{
 "key": &"entry",

@@ -79,3 +79,12 @@ extends Resource
 @export var pickup_reach: float = 2.0
 @export var pickup_cone_half_angle_degrees: float = 60.0
 @export var pickup_underfoot_radius: float = 0.45
+
+## REACTION ALLOWANCE (ADR-001 S2.5, human finding 2026-10-23: enemies woke "directly on top of
+## the player"). The time a player is granted to read an enemy that appears on activation before
+## it can be upon them: EncounterSpacing adds this to the enemy's shortest windup and multiplies
+## by its speed to derive the ARRIVAL REACH no activation-spawn may stand inside. Read by content
+## validation only; the sim never consults it. 15 ticks = 0.5 s at 30 Hz, PROVISIONAL: with it,
+## every shipped plate-activated encounter the human accepted passes (closest margin: E_POCKET's
+## fang, 5.8 against 5.7) and the rejected S2 exit gallery (2.0, 2.2) fails. Retune on evidence.
+@export var spawn_reaction_ticks: int = 15

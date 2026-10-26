@@ -1,0 +1,84 @@
+[gd_resource type="Resource" script_class="FloorRecipe" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_recipe.gd" id="recipe"]
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/traversal_profile.gd" id="profile"]
+[ext_resource type="Resource" path="res://game/content/strata/archive.tres" id="stratum"]
+[ext_resource type="Resource" path="res://game/content/layouts/archive_prototype.tres" id="fallback"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_entry_apron.tres" id="pc_archive_entry_apron"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_exit_landing.tres" id="pc_archive_exit_landing"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_landmark_rotunda.tres" id="pc_archive_landmark_rotunda"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_landmark_gallery.tres" id="pc_archive_landmark_gallery"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_encounter_pit.tres" id="pc_archive_encounter_pit"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_encounter_lane.tres" id="pc_archive_encounter_lane"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_objective_crate_store.tres" id="pc_archive_objective_crate_store"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_objective_switch_vault.tres" id="pc_archive_objective_switch_vault"]
+[ext_resource type="Resource" path="res://game/content/floors/profiles/approach.tres" id="pf_approach"]
+[ext_resource type="Resource" path="res://game/content/floors/profiles/link.tres" id="pf_link"]
+[ext_resource type="Resource" path="res://game/content/floors/profiles/link_turn.tres" id="pf_link_turn"]
+[ext_resource type="Resource" path="res://game/content/floors/profiles/detour.tres" id="pf_detour"]
+[ext_resource type="Resource" path="res://game/content/floors/profiles/shortcut.tres" id="pf_shortcut"]
+
+[resource]
+script = ExtResource("recipe")
+recipe_id = &"proto_archive_dogleg"
+place_label = ""
+stratum = ExtResource("stratum")
+pieces = Array[ExtResource("piece")]([ExtResource("pc_archive_entry_apron"), ExtResource("pc_archive_exit_landing"), ExtResource("pc_archive_landmark_rotunda"), ExtResource("pc_archive_landmark_gallery"), ExtResource("pc_archive_encounter_pit"), ExtResource("pc_archive_encounter_lane"), ExtResource("pc_archive_objective_crate_store"), ExtResource("pc_archive_objective_switch_vault")])
+profiles = Array[ExtResource("profile")]([ExtResource("pf_approach"), ExtResource("pf_link"), ExtResource("pf_link_turn"), ExtResource("pf_detour"), ExtResource("pf_shortcut")])
+nodes = Array[Dictionary]([{
+"key": &"entry",
+"role": &"entry"
+}, {
+"key": &"landmark",
+"role": &"landmark"
+}, {
+"key": &"encounter",
+"role": &"encounter"
+}, {
+"key": &"exit",
+"role": &"exit"
+}, {
+"key": &"objective",
+"role": &"objective"
+}])
+edges = Array[Dictionary]([{
+"from": &"entry",
+"from_port": &"out",
+"to": &"landmark",
+"to_port": &"in",
+"profile": &"approach"
+}, {
+"from": &"landmark",
+"from_port": &"side",
+"to": &"encounter",
+"to_port": &"in",
+"profile": &"link_turn"
+}, {
+"from": &"encounter",
+"from_port": &"out",
+"to": &"exit",
+"to_port": &"in",
+"profile": &"link"
+}, {
+"from": &"landmark",
+"from_port": &"out",
+"to": &"objective",
+"to_port": &"in",
+"profile": &"detour"
+}, {
+"from": &"objective",
+"from_port": &"out",
+"to": &"exit",
+"to_port": &"side",
+"profile": &"shortcut",
+"closes_cycle": true
+}])
+flow_axis = Vector2(0, -1)
+grid_cell = 2
+margin = 2
+extent = Rect2(-80, -160, 160, 164)
+candidates_per_piece = 3
+placement_budget = 300
+reseed_budget = 3
+fallback = ExtResource("fallback")

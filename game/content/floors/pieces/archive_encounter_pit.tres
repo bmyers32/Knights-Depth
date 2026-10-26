@@ -16,13 +16,13 @@
 script = ExtResource("patch")
 key = &"P_PIT"
 patch_id = 0
-rect = Rect2(-7, -18, 16, 18)
+rect = Rect2(-9, -26, 20, 26)
 
 [sub_resource type="Resource" id="trig_t_plate"]
 script = ExtResource("trig")
 key = &"T_PLATE"
 trigger_id = 0
-region = Rect2(-1, -10, 2, 2)
+region = Rect2(-1, -7, 2, 2)
 renders_as_plate = true
 effects = Array[Dictionary]([{
 "kind": &"activate_encounter",
@@ -44,23 +44,29 @@ effects = Array[Dictionary]([{
 script = ExtResource("enc")
 key = &"E_PIT"
 encounter_id = 0
-regions = Array[Rect2]([Rect2(-7, -18, 16, 18)])
+regions = Array[Rect2]([Rect2(-9, -26, 20, 26)])
 roster = Array[Dictionary]([{
 "enemy_key": &"fang",
-"position": Vector3(3, 0, -5)
+"position": Vector3(7, 0, -18)
 }, {
 "enemy_key": &"fang",
-"position": Vector3(-3, 0, -13)
+"position": Vector3(-6, 0, -18)
 }, {
 "enemy_key": &"ooze",
-"position": Vector3(5, 0, -14)
+"position": Vector3(-2, 0, -21)
 }])
 
 [sub_resource type="Resource" id="brk_b_rubble"]
 script = ExtResource("brk")
 key = &"B_RUBBLE"
 breakable_id = 0
-position = Vector3(-5, 0, -3)
+position = Vector3(-6, 0, -3)
+
+[sub_resource type="Resource" id="obs_o_cover"]
+script = ExtResource("obs")
+key = &"O_COVER"
+obstacle_id = 0
+rect = Rect2(3, -15, 3, 3)
 
 [sub_resource type="Resource" id="body"]
 script = ExtResource("layout")
@@ -69,13 +75,14 @@ patches = Array[ExtResource("patch")]([SubResource("patch_p_pit")])
 triggers = Array[ExtResource("trig")]([SubResource("trig_t_plate"), SubResource("trig_t_clear")])
 encounters = Array[ExtResource("enc")]([SubResource("enc_e_pit")])
 breakables = Array[ExtResource("brk")]([SubResource("brk_b_rubble")])
+obstacles = Array[ExtResource("obs")]([SubResource("obs_o_cover")])
 
 [sub_resource type="Resource" id="port_in"]
 script = ExtResource("port")
 key = &"in"
 kind = &"connector"
 edge = &"north"
-offset = 6
+offset = 8
 width = 6
 patch_key = &"P_PIT"
 
@@ -84,7 +91,7 @@ script = ExtResource("port")
 key = &"out"
 kind = &"gate"
 edge = &"south"
-offset = 6
+offset = 8
 width = 6
 patch_key = &"P_PIT"
 
@@ -93,7 +100,7 @@ script = ExtResource("port")
 key = &"side"
 kind = &"connector"
 edge = &"east"
-offset = 6
+offset = 8
 width = 6
 patch_key = &"P_PIT"
 
@@ -102,7 +109,7 @@ script = ExtResource("piece")
 piece_id = &"archive_encounter_pit"
 role = &"encounter"
 body = SubResource("body")
-footprint = Rect2(-9, -18, 18, 18)
+footprint = Rect2(-11, -26, 22, 26)
 allowed_transforms = Array[StringName]([&"identity", &"mirror_x"])
 ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_out"), SubResource("port_side")])
 tags = Array[StringName]([&"sealing"])

@@ -4,10 +4,10 @@ extends SceneTree
 ## papers' ASCII maps. Pieces are tinted by instance, hallways grey, apertures blue, obstacles
 ## dark, plates orange, encounter territories outlined red, entry / exit / console marked.
 ##
-## Run:  & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s tools/draw_composed_floor.gd -- --seeds=1,7,42 --depth=1
-## Writes build/composed/seed_<n>.svg (build/ is untracked) and prints a one-line legend per seed.
+## Run:  & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s tools/draw_composed_floor.gd -- --seeds=1,7,42 --depth=1 --recipe=proto_archive
+## Writes build/composed/<recipe>/seed_<n>.svg (build/ is untracked) and prints a one-line legend per seed.
 
-const RECIPE_PATH := "res://game/content/floors/recipes/proto_archive.tres"
+const RECIPE_DIR := "res://game/content/floors/recipes/"
 const SCALE: float = 4.0
 const PAD: float = 12.0
 const TINTS: Array[String] = ["#d9c7a0", "#b8cfe0", "#cfe0b8", "#e0b8d6", "#e0d2b8", "#b8e0dc"]
@@ -15,15 +15,17 @@ const TINTS: Array[String] = ["#d9c7a0", "#b8cfe0", "#cfe0b8", "#e0b8d6", "#e0d2
 
 func _init() -> void:
 	var depth: int = int(_arg("depth", "1"))
-	var recipe: FloorRecipe = load(RECIPE_PATH)
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://build/composed"))
+	var recipe_id: String = _arg("recipe", "proto_archive")
+	var recipe: FloorRecipe = load(RECIPE_DIR + recipe_id + ".tres")
+	var out_dir: String = "res://build/composed/%s" % recipe_id
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(out_dir))
 	for token: String in _arg("seeds", "1,7,42").split(","):
 		var run_seed: int = int(token)
 		var result: FloorComposer.ComposeResult = FloorComposer.compose(recipe, SeedMix.derive(run_seed, depth), depth)
 		if result.draft == null:
 			print("seed %d: %s" % [run_seed, result.report.summary()])
 			continue
-		var path: String = "res://build/composed/seed_%d.svg" % run_seed
+		var path: String = "%s/seed_%d.svg" % [out_dir, run_seed]
 		var file := FileAccess.open(path, FileAccess.WRITE)
 		file.store_string(_svg(result))
 		file.close()

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="TraversalProfile" format=3]
+
+[ext_resource type="Script" path="res://game/gen/traversal_profile.gd" id="profile"]
+
+[resource]
+script = ExtResource("profile")
+profile_id = &"link_turn"
+width = 6
+length_min = 16
+length_max = 32
+max_legs = 2
+leg_min = 8
+gap = 2
+overlap = 1.5
+boundary_style = &"ledge"

@@ -4,19 +4,20 @@ extends Node
 ## exactly the way a test boots a single floor, with the composed plan handed in through the
 ## Arena's prepared-plan seam. Nothing here touches the normal itinerary or DepthGenerator.
 ##
-## Run (windowed):  & "C:\Godot\Godot_v4.7-stable_win64.exe" --path . tools/composed_floor_playground.tscn -- --seed=7
+## Run (windowed):  & "C:\Godot\Godot_v4.7-stable_win64.exe" --path . tools/composed_floor_playground.tscn -- --seed=7 --recipe=proto_archive
 ## Boot check:      & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless --path . tools/composed_floor_playground.tscn --quit-after 300 -- --seed=7
+## (`tools/play_composed_floor.ps1 -Seed 7 -Recipe proto_archive_dogleg` wraps both.)
 ##
 ## A scene rather than a -s script because the Arena needs the ContentDB autoload.
 
 const ARENA := preload("res://game/arena/arena.tscn")
-const RECIPE_PATH := "res://game/content/floors/recipes/proto_archive.tres"
+const RECIPE_DIR := "res://game/content/floors/recipes/"
 const DEPTH: int = 1
 
 
 func _ready() -> void:
 	var run_seed: int = int(_arg("seed", "1"))
-	var recipe: FloorRecipe = load(RECIPE_PATH)
+	var recipe: FloorRecipe = load(RECIPE_DIR + _arg("recipe", "proto_archive") + ".tres")
 	var radii: Dictionary = {}
 	for key: StringName in recipe.stratum.enemy_keys:
 		var stats: Resource = ContentDB.get_resource(&"enemy", key)

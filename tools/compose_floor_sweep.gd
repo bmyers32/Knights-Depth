@@ -3,25 +3,28 @@ extends SceneTree
 ## reports what happened -- successes, reseeds, fallbacks, rejection reasons, route shapes and
 ## lengths, piece choices, distinct spatial signatures, and generation time (p50 / p99).
 ##
-## Run:  & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s tools/compose_floor_sweep.gd -- --seeds=200 --depth=1
-## Writes build/compose_sweep.json (build/ is untracked) and prints the aggregate.
+## Run:  & "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s tools/compose_floor_sweep.gd -- --seeds=200 --depth=1 --recipe=proto_archive
+## Writes build/compose_sweep_<recipe>.json (build/ is untracked) and prints the aggregate.
 ##
 ## No autoloads exist under -s: content is loaded by path, never through ContentDB. The S0
-## progression validator runs on every composed floor FOR INFORMATION (S3 puts it in the loop).
+## progression validator and the S2.5 spawn-spacing rule run on every composed floor FOR
+## INFORMATION (S3 puts the validator in the loop).
 
-const RECIPE_PATH := "res://game/content/floors/recipes/proto_archive.tres"
-const OUT_PATH := "res://build/compose_sweep.json"
+const RECIPE_DIR := "res://game/content/floors/recipes/"
 
 
 func _init() -> void:
 	var seeds: int = int(_arg("seeds", "100"))
 	var depth: int = int(_arg("depth", "1"))
-	var recipe: FloorRecipe = load(RECIPE_PATH)
+	var recipe_id: String = _arg("recipe", "proto_archive")
+	var recipe: FloorRecipe = load(RECIPE_DIR + recipe_id + ".tres")
+	var out_path: String = "res://build/compose_sweep_%s.json" % recipe_id
 	var rules: Dictionary = _rules()
 	var radii: Dictionary = _radii(recipe)
+	var reaches: Dictionary = _reaches(recipe)
 	var rows: Array[Dictionary] = []
 	var times: Array[float] = []
-	var totals: Dictionary = {"composed": 0, "fallback": 0, "structural": 0, "reseeded": 0, "progression_pass": 0, "progression_fail": 0, "progression_unsupported": 0}
+	var totals: Dictionary = {"composed": 0, "fallback": 0, "structural": 0, "reseeded": 0, "progression_pass": 0, "progression_fail": 0, "progression_unsupported": 0, "spawn_unsafe": 0}
 	var rejections: Dictionary = {}
 	var signatures: Dictionary = {}
 	var casts: Dictionary = {}
@@ -62,21 +65,25 @@ func _init() -> void:
 			row["progression"] = String(progression.outcome)
 			row["progression_steps"] = progression.trace.size()
 			totals["progression_" + String(progression.outcome)] += 1
+			var spacing: Array[Dictionary] = EncounterSpacing.findings(result.layout, reaches)
+			row["spawn_findings"] = spacing.size()
+			if not spacing.is_empty():
+				totals["spawn_unsafe"] += 1
 		rows.append(row)
 		print("%4d  %s" % [run_seed, report.summary().split("\n")[0]])
 	times.sort()
 	var aggregate: Dictionary = {
-		"seeds": seeds, "depth": depth, "totals": totals, "rejections": rejections,
+		"recipe": recipe_id, "seeds": seeds, "depth": depth, "totals": totals, "rejections": rejections,
 		"distinct_signatures": signatures.size(), "casts": casts, "shapes": shapes,
 		"lengths": _bands(lengths),
 		"time_ms": {"p50": _percentile(times, 0.50), "p90": _percentile(times, 0.90), "p99": _percentile(times, 0.99), "max": times[times.size() - 1] if not times.is_empty() else 0.0},
 	}
 	print(JSON.stringify(aggregate, "  "))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://build"))
-	var file := FileAccess.open(OUT_PATH, FileAccess.WRITE)
+	var file := FileAccess.open(out_path, FileAccess.WRITE)
 	file.store_string(JSON.stringify({"aggregate": aggregate, "rows": rows}, "\t"))
 	file.close()
-	print("wrote ", OUT_PATH)
+	print("wrote ", out_path)
 	quit()
 
 
@@ -101,6 +108,25 @@ func _radii(recipe: FloorRecipe) -> Dictionary:
 		if stats != null:
 			radii[key] = stats.combat_radius
 	return radii
+
+
+## Each roster member's ARRIVAL REACH (EncounterSpacing) from its own stats, its natural weapons'
+## shortest windup, the Envoy's body and reaction allowance, and the project's tick rate.
+func _reaches(recipe: FloorRecipe) -> Dictionary:
+	var envoy: Resource = load("res://game/content/envoy/envoy_stats.tres")
+	var ticks_per_second: float = float(ProjectSettings.get_setting("physics/common/physics_ticks_per_second"))
+	var reaches: Dictionary = {}
+	for key: StringName in recipe.stratum.enemy_keys:
+		var stats: Resource = load("res://game/content/enemies/%s/%s_stats.tres" % [key, key])
+		if stats == null:
+			continue
+		var windup: int = -1
+		for action_id: StringName in stats.action_ids:
+			var weapon: Resource = load("res://game/content/enemies/natural_weapons/%s.tres" % action_id)
+			if weapon != null and (windup < 0 or weapon.windup_ticks < windup):
+				windup = weapon.windup_ticks
+		reaches[key] = EncounterSpacing.arrival_reach(envoy.combat_radius, stats.combat_radius, stats.preferred_attack_distance, stats.move_speed, maxi(windup, 0), envoy.spawn_reaction_ticks, ticks_per_second)
+	return reaches
 
 
 func _percentile(sorted_values: Array[float], fraction: float) -> float:

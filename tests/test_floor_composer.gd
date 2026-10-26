@@ -5,6 +5,7 @@ extends GutTest
 ## lengths, which extents), never on serialized ids happening to differ.
 
 const RECIPE_PATH := "res://game/content/floors/recipes/proto_archive.tres"
+const DOGLEG_PATH := "res://game/content/floors/recipes/proto_archive_dogleg.tres"
 const SWEEP: int = 40
 const DEPTH: int = 1
 
@@ -120,8 +121,9 @@ func test_casting_sorts_by_identity_then_draws_by_weight() -> void:
 
 # --- soundness of every composed floor ------------------------------------------------------
 
-func test_every_composed_floor_in_the_sweep_is_structurally_sound_and_finishable() -> void:
-	var recipe: FloorRecipe = _recipe()
+## Every composed floor of a recipe over the sweep: emitted, compiled with no violations, margins
+## kept, joints named, routes inside their profiles, finishable. Returns how many seeds fell back.
+func _sweep_is_sound(recipe: FloorRecipe) -> int:
 	var fallbacks: int = 0
 	for run_seed in SWEEP:
 		var result: FloorComposer.ComposeResult = _compose(run_seed, recipe)
@@ -153,9 +155,46 @@ func test_every_composed_floor_in_the_sweep_is_structurally_sound_and_finishable
 			assert_between(float(route["length"]), profile.length_min, profile.length_max, "seed %d %s length" % [run_seed, edge])
 		var progression: ProgressionReport = ProgressionValidator.check(plan, _rules())
 		assert_true(progression.is_pass(), "seed %d: %s" % [run_seed, progression.summary()])
+	return fallbacks
+
+
+func test_every_composed_floor_in_the_sweep_is_structurally_sound_and_finishable() -> void:
 	# MEASURED BASELINE (2026-10-23), not a law: these forty seeds all composed. If content or
 	# profiles change and this moves, the sweep tool says by how much; the owner rules on it (O4).
-	assert_eq(fallbacks, 0, "fallbacks in seeds 0..%d" % (SWEEP - 1))
+	assert_eq(_sweep_is_sound(_recipe()), 0, "fallbacks in seeds 0..%d" % (SWEEP - 1))
+
+
+# --- the dogleg (S2.5 topology experiment) -----------------------------------------------------
+
+func _dogleg() -> FloorRecipe:
+	return load(DOGLEG_PATH)
+
+
+func test_the_dogleg_recipe_lints_clean_and_is_as_sound_as_the_column() -> void:
+	var recipe: FloorRecipe = _dogleg()
+	assert_eq(recipe.lint(), [] as Array[Dictionary])
+	assert_eq(recipe.profile(&"link_turn").max_legs, 2, "the turning LINK bends exactly once")
+	assert_eq(_sweep_is_sound(recipe), 0, "fallbacks in seeds 0..%d (measured baseline 2026-10-23)" % (SWEEP - 1))
+
+
+## TOPOLOGY, NOT SIZE. Column: the encounter stands on the landmark's axis behind a straight LINK
+## and the shortcut returns into the encounter's flank. Dogleg: the main line leaves the
+## landmark's SIDE, bends toward the flow and stands aside; the objective continues straight
+## through the far door; its shortcut enters the exit's side, around the encounter.
+func test_the_dogleg_differs_from_the_column_in_topology_not_in_dimensions() -> void:
+	for run_seed in [1, 7, 42]:
+		var column: GenerationReport = _compose(run_seed).report
+		var dogleg: GenerationReport = _compose(run_seed, _dogleg()).report
+		assert_true(column.succeeded() and dogleg.succeeded(), "seed %d" % run_seed)
+		if not (column.succeeded() and dogleg.succeeded()):
+			continue
+		assert_eq(column.routes["landmark>encounter"]["shape"], FloorComposer.SHAPE_STRAIGHT, "column: a straight link")
+		assert_eq(dogleg.routes["landmark>encounter"]["shape"], FloorComposer.SHAPE_L, "dogleg: one bend")
+		assert_eq(float(column.cast[&"encounter"]["origin"].x), float(column.cast[&"landmark"]["origin"].x), "column: the encounter stays on the landmark's axis")
+		assert_gte(absf(float(dogleg.cast[&"encounter"]["origin"].x) - float(dogleg.cast[&"landmark"]["origin"].x)), 8.0, "dogleg: the main line steps aside by at least a leg")
+		assert_true(column.routes.has("objective>encounter") and not column.routes.has("objective>exit"), "column: the shortcut rejoins the encounter")
+		assert_true(dogleg.routes.has("objective>exit") and not dogleg.routes.has("objective>encounter"), "dogleg: the shortcut bypasses the encounter into the exit's side")
+		assert_lt(float(dogleg.cast[&"objective"]["origin"].y), float(dogleg.cast[&"landmark"]["origin"].y), "dogleg: the objective lies beyond the landmark along the flow")
 
 
 ## THE CLEARANCE LAW, DIRECTLY: everything new, grown by the margin, has no positive-area overlap
