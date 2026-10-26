@@ -59,7 +59,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P50 | Seed policy for deployments | PROPOSED — **recorded 2026-10-22** | Main fixes `run_seed = 0` (Slice 3 baseline). Once floors vary by seed: fresh seed per deployment by default, deliberate replay-by-seed, layout vs combat seed kept explicit |
 | P51 | Obstacle wall skirts on expedition floors | DEBT — **recorded 2026-10-22**, P39 presentation | FloorBuilder wraps every obstacle in 2.2-high walls pushed 0.3 outward; hubs switch it off (`draw_obstacle_faces`), expedition floors still draw it |
 | P52 | Commons spatial master plan | REQUIRED BEFORE ANY COMMONS REBUILD — **ruled 2026-10-21 (D5)** | Central plaza, connected districts, services/NPC sites, loops, crowd + camera; split build-now / M4 / deferred. Plan first, then review |
-| P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 `6631ed8`, S1 `5b588c6` SHIPPED; S2 `a4f87dd` TECHNICAL PASS 2026-10-23 (human look at 3 seeds OPEN, not performed); S3+ NOT AUTHORIZED** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
+| P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 `6631ed8`, S1 `5b588c6` SHIPPED; S2 `a4f87dd` TECHNICAL PASS 2026-10-23; HUMAN GATE PLAYED 2026-10-23: ITERATE → S2.5 (spatial + encounter quality) COMMITTED `6d252cd`, HUMAN S2.5 GATE PLAYED: ITERATE; S3a AUTHORIZED 2026-10-26 (no-commit G1 gate), S3b+ NOT AUTHORIZED** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4412,7 +4412,21 @@ depth-first search with undo-by-mark backtracking, cycle-closing routes (I / L /
 reseeds, an authored fallback reported apart. Eight pieces, four profiles, recipe `proto_archive` (a
 fork-and-rejoin loop; gates stay inside their pieces). 200-seed sweep: 200 composed, 0 fallback, p99 55 ms,
 every floor PASSes the S0 validator. Tools: sweep, SVG diagrams, a debug-playable scene (not on the itinerary).
-**Human S2 gate (not performed):** three seeds, one question -- hallways: architecture, or trench/filler?
+**Human S2 gate (played 2026-10-23): ITERATE.** Better than the first authored rooms; seed 42 the best
+arrangement; some areas too narrow; routes want more interest; the final sealing chamber far too small,
+enemies waking on the player; a fight + switch + key + receiver + exit compressed into one room.
+**S2.5 (built 2026-10-23, uncommitted, pending review):** diagnosis measured against every shipped
+encounter (guards authored 2.0 / 2.2 from the plate vs never under 5.83 shipped; a 96-area chamber vs
+520-616 for three-roster arenas); `EncounterSpacing` ARRIVAL REACH rule (stats-derived, calibrated:
+every accepted room passes, the gallery fails) + `EnvoyStats.spawn_reaction_ticks`; the pit resized to
+520 with spawns ahead and a cover pillar; a plain exit landing (pad + console) replaces the gallery in
+the recipes (the gallery stays as the S1 fixture); `link_turn` profile + recipe `proto_archive_dogleg`
+(main line bends off the landmark's side; objective straight ahead; its shortcut enters the exit's
+side around the fight). Sweeps 200 seeds each: column 200/0 fallback/p99 52 ms; dogleg 200/0/p99 59 ms;
+0 spawn findings. S3 acceptance now carries an experience contract (ADR §7 S3 row).
+**Human S2.5 gate (played): ITERATE.** The enlarged arena improved; the dogleg lacked meaningful exploration;
+the shortcut was unsatisfying; the opening crate-and-plate interaction was trivial (ruled out). Committed
+`6d252cd` as a technical foundation, not as approved level design. Next: S3a, the folded remote-key expedition.
 **Next (needs separate authorization):** S3 -- ports -> cross-piece effects, gates/shortcut wiring,
 progression validator in the loop.
 **Open owner numbers (O4):** fallback rate, diversity floor, safe screen band, grid cell, profile bands --

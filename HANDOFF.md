@@ -24,32 +24,31 @@ picked by DEPTH (authored; the seed changes nothing spatial). Four goldens uncha
 - **Ready Room = one open hall** (`ready_room.tres`): lower arrival apron, console island ahead (lectern
   faces arrival), two stepped approaches (visual-only risers), merchant NW, armory + crafter east, pad
   unchanged at Rect2(-2,-25,4,4) in a framed north recess. Walks: briefing 0.9 s, pad 8.0 s.
-- **FloorBuilder hub-only switches** (`hub_space.tscn`): `draw_obstacle_faces = false`,
-  `solid_raised_ground = true`; expedition floors unchanged (P51). `turn_exit_console_toward()` public.
-- **Arena:** `standalone` export gates R; `return_to_commons_requested`; summary Button after the intro;
-  `freeze()`; `FloorPreview` extracted. `begin_expedition()` is still the one run entry, once per instance.
+- **Hub-only FloorBuilder switches** `draw_obstacle_faces = false`, `solid_raised_ground = true` (P51). **Arena:**
+  `standalone` gates R; summary Button; `freeze()`; `FloorPreview`; `begin_expedition()` still the one run entry.
 - Tests: navigation 31, ready_room_space 16, hub_layouts 6. Mutants: Ready Room 12/13 (survivor legitimate), deployment 9/9.
-
 **NOT human-checked:** travel-HUD hiding during departure; a full Extraction/Recall -> Commons loop under Main. Home = shell; Commons = placeholder (P52).
 
-## ADR-001 PROCEDURAL FLOORS — S0 `6631ed8`, S1 `5b588c6`, S2 `a4f87dd` (TECHNICAL PASS 2026-10-23; HUMAN GATE OPEN)
-- `ADR-001-PROCEDURAL-FLOORS.md` is the design of record (ROADMAP P53). Stages are authorized ONE AT A TIME;
-  **S3+ (cross-piece wiring, visibility, population, itinerary slot) is NOT authorized.** Numbers: `ADR-001-S2-MEASUREMENTS.md`.
-- **S0/S1:** `FloorPlan.violations()`, `ProgressionValidator`; `FloorPiece`/`PiecePort`/`FloorDraft`/`DraftEmitter` (S1).
-- **S2:** `seed_mix.gd` (pinned derivation, autoload-free; `DepthGenerator.derive_floor_seed` delegates -- a `-s` tool
-  cannot compile anything reaching ContentDB), `traversal_profile.gd`, `floor_recipe.gd` (explicit node order + edges,
-  pool, budgets, extent, fallback), `generation_report.gd` (O2), `floor_composer.gd` (`compose(recipe, floor_seed,
-  depth, radii)`: cast sorted-then-weighted by an isolated stream; positions FROM THE ROUTE (I/L/Z legs on the grid,
-  ring start from the place stream, lazy cursor per frame); depth-first with `mark()/rewind()`; cycle-closing I/L/Z/U;
-  counted budgets; reseeds; fallback reported APART). 4 profiles, 8 pieces, recipe `proto_archive` (fork-and-rejoin
-  loop; gates stay inside pieces). Tools: `tools/compose_floor_sweep.gd` (-s), `draw_composed_floor.gd` (SVG ->
-  build/composed/), `composed_floor_playground.tscn` (debug-playable `--seed=N`; NOT on the itinerary). 200 seeds:
-  200 composed, 0 fallback, 13 reseeded, all PASS S0, p50 15.5 / p99 55 ms. **Human look at 3 seeds NOT performed.**
-- **Found:** mirror_x is never reached on the prototype (identity + a jog always fits first); the main line is a
-  straight column of rooms + straight LINKs -- the "four boxes" risk is REAL and is the human's call, not a validator's.
+## ADR-001 PROCEDURAL FLOORS — S0 `6631ed8`, S1 `5b588c6`, S2 `a4f87dd`; S2.5 `6d252cd`; HUMAN S2 AND S2.5 GATES: ITERATE
+- `ADR-001-PROCEDURAL-FLOORS.md` is the design of record (ROADMAP P53); numbers in `ADR-001-S2-MEASUREMENTS.md` (+§S2.5).
+  Stages are authorized ONE AT A TIME; **S3a (folded remote-key expedition) AUTHORIZED 2026-10-26, NO-COMMIT G1 gate; S3b+ NOT authorized.**
+- **S2 (committed):** `seed_mix.gd` (a `-s` tool cannot compile anything reaching ContentDB), `traversal_profile.gd`,
+  `floor_recipe.gd`, `generation_report.gd`, `floor_composer.gd` (`compose(recipe, floor_seed, depth, radii)`: cast
+  sorted-then-weighted; positions FROM THE ROUTE; depth-first `mark()/rewind()`; cycle-closing I/L/Z/U; fallback APART).
+- **Playtest verdict:** better than the first authored rooms; seed 42 best; areas narrow, routes want interest; the exit
+  gallery's sealing fight woke enemies ON the player and packed fight + switch + key + receiver + exit into 12x8.
+- **S2.5 (`6d252cd`; human ITERATE: arena better, dogleg no exploration, shortcut flat, crate opening ruled out):** `game/gen/encounter_spacing.gd` ARRIVAL REACH = envoy body + enemy body + attack band + speed x
+  (shortest windup + `EnvoyStats.spawn_reaction_ticks` 15)/30 from the region's CENTRE (nearest-point flagged 3 accepted
+  shipped rooms -- BRAIN); fang 5.7 / ooze 6.35 / watcher 5.63; every shipped room passes, the gallery (2.0, 2.2) fails.
+  Pit 20x26 (spawns 12.5-15.1 ahead of the plate, cover pillar); `archive_exit_landing` (pad+console, `in` + west `side`)
+  replaces the gallery in BOTH recipes (gallery kept as the S1 fixture); `link_turn` 16-32 one bend; `proto_archive_dogleg`
+  (landmark.side -LINK_TURN-> encounter; landmark.out -DETOUR-> objective; objective.out -SHORTCUT-> exit.side). Tools
+  take `--recipe=` (build/compose_sweep_<recipe>.json, build/composed/<recipe>/). 200 seeds each: column 200/0 fallback/
+  p99 52 ms; dogleg 200/0/p99 59 ms; 0 spawn findings; all PASS S0. **Found, unchanged:** `SimWorld._activate_encounter`
+  makes a roster present AND active the same tick with no engagement opener (`_acquire_aggro` arms one) -- owner's call.
 ## Next action
-1. HUMAN S2 GATE (owner): `.\tools\play_composed_floor.ps1 -Seed 7 -Diagram` (also 1, 42): place, or corridors
-   between arenas? Then rule on the straight main column BEFORE S3 (S3 NOT started). 2. Commons plan (P52). 3. Melee-through-walls.
+1. S3a: plain entry -> landmark with a closed key door -> mandatory fight -> key vault -> earned return -> key into the
+   door itself -> folded route to the exit. Stop at G1, no commit. 2. Commons plan (P52).
 **Deferred (ROADMAP, do NOT build in M2 slices):** P46 loot on summary · P49 death/resync animation ·
 P45 descent preloading · P47/P48 co-op revival + carry-through · P38 party/loadout/route · P51 skirts.
 

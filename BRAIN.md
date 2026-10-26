@@ -1302,3 +1302,20 @@ landmark plus objective side by side span 34, so a width of 24 is impossible whi
 fits), state the bound in the test, and assert the failure diagnostics, not just the failure.
 **Where else:** any negative test of a planner, router, solver or validator; "unsolvable" progression
 fixtures (S0 showed the mirror image: a fixture the author thought solvable that the sim refused).
+
+### Calibrate a derived rule against accepted content in BOTH directions before trusting it
+**Incident (ADR-001 S2.5, 2026-10-23):** the spawn-safety rule (no roster member inside its arrival
+reach of the plate that wakes it) was first written to measure from the point of the region nearest
+the spawn -- the pessimistic, "obviously safe" choice. It flagged three shipped rooms the human had
+played and accepted (threshold zones whose rosters stand inside the zone), while the gallery the
+human had just rejected failed either way. The rule was stricter than the judgement it claimed to
+encode.
+**Mechanism:** a rule derived from stats has a free modelling choice hidden in it (where the player
+stands when it fires). The stats fix the reach; only accepted content can fix the model.
+**Failure if ignored:** a validator that rejects content the owner likes, which gets "tuned" by
+loosening the allowance until the rejected content passes too -- the rule then encodes nothing.
+**Fix shape:** run the rule over every piece of content with a known verdict, accepted AND rejected,
+and keep the modelling choice that separates them; pin the tightest accepted margin in a test so the
+next allowance change names the room it would contradict.
+**Where else:** any threshold derived from stats (reach, visibility, leash); any lint added after a
+playtest finding.

@@ -31,3 +31,24 @@ separation between unjoined patches, and extents.
 
 **Not measured, deliberately:** fallback-rate threshold, diversity floor, safe screen band (O4,
 still open) — the S2 sweep produces the numbers the owner will rule on.
+
+## S2.5 — spatial and encounter quality (2026-10-23, after the S2 playtest: ITERATE)
+
+The playtest's finding — enemies wake "directly on top of the player" in a chamber that also holds
+a switch, a key, its receiver and the exit — was measured against every encounter the human had
+already accepted. Sources: the four shipped layouts' `activate_encounter` triggers, roster
+positions and territories; `envoy_stats.gd`; `*_stats.gd`; `natural_weapons/*.tres`;
+`physics_ticks_per_second = 30`.
+
+| Parameter | Measured | Provisional S2.5 value | Where it lives |
+|---|---|---|---|
+| Spawn distance from the activating region's centre, shipped sealing rooms | smallest **5.83** (Floor 2 `E_POCKET`, a deliberate ambush); next 6.00, 6.32 (`E_WORKS`), 7.0, 8.06; plates with a party trigger 10–24 | the S2 exit gallery: **2.0 and 2.2**; the S2 pit: 5.0, 5.0, 7.1 | — |
+| **Arrival reach** = envoy body + enemy body + preferred attack distance + speed × (shortest windup + reaction) / 30 | fang 0.45 + 0.9 + 1.65 + 3.0 × (12 + 15)/30 = **5.70**; ooze 0.45 + 1.45 + 2.2 + 1.5 × (30 + 15)/30 = **6.35**; watcher 0.45 + 0.85 + 2.0 + 2.0 × (20 + 15)/30 = **5.63** | reaction allowance **15 ticks** (0.5 s): the largest whole value under which every accepted room passes and the rejected gallery fails; the activation point is the region's **centre** (nearest-point flags three accepted threshold rooms) | `EnvoyStats.spawn_reaction_ticks`; `EncounterSpacing` |
+| Sealing territory area, shipped, by roster size | 1 roster: 256; 2: 344–360; 3: 520, 529, 616; 4-wave arenas 1072–1600 | pit **20 × 26 = 520** (three roster), spawns 12.5–15.1 from the plate's centre, all ahead of it (the camera shows ~70 units ahead and ~10 behind) | `archive_encounter_pit.tres` |
+| Mechanics per piece | shipped: a sealing fight, a key lift and its receiver are never in one patch; the S2 exit gallery held plate, fight, switch, key, receiver, console and exit in 12 × 8 | exit **landing** 16 × 16: pad, console, one urn; the key chain is S3's, across pieces | `archive_exit_landing.tres` |
+| Turning LINK band | Floor 2's bent hall: 12 + 20; Floor 4's jog 8 + 8 + 12 | `link_turn` **16–32** total, two legs ≥ 8 (the first leg must clear the landmark's own half-width before the bend) | `profiles/link_turn.tres` |
+| Side door height on the landing | — | offset 1 of 16 (the far end): the dogleg's shortcut arrives from an objective that stands below the landing's top; the lower the door, the wider the band of objective positions with an 8-unit first leg. Measured: p99 106 ms → 59 ms, rejections 22 379 → 6 193 over 200 seeds | `archive_exit_landing.tres` |
+
+**Human S2.5 gate (played): ITERATE.** The enlarged arena improved; the dogleg lacked meaningful
+exploration; the shortcut was unsatisfying; the opening crate-and-plate interaction was trivial. These
+numbers stand as the foundation S3 builds on (committed `6d252cd`); none is an acceptance of the floors.
