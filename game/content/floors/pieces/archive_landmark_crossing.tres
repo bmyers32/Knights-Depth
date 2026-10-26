@@ -1,0 +1,98 @@
+[gd_resource type="Resource" script_class="FloorPiece" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/piece_port.gd" id="port"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="layout"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="patch"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="trig"]
+[ext_resource type="Script" path="res://game/gen/breakable_plan.gd" id="brk"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="obs"]
+
+[sub_resource type="Resource" id="patch_p_hall"]
+script = ExtResource("patch")
+key = &"P_HALL"
+patch_id = 0
+rect = Rect2(-10, -20, 20, 20)
+
+[sub_resource type="Resource" id="trig_t_door"]
+script = ExtResource("trig")
+key = &"T_DOOR"
+trigger_id = 0
+kind = &"carriable_inserted"
+region = Rect2(-10, -18, 3, 6)
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"@out"
+}])
+
+[sub_resource type="Resource" id="brk_b_urn"]
+script = ExtResource("brk")
+key = &"B_URN"
+breakable_id = 0
+position = Vector3(-8, 0, -2)
+
+[sub_resource type="Resource" id="obs_o_pillar_w"]
+script = ExtResource("obs")
+key = &"O_PILLAR_W"
+obstacle_id = 0
+rect = Rect2(-6, -7, 3, 3)
+
+[sub_resource type="Resource" id="obs_o_pillar_e"]
+script = ExtResource("obs")
+key = &"O_PILLAR_E"
+obstacle_id = 1
+rect = Rect2(2, -12, 3, 3)
+
+[sub_resource type="Resource" id="body"]
+script = ExtResource("layout")
+layout_id = &"archive_landmark_crossing"
+patches = Array[ExtResource("patch")]([SubResource("patch_p_hall")])
+triggers = Array[ExtResource("trig")]([SubResource("trig_t_door")])
+breakables = Array[ExtResource("brk")]([SubResource("brk_b_urn")])
+obstacles = Array[ExtResource("obs")]([SubResource("obs_o_pillar_w"), SubResource("obs_o_pillar_e")])
+
+[sub_resource type="Resource" id="port_in"]
+script = ExtResource("port")
+key = &"in"
+kind = &"connector"
+edge = &"north"
+offset = 7
+width = 6
+patch_key = &"P_HALL"
+
+[sub_resource type="Resource" id="port_side"]
+script = ExtResource("port")
+key = &"side"
+kind = &"connector"
+edge = &"east"
+offset = 13
+width = 6
+patch_key = &"P_HALL"
+
+[sub_resource type="Resource" id="port_out"]
+script = ExtResource("port")
+key = &"out"
+kind = &"gate"
+edge = &"west"
+offset = 2
+width = 6
+patch_key = &"P_HALL"
+
+[sub_resource type="Resource" id="port_back"]
+script = ExtResource("port")
+key = &"back"
+kind = &"connector"
+edge = &"south"
+offset = 7
+width = 6
+patch_key = &"P_HALL"
+
+[resource]
+script = ExtResource("piece")
+piece_id = &"archive_landmark_crossing"
+role = &"landmark"
+body = SubResource("body")
+footprint = Rect2(-10, -20, 20, 20)
+allowed_transforms = Array[StringName]([&"identity", &"mirror_x"])
+ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_side"), SubResource("port_out"), SubResource("port_back")])
+tags = Array[StringName]([&"key_door"])

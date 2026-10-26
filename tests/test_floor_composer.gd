@@ -6,6 +6,10 @@ extends GutTest
 
 const RECIPE_PATH := "res://game/content/floors/recipes/proto_archive.tres"
 const DOGLEG_PATH := "res://game/content/floors/recipes/proto_archive_dogleg.tres"
+const FOLD_PATH := "res://game/content/floors/recipes/proto_archive_fold.tres"
+## Diagnostics live in tools/ (the sweep reports them); the fold's geometric contract is asserted
+## with the SAME walked-route measure, so a test and the sweep cannot disagree about a length.
+const RouteMetrics := preload("res://tools/route_metrics.gd")
 const SWEEP: int = 40
 const DEPTH: int = 1
 
@@ -415,3 +419,179 @@ func test_a_joint_facing_two_hallway_rects_is_refused_unless_it_names_one() -> v
 	draft.joints[0].rect_index = 5
 	report = DraftEmitter.emit(draft)
 	assert_eq(report.errors.map(func(e: Dictionary) -> StringName: return e["kind"]), [&"joint_rect_unknown"])
+
+
+# --- the fold (S3a: the folded remote-key expedition, geometry only) ---------------------------
+#
+# What S3a claims, and all it claims: the fold COMPOSES, soundly, into the intended arrangement --
+# a plain arrival, a landmark whose key door is shut, a sealing fight off to one side, a vault
+# beyond it, a return hall from the vault into the landmark, and an onward route folding back the
+# other way. Every distance is WALKED (route_metrics), never straight-line. Whether the
+# progression's mandatory beats are unavoidable is S3b's validator work and is NOT asserted here.
+
+func _fold() -> FloorRecipe:
+	return load(FOLD_PATH)
+
+
+func _instance(recipe: FloorRecipe, result: FloorComposer.ComposeResult, node_key: StringName) -> FloorDraft.PieceInstance:
+	return result.draft.instance_of(RouteMetrics.instance_of_node(recipe, result, node_key))
+
+
+func _trigger_of_kind(plan: FloorPlan, kind: StringName) -> FloorTrigger:
+	for trigger: FloorTrigger in plan.triggers:
+		if trigger.kind == kind:
+			return trigger
+	return null
+
+
+func _exit_pad(plan: FloorPlan) -> Rect2:
+	for trigger: FloorTrigger in plan.triggers:
+		for effect: Dictionary in trigger.effects:
+			if effect.get("kind", &"") == FloorLayers.EFFECT_COMPLETE_FLOOR:
+				return trigger.region
+	return Rect2()
+
+
+func test_the_fold_recipe_lints_clean_casts_one_piece_per_role_and_arrives_without_a_toll() -> void:
+	var recipe: FloorRecipe = _fold()
+	assert_eq(recipe.lint(), [] as Array[Dictionary])
+	for piece: FloorPiece in recipe.pieces:
+		assert_eq(piece.lint(recipe.stratum.enemy_keys), [] as Array[Dictionary], piece.piece_id)
+	var rng := RandomNumberGenerator.new()
+	for node: Dictionary in recipe.nodes:
+		assert_eq(FloorComposer.cast(recipe, node, DEPTH, rng).size(), 1, "node %s has exactly one eligible piece" % node["key"])
+	# The S2.5 ruling: the crate-and-plate entry toll is gone. The arrival has no gate, no trigger,
+	# no prop to break -- it is somewhere to arrive, and its one door is open.
+	var entry: FloorPiece = load("res://game/content/floors/pieces/archive_entry_hall.tres")
+	assert_eq(entry.body.triggers.size(), 0)
+	assert_eq(entry.body.breakables.size(), 0)
+	for port: PiecePort in entry.ports:
+		assert_eq(port.kind, PiecePort.KIND_CONNECTOR, "the arrival's way on is open")
+	var back: TraversalProfile = recipe.profile(&"return")
+	assert_true(back.leg_min >= back.overlap + back.width * 0.5,
+		"a return leg shorter than overlap + half-width puts its next rect inside the joint aperture (S3a finding)")
+
+
+func test_every_fold_floor_in_the_sweep_is_structurally_sound_and_finishable() -> void:
+	# MEASURED BASELINE (2026-10-26): all forty seeds compose; the 200-seed sweep is the report.
+	assert_eq(_sweep_is_sound(_fold()), 0, "fallbacks in seeds 0..%d" % (SWEEP - 1))
+
+
+func test_the_same_seed_composes_the_identical_fold() -> void:
+	for run_seed in [1, 7, 42]:
+		var first: FloorComposer.ComposeResult = _compose(run_seed, _fold())
+		var second: FloorComposer.ComposeResult = _compose(run_seed, _fold())
+		assert_true(first.report.succeeded(), first.report.summary())
+		assert_eq(JSON.stringify(_compiled(first.layout).to_dict()), JSON.stringify(_compiled(second.layout).to_dict()), "seed %d" % run_seed)
+
+
+## THE KEY DOOR IS THE LANDMARK'S OWN SHUT DOOR, and the key that opens it rests in another piece.
+## The receiver is the door's threshold: inside the landmark, touching the door's line, within its
+## span -- under whatever transform the landmark was placed with.
+func test_the_key_rests_in_the_vault_and_its_door_is_the_landmarks_shut_gate() -> void:
+	var recipe: FloorRecipe = _fold()
+	for run_seed in [1, 7, 42]:
+		var result: FloorComposer.ComposeResult = _compose(run_seed, recipe)
+		if not result.report.succeeded():
+			fail_test("seed %d: %s" % [run_seed, result.report.summary()])
+			continue
+		var plan: FloorPlan = _compiled(result.layout)
+		var landmark: FloorDraft.PieceInstance = _instance(recipe, result, &"landmark")
+		var vault: FloorDraft.PieceInstance = _instance(recipe, result, &"objective")
+		assert_eq(plan.carriables.size(), 1, "one key")
+		var key: Vector3 = plan.carriables[0].position
+		assert_true(WalkableBounds.contains(FloorDraft.world_footprint(vault), key.x, key.z), "seed %d: the key rests in the vault" % run_seed)
+		var receiver: FloorTrigger = _trigger_of_kind(plan, FloorLayers.TRIGGER_CARRIABLE_INSERTED)
+		if receiver == null:
+			fail_test("seed %d: no receiver" % run_seed)
+			continue
+		assert_true(FloorDraft.world_footprint(landmark).encloses(receiver.region), "seed %d: the receiver is the landmark's" % run_seed)
+		var door: int = RouteMetrics.connection_of(result, landmark.instance_id, &"out")
+		var opened: Array = receiver.effects.map(func(e: Dictionary) -> int: return int(e.get("target_id", -1)))
+		assert_eq(opened, [door], "seed %d: delivering the key opens the landmark's out door, and only that" % run_seed)
+		var shut_on_arrival: bool = false
+		for connection: TraversalConnection in plan.connections:
+			if connection.connection_id == door:
+				shut_on_arrival = not connection.starts_open
+		assert_true(shut_on_arrival, "seed %d: the key door is shut on arrival" % run_seed)
+		var port: PiecePort = landmark.piece.port(&"out")
+		var span: Dictionary = FloorDraft.port_span(landmark, port)
+		assert_false(PiecePort.runs_along_x(FloorDraft.world_edge(landmark, port.edge)), "sanity: the key door is in a side wall")
+		var touches: bool = is_equal_approx(receiver.region.position.x, float(span["at"])) or is_equal_approx(receiver.region.end.x, float(span["at"]))
+		assert_true(touches, "seed %d: the receiver stands on the door's threshold" % run_seed)
+		assert_true(receiver.region.position.y >= float(span["from"]) - 0.001 and receiver.region.end.y <= float(span["to"]) + 0.001,
+			"seed %d: the receiver lies within the door's span" % run_seed)
+
+
+## THE RETURN IS A REAL SHORTCUT: with the key in hand (the fight cleared, the vault's back door
+## open), the walked carry to the door is shorter than the same carry with the return hall shut --
+## and it crosses from the vault into the landmark without entering the fight's room.
+func test_the_return_shortens_the_carry_and_never_re_enters_the_fight() -> void:
+	var recipe: FloorRecipe = _fold()
+	var radius: float = float(_rules()["body_radius"])
+	for run_seed in [1, 7, 42]:
+		var result: FloorComposer.ComposeResult = _compose(run_seed, recipe)
+		if not result.report.succeeded():
+			fail_test("seed %d: %s" % [run_seed, result.report.summary()])
+			continue
+		var plan: FloorPlan = _compiled(result.layout)
+		var landmark: FloorDraft.PieceInstance = _instance(recipe, result, &"landmark")
+		var vault: FloorDraft.PieceInstance = _instance(recipe, result, &"objective")
+		var pit: FloorDraft.PieceInstance = _instance(recipe, result, &"encounter")
+		var door: int = RouteMetrics.connection_of(result, landmark.instance_id, &"out")
+		var returns: Array = [RouteMetrics.connection_of(result, vault.instance_id, &"back"), RouteMetrics.connection_of(result, landmark.instance_id, &"back")]
+		var key: Vector3 = plan.carriables[0].position
+		var receiver: Rect2 = _trigger_of_kind(plan, FloorLayers.TRIGGER_CARRIABLE_INSERTED).region
+		var carry: Dictionary = RouteMetrics.walk(plan, RouteMetrics.open_except(plan, [door]), Vector2(key.x, key.z), receiver, radius)
+		var without: Dictionary = RouteMetrics.walk(plan, RouteMetrics.open_except(plan, [door] + returns), Vector2(key.x, key.z), receiver, radius)
+		assert_gt(float(carry["length"]), 0.0, "seed %d: the key can be carried home" % run_seed)
+		assert_gt(float(without["length"]), 0.0, "seed %d: sanity: the long way exists" % run_seed)
+		assert_lt(float(carry["length"]), float(without["length"]), "seed %d: the return is shorter than going back through the fight" % run_seed)
+		var crossed: Array[StringName] = RouteMetrics.pieces_crossed(result, carry["path"])
+		assert_eq(crossed, [vault.instance_id, landmark.instance_id] as Array[StringName], "seed %d: vault, then the landmark -- nothing between but the return hall" % run_seed)
+		var entered: bool = false
+		for point: Vector2 in carry["path"]:
+			entered = entered or WalkableBounds.contains(FloorDraft.world_footprint(pit), point.x, point.y)
+		assert_false(entered, "seed %d: the carry never enters the fight's room" % run_seed)
+
+
+## THE GEOMETRY BLOCKS WHAT IT SHOULD, read as reachability only (S3b's validator owns whether a
+## mandatory beat is truly unavoidable): with the doors as authored the key is out of reach; with
+## everything open except the key door the exit is out of reach; with that door open it is not.
+func test_on_arrival_the_key_and_the_exit_lie_behind_shut_doors() -> void:
+	var recipe: FloorRecipe = _fold()
+	var radius: float = float(_rules()["body_radius"])
+	for run_seed in [1, 7, 42]:
+		var result: FloorComposer.ComposeResult = _compose(run_seed, recipe)
+		if not result.report.succeeded():
+			fail_test("seed %d: %s" % [run_seed, result.report.summary()])
+			continue
+		var plan: FloorPlan = _compiled(result.layout)
+		var closed: Array = []
+		for connection: TraversalConnection in plan.connections:
+			if not connection.starts_open:
+				closed.append(connection.connection_id)
+		var entry := Vector2(plan.entry_point.x, plan.entry_point.z)
+		var key: Vector3 = plan.carriables[0].position
+		var key_spot := Rect2(key.x - 1.0, key.z - 1.0, 2.0, 2.0)
+		var door: int = RouteMetrics.connection_of(result, _instance(recipe, result, &"landmark").instance_id, &"out")
+		assert_eq(float(RouteMetrics.walk(plan, RouteMetrics.open_except(plan, closed), entry, key_spot, radius)["length"]), -1.0, "seed %d: the key is out of reach on arrival" % run_seed)
+		assert_eq(float(RouteMetrics.walk(plan, RouteMetrics.open_except(plan, [door]), entry, _exit_pad(plan), radius)["length"]), -1.0, "seed %d: only the key door leads to the exit" % run_seed)
+		assert_gt(float(RouteMetrics.walk(plan, RouteMetrics.open_except(plan, []), entry, _exit_pad(plan), radius)["length"]), 0.0, "seed %d: sanity: with the door open the exit is reached" % run_seed)
+
+
+## THE FOLD: the fight and the vault lie off one side of the landmark; the onward route leaves the
+## other side and turns back down the floor, so the exit ends up beside ground already walked.
+func test_the_onward_route_folds_back_on_the_far_side_from_the_fight() -> void:
+	var recipe: FloorRecipe = _fold()
+	for run_seed in [1, 7, 42]:
+		var report: GenerationReport = _compose(run_seed, recipe).report
+		if not report.succeeded():
+			fail_test("seed %d: %s" % [run_seed, report.summary()])
+			continue
+		var landmark: Vector2 = report.cast[&"landmark"]["origin"]
+		var fight: Vector2 = report.cast[&"encounter"]["origin"]
+		var exit: Vector2 = report.cast[&"exit"]["origin"]
+		assert_lt(signf(fight.x - landmark.x) * signf(exit.x - landmark.x), 0.0, "seed %d: the exit leaves the landmark's other side" % run_seed)
+		assert_lt(exit.y, landmark.y, "seed %d: and turns back down the floor" % run_seed)
+		assert_eq(report.routes["landmark>exit"]["shape"], FloorComposer.SHAPE_L, "seed %d: one turn" % run_seed)

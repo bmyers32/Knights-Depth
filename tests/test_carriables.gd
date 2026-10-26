@@ -512,6 +512,34 @@ func test_either_key_fits_and_a_filled_receiver_takes_no_second_key() -> void:
 	assert_false(_kinds(events).has("carriable_inserted"))
 
 
+## THE UNIVERSAL-KEY CONTRACT (owner ruling 2026-10-26), across two doors: keys are not paired,
+## each successful insertion spends exactly one key, and a spent key fills exactly one door. The
+## second key goes in FIRST, so a pairing by registration order could not pass either.
+func test_two_keys_open_two_doors_in_either_order_each_spending_exactly_one_key() -> void:
+	const SECOND_RECEIVER := 6
+	const SECOND_DOOR := 9
+	var second_region := Rect2(12.0, -2.0, 4.0, 4.0)
+	sim.register_connection(SECOND_DOOR, Rect2(-24.0, -2.0, 4.0, 4.0), false)
+	sim.register_trigger(SECOND_RECEIVER, FloorLayers.TRIGGER_CARRIABLE_INSERTED, second_region, -1, true,
+		[FloorLayers.effect(FloorLayers.EFFECT_OPEN_CONNECTION, SECOND_DOOR)])
+	sim.register_carriable(SECOND_KEY, Vector3(-1.0, 0.0, 0.0))
+	sim.entities[PLAYER] = Vector3(-0.5, 0.0, 0.0)
+	assert_true(_kinds(_click(_aim_at(_key_at(SECOND_KEY)), 0)).has("carriable_lifted"))
+	sim.entities[PLAYER] = Vector3(14.0, 0.0, 0.0)
+	assert_true(_kinds(_click(Vector3(0, 0, -3), 0)).has("carriable_inserted"), "the later-registered key opens the later door")
+	assert_true(bool(sim._connection_open[SECOND_DOOR]))
+	assert_false(bool(sim._connection_open[DOOR]), "one insertion opens one door")
+	assert_true(bool(sim._carriables[SECOND_KEY]["inserted"]))
+	assert_false(bool(sim._carriables[KEY]["inserted"]), "and spends one key")
+	sim.entities[PLAYER] = Vector3(0.0, 0.0, 0.0)
+	_lift()
+	sim.entities[PLAYER] = Vector3(-10.0, 0.0, 0.0)
+	assert_true(_kinds(_click(Vector3(0, 0, -3), 0)).has("carriable_inserted"), "the first key opens the first door")
+	assert_true(bool(sim._connection_open[DOOR]))
+	assert_true(bool(sim._carriables[KEY]["inserted"]))
+	assert_eq(sim.carried_by(PLAYER), -1, "nothing left in hand: two doors, two keys spent")
+
+
 func test_carrying_state_dies_with_the_floor() -> void:
 	_lift()
 	var rects: Array[Rect2] = [ROOM]

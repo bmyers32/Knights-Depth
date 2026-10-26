@@ -1,0 +1,83 @@
+[gd_resource type="Resource" script_class="FloorRecipe" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_recipe.gd" id="recipe"]
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/traversal_profile.gd" id="profile"]
+[ext_resource type="Resource" path="res://game/content/strata/archive.tres" id="stratum"]
+[ext_resource type="Resource" path="res://game/content/layouts/archive_prototype.tres" id="fallback"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_entry_hall.tres" id="pc_archive_entry_hall"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_landmark_crossing.tres" id="pc_archive_landmark_crossing"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_encounter_pit.tres" id="pc_archive_encounter_pit"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_objective_key_vault.tres" id="pc_archive_objective_key_vault"]
+[ext_resource type="Resource" path="res://game/content/floors/pieces/archive_exit_landing.tres" id="pc_archive_exit_landing"]
+[ext_resource type="Resource" path="res://game/content/floors/profiles/approach.tres" id="pf_approach"]
+[ext_resource type="Resource" path="res://game/content/floors/profiles/link_turn.tres" id="pf_link_turn"]
+[ext_resource type="Resource" path="res://game/content/floors/profiles/return.tres" id="pf_return"]
+
+[resource]
+script = ExtResource("recipe")
+recipe_id = &"proto_archive_fold"
+place_label = ""
+stratum = ExtResource("stratum")
+pieces = Array[ExtResource("piece")]([ExtResource("pc_archive_entry_hall"), ExtResource("pc_archive_landmark_crossing"), ExtResource("pc_archive_encounter_pit"), ExtResource("pc_archive_objective_key_vault"), ExtResource("pc_archive_exit_landing")])
+profiles = Array[ExtResource("profile")]([ExtResource("pf_approach"), ExtResource("pf_link_turn"), ExtResource("pf_return")])
+nodes = Array[Dictionary]([{
+"key": &"entry",
+"role": &"entry",
+"tags": [&"open"]
+}, {
+"key": &"landmark",
+"role": &"landmark",
+"tags": [&"key_door"]
+}, {
+"key": &"encounter",
+"role": &"encounter",
+"tags": [&"sealing"]
+}, {
+"key": &"objective",
+"role": &"objective",
+"tags": [&"key_vault"]
+}, {
+"key": &"exit",
+"role": &"exit"
+}])
+edges = Array[Dictionary]([{
+"from": &"entry",
+"from_port": &"out",
+"to": &"landmark",
+"to_port": &"in",
+"profile": &"approach"
+}, {
+"from": &"landmark",
+"from_port": &"side",
+"to": &"encounter",
+"to_port": &"in",
+"profile": &"link_turn"
+}, {
+"from": &"encounter",
+"from_port": &"out",
+"to": &"objective",
+"to_port": &"in",
+"profile": &"link_turn"
+}, {
+"from": &"objective",
+"from_port": &"back",
+"to": &"landmark",
+"to_port": &"back",
+"profile": &"return",
+"closes_cycle": true
+}, {
+"from": &"landmark",
+"from_port": &"out",
+"to": &"exit",
+"to_port": &"in",
+"profile": &"approach"
+}])
+flow_axis = Vector2(0, -1)
+grid_cell = 2
+margin = 2
+extent = Rect2(-80, -160, 160, 164)
+candidates_per_piece = 3
+placement_budget = 300
+reseed_budget = 3
+fallback = ExtResource("fallback")

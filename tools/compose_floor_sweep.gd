@@ -9,8 +9,15 @@ extends SceneTree
 ## No autoloads exist under -s: content is loaded by path, never through ContentDB. The S0
 ## progression validator and the S2.5 spawn-spacing rule run on every composed floor FOR
 ## INFORMATION (S3 puts the validator in the loop).
+##
+## S3a: every composed floor is also measured by tools/route_metrics.gd -- the patch graph's
+## topology, and, when the floor carries one key and one receiver, the WALKED length of each
+## mandatory leg under the door states the sim would have at that moment, the carry with its
+## closing edges shut (what the return saves), the pieces the carry crosses, and the headings
+## of the whole mandatory walk. Diagnostics only: nothing here is a pass/fail verdict.
 
 const RECIPE_DIR := "res://game/content/floors/recipes/"
+const RouteMetrics := preload("res://tools/route_metrics.gd")
 
 
 func _init() -> void:
@@ -24,6 +31,8 @@ func _init() -> void:
 	var reaches: Dictionary = _reaches(recipe)
 	var rows: Array[Dictionary] = []
 	var times: Array[float] = []
+	var radius: float = float(rules["body_radius"])
+	var metrics: Dictionary = {}
 	var totals: Dictionary = {"composed": 0, "fallback": 0, "structural": 0, "reseeded": 0, "progression_pass": 0, "progression_fail": 0, "progression_unsupported": 0, "spawn_unsafe": 0}
 	var rejections: Dictionary = {}
 	var signatures: Dictionary = {}
@@ -69,13 +78,24 @@ func _init() -> void:
 			row["spawn_findings"] = spacing.size()
 			if not spacing.is_empty():
 				totals["spawn_unsafe"] += 1
+			var measured: Dictionary = RouteMetrics.topology(plan, result.layout)
+			measured.merge(_route_metrics(recipe, result, plan, radius))
+			row["metrics"] = measured
+			for name: String in measured:
+				if typeof(measured[name]) == TYPE_FLOAT or typeof(measured[name]) == TYPE_INT:
+					if not metrics.has(name):
+						metrics[name] = []
+					metrics[name].append(float(measured[name]))
+				elif typeof(measured[name]) == TYPE_STRING:
+					var tally_key: String = "%s=%s" % [name, measured[name]]
+					metrics[tally_key] = [float(metrics.get(tally_key, [0.0])[0]) + 1.0]
 		rows.append(row)
 		print("%4d  %s" % [run_seed, report.summary().split("\n")[0]])
 	times.sort()
 	var aggregate: Dictionary = {
 		"recipe": recipe_id, "seeds": seeds, "depth": depth, "totals": totals, "rejections": rejections,
 		"distinct_signatures": signatures.size(), "casts": casts, "shapes": shapes,
-		"lengths": _bands(lengths),
+		"lengths": _bands(lengths), "metrics": _bands(metrics),
 		"time_ms": {"p50": _percentile(times, 0.50), "p90": _percentile(times, 0.90), "p99": _percentile(times, 0.99), "max": times[times.size() - 1] if not times.is_empty() else 0.0},
 	}
 	print(JSON.stringify(aggregate, "  "))
@@ -141,5 +161,78 @@ func _bands(lengths: Dictionary) -> Dictionary:
 	for edge: String in lengths:
 		var values: Array = lengths[edge]
 		values.sort()
-		out[edge] = {"min": values[0], "max": values[values.size() - 1], "n": values.size()}
+		out[edge] = {"min": values[0], "median": values[values.size() / 2], "max": values[values.size() - 1], "n": values.size()}
 	return out
+
+
+## The mandatory walk of a one-key floor, leg by leg, each under the doors open AT THAT MOMENT:
+##   arrival -> the encounter's plate      (doors as authored)
+##   plate   -> the key                    (+ whatever the clear opens)
+##   key     -> the receiver               (+ whatever the lift opens: everything but the receiver's own doors)
+##   receiver -> the exit pad              (everything open)
+## and the carry again with every closing edge shut, which is the walk the return saves. {} when
+## the floor has no single key/receiver pair or no sealing plate to measure against.
+func _route_metrics(recipe: FloorRecipe, result: FloorComposer.ComposeResult, plan: FloorPlan, radius: float) -> Dictionary:
+	if plan.carriables.size() != 1:
+		return {}
+	var receiver: FloorTrigger = null
+	var plate: FloorTrigger = null
+	var pad: FloorTrigger = null
+	var cleared_opens: Array = []
+	var receiver_opens: Array = []
+	for trigger: FloorTrigger in plan.triggers:
+		for effect: Dictionary in trigger.effects:
+			var kind: StringName = effect.get("kind", &"")
+			if kind == FloorLayers.EFFECT_ACTIVATE_ENCOUNTER and trigger.region.get_area() > 0.0:
+				plate = trigger
+			elif kind == FloorLayers.EFFECT_COMPLETE_FLOOR:
+				pad = trigger
+			elif kind == FloorLayers.EFFECT_OPEN_CONNECTION and trigger.kind == FloorLayers.TRIGGER_ENCOUNTER_CLEARED:
+				cleared_opens.append(int(effect.get("target_id", -1)))
+			elif kind == FloorLayers.EFFECT_OPEN_CONNECTION and trigger.kind == FloorLayers.TRIGGER_CARRIABLE_INSERTED:
+				receiver_opens.append(int(effect.get("target_id", -1)))
+		if trigger.kind == FloorLayers.TRIGGER_CARRIABLE_INSERTED:
+			receiver = trigger
+	if receiver == null or plate == null or pad == null:
+		return {}
+	var initially_closed: Array = []
+	for connection: TraversalConnection in plan.connections:
+		if not connection.starts_open:
+			initially_closed.append(connection.connection_id)
+	var after_clear: Array = initially_closed.filter(func(id: int) -> bool: return not id in cleared_opens)
+	var closing: Array = []
+	for edge: Dictionary in recipe.edges:
+		if bool(edge.get("closes_cycle", false)):
+			closing.append(RouteMetrics.connection_of(result, RouteMetrics.instance_of_node(recipe, result, edge["from"]), edge["from_port"]))
+			closing.append(RouteMetrics.connection_of(result, RouteMetrics.instance_of_node(recipe, result, edge["to"]), edge["to_port"]))
+	var key: Vector3 = plan.carriables[0].position
+	var key_spot := Rect2(key.x - 1.0, key.z - 1.0, 2.0, 2.0)
+	var entry := Vector2(plan.entry_point.x, plan.entry_point.z)
+	var to_plate: Dictionary = RouteMetrics.walk(plan, RouteMetrics.open_except(plan, initially_closed), entry, plate.region, radius)
+	var plate_at: Vector2 = plate.region.get_center()
+	var to_key: Dictionary = RouteMetrics.walk(plan, RouteMetrics.open_except(plan, after_clear), plate_at, key_spot, radius)
+	var carry: Dictionary = RouteMetrics.walk(plan, RouteMetrics.open_except(plan, receiver_opens), Vector2(key.x, key.z), receiver.region, radius)
+	var carry_shut: Dictionary = RouteMetrics.walk(plan, RouteMetrics.open_except(plan, receiver_opens + closing), Vector2(key.x, key.z), receiver.region, radius)
+	var onward: Dictionary = RouteMetrics.walk(plan, RouteMetrics.open_except(plan, []), receiver.region.get_center(), pad.region, radius)
+	var walked: Array = []
+	for leg: Dictionary in [to_plate, to_key, carry, onward]:
+		walked.append_array(leg["path"])
+	var out: Dictionary = {
+		"walk_to_plate": to_plate["length"], "walk_to_key": to_key["length"], "carry": carry["length"],
+		"carry_without_return": carry_shut["length"], "walk_onward": onward["length"],
+		"mandatory_walk": float(to_plate["length"]) + float(to_key["length"]) + float(carry["length"]) + float(onward["length"]),
+		"carry_pieces_crossed": RouteMetrics.pieces_crossed(result, carry["path"]).size(),
+		"headings": "".join(RouteMetrics.headings(walked)),
+		"distinct_headings": _distinct(RouteMetrics.headings(walked)),
+	}
+	if float(carry["length"]) > 0.0 and float(carry_shut["length"]) > 0.0:
+		out["return_saving"] = float(carry_shut["length"]) - float(carry["length"])
+		out["return_ratio"] = float(carry["length"]) / float(carry_shut["length"])
+	return out
+
+
+func _distinct(headings: PackedStringArray) -> int:
+	var seen: Dictionary = {}
+	for heading: String in headings:
+		seen[heading] = true
+	return seen.size()

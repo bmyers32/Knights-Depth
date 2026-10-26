@@ -1,0 +1,74 @@
+[gd_resource type="Resource" script_class="FloorPiece" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/piece_port.gd" id="port"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="layout"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="patch"]
+[ext_resource type="Script" path="res://game/gen/floor_trigger.gd" id="trig"]
+[ext_resource type="Script" path="res://game/gen/obstacle_plan.gd" id="obs"]
+[ext_resource type="Script" path="res://game/gen/carriable_plan.gd" id="car"]
+
+[sub_resource type="Resource" id="patch_p_vault"]
+script = ExtResource("patch")
+key = &"P_VAULT"
+patch_id = 0
+rect = Rect2(-8, -16, 16, 16)
+
+[sub_resource type="Resource" id="trig_t_lift"]
+script = ExtResource("trig")
+key = &"T_LIFT"
+trigger_id = 0
+kind = &"carriable_lifted"
+source_key = &"K_KEY"
+effects = Array[Dictionary]([{
+"kind": &"open_connection",
+"target_key": &"@back"
+}])
+
+[sub_resource type="Resource" id="obs_o_plinth"]
+script = ExtResource("obs")
+key = &"O_PLINTH"
+obstacle_id = 0
+rect = Rect2(1, -12, 3, 3)
+
+[sub_resource type="Resource" id="car_k_key"]
+script = ExtResource("car")
+key = &"K_KEY"
+carriable_id = 0
+position = Vector3(-4, 0, -10)
+
+[sub_resource type="Resource" id="body"]
+script = ExtResource("layout")
+layout_id = &"archive_objective_key_vault"
+patches = Array[ExtResource("patch")]([SubResource("patch_p_vault")])
+triggers = Array[ExtResource("trig")]([SubResource("trig_t_lift")])
+obstacles = Array[ExtResource("obs")]([SubResource("obs_o_plinth")])
+carriables = Array[ExtResource("car")]([SubResource("car_k_key")])
+
+[sub_resource type="Resource" id="port_in"]
+script = ExtResource("port")
+key = &"in"
+kind = &"connector"
+edge = &"east"
+offset = 9
+width = 6
+patch_key = &"P_VAULT"
+
+[sub_resource type="Resource" id="port_back"]
+script = ExtResource("port")
+key = &"back"
+kind = &"gate"
+edge = &"north"
+offset = 5
+width = 6
+patch_key = &"P_VAULT"
+
+[resource]
+script = ExtResource("piece")
+piece_id = &"archive_objective_key_vault"
+role = &"objective"
+body = SubResource("body")
+footprint = Rect2(-8, -16, 16, 16)
+allowed_transforms = Array[StringName]([&"identity", &"mirror_x"])
+ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_back")])
+tags = Array[StringName]([&"key_vault"])
