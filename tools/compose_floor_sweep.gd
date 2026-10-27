@@ -21,6 +21,13 @@ extends SceneTree
 ## with keys set down anywhere. Two spacing margins are reported per floor, kept apart on purpose:
 ## from the activating region's CENTRE (what the composer rejects on) and from the region's NEAREST
 ## POINT (a stricter reading, diagnostic only -- three accepted shipped rooms fail it).
+##
+## TIERS (test-harness rule, 2026-10-27). Full coverage is the DEFAULT; less is asked for by name
+## and shown in the output and the JSON:
+##   --integrity=full   ObjectiveIntegrity with keys set down anywhere (default, certification)
+##   --integrity=fast   the same claims, the voluntary set-down not modelled
+##   --integrity=off    no integrity at all -- reported NOT_EVALUATED, never as a pass
+##   --metrics=on|off   route and topology metrics (default on) -- off is reported NOT_EVALUATED
 
 const RECIPE_DIR := "res://game/content/floors/recipes/"
 const RouteMetrics := preload("res://tools/route_metrics.gd")
@@ -42,8 +49,13 @@ func _init() -> void:
 	var metrics: Dictionary = {}
 	var totals: Dictionary = {"composed": 0, "fallback": 0, "structural": 0, "reseeded": 0, "progression_pass": 0, "progression_fail": 0, "progression_unsupported": 0, "spawn_unsafe": 0,
 		"integrity_pass": 0, "integrity_fail": 0, "integrity_unsupported": 0, "integrity_undeclared": 0}
+	var integrity_mode: String = _arg("integrity", "full")
+	var metrics_mode: String = _arg("metrics", "on")
+	assert(integrity_mode in ["full", "fast", "off"] and metrics_mode in ["on", "off"], "--integrity=full|fast|off, --metrics=on|off")
 	var integrity_rules: Dictionary = rules.duplicate()
-	integrity_rules["set_down_anywhere"] = true
+	integrity_rules["set_down_anywhere"] = integrity_mode == "full"
+	if integrity_mode != "full" or metrics_mode != "on":
+		print("REDUCED COVERAGE: integrity=%s metrics=%s -- not a certification sweep" % [integrity_mode, metrics_mode])
 	var integrity_times: Array[float] = []
 	var declares: bool = recipe.nodes.any(func(node: Dictionary) -> bool: return node.has("progression"))
 	var rejections: Dictionary = {}
@@ -90,7 +102,9 @@ func _init() -> void:
 			row["spawn_findings"] = spacing.size()
 			if not spacing.is_empty():
 				totals["spawn_unsafe"] += 1
-			if declares:
+			if declares and integrity_mode == "off":
+				row["integrity"] = "not_evaluated"
+			elif declares:
 				var started: int = Time.get_ticks_usec()
 				var integrity: ObjectiveIntegrity.Report = ObjectiveIntegrity.check(recipe, result, plan, integrity_rules)
 				integrity_times.append((Time.get_ticks_usec() - started) / 1000.0)
@@ -102,10 +116,14 @@ func _init() -> void:
 				totals["integrity_" + String(integrity.outcome)] += 1
 			else:
 				totals["integrity_undeclared"] += 1
-			var measured: Dictionary = RouteMetrics.topology(plan, result.layout)
-			measured.merge(_spacing_margins(result.layout, reaches))
-			measured.merge(_route_metrics(recipe, result, plan, radius))
-			row["metrics"] = measured
+			var measured: Dictionary = {}
+			if metrics_mode == "on":
+				measured = RouteMetrics.topology(plan, result.layout)
+				measured.merge(_spacing_margins(result.layout, reaches))
+				measured.merge(_route_metrics(recipe, result, plan, radius))
+				row["metrics"] = measured
+			else:
+				row["metrics"] = "not_evaluated"
 			for name: String in measured:
 				if typeof(measured[name]) == TYPE_FLOAT or typeof(measured[name]) == TYPE_INT:
 					if not metrics.has(name):
@@ -123,7 +141,13 @@ func _init() -> void:
 		"lengths": _bands(lengths), "metrics": _bands(metrics),
 		"time_ms": {"p50": _percentile(times, 0.50), "p90": _percentile(times, 0.90), "p99": _percentile(times, 0.99), "max": times[times.size() - 1] if not times.is_empty() else 0.0},
 		"integrity_time_ms": _time_band(integrity_times),
+		"coverage": {"integrity": integrity_mode if declares else "undeclared", "metrics": metrics_mode},
 	}
+	if declares and integrity_mode == "off":
+		for key: String in ["integrity_pass", "integrity_fail", "integrity_unsupported"]:
+			totals[key] = "NOT_EVALUATED"
+	if metrics_mode == "off":
+		aggregate["metrics"] = "NOT_EVALUATED"
 	print(JSON.stringify(aggregate, "  "))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://build"))
 	var file := FileAccess.open(out_path, FileAccess.WRITE)

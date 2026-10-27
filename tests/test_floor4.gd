@@ -362,7 +362,7 @@ func _await_query(arena: Node3D, pad_id: int, value: int) -> void:
 func _on_signal_walk_to(arena: Node3D, signal_seen: Callable, x: float, health: float, label: String) -> bool:
 	var envoy_id: int = arena.envoy.actor_id
 	var waited: int = 0
-	while not signal_seen.call():
+	while not signal_seen.call():  # bounded: `waited` is checked against _SIGNAL_BUDGET_TICKS in the body
 		arena._step([] as Array[Command], DT)
 		waited += 1
 		if waited > _SIGNAL_BUDGET_TICKS:

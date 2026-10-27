@@ -43,9 +43,11 @@ static func instance_of_node(recipe: FloorRecipe, result: FloorComposer.ComposeR
 	return &""
 
 
-## The shortest walked route from a point to any legal point inside `target`, under `open`.
-## Returns {length: float (-1 when unreachable), path: Array[Vector2]}.
-static func walk(plan: FloorPlan, open: Dictionary, from: Vector2, target: Rect2, radius: float) -> Dictionary:
+## The shortest walked route from a point to any legal point inside `target`, under `open`, never
+## standing inside an `avoid` rect (ground a route is asked to go round -- an optional hazard piece,
+## to measure the way that does without it). Returns {length: float (-1 when unreachable),
+## path: Array[Vector2]}.
+static func walk(plan: FloorPlan, open: Dictionary, from: Vector2, target: Rect2, radius: float, avoid: Array = []) -> Dictionary:
 	var bounds := WalkableBounds.new(plan.open_walkable_rects(open), plan.obstacle_rects())
 	var area: Rect2 = _extent(plan).grow(CELL)
 	var columns: int = int(ceil(area.size.x / CELL)) + 1
@@ -55,7 +57,8 @@ static func walk(plan: FloorPlan, open: Dictionary, from: Vector2, target: Rect2
 	for row: int in rows:
 		for column: int in columns:
 			var point: Vector2 = area.position + Vector2(column, row) * CELL
-			passable[row * columns + column] = 1 if bounds.fits(Vector3(point.x, 0.0, point.y), radius) else 0
+			var avoided: bool = avoid.any(func(rect: Rect2) -> bool: return WalkableBounds.contains(rect, point.x, point.y))
+			passable[row * columns + column] = 1 if not avoided and bounds.fits(Vector3(point.x, 0.0, point.y), radius) else 0
 	var start: int = _nearest_passable(area, columns, rows, passable, from)
 	if start < 0:
 		return {"length": -1.0, "path": []}

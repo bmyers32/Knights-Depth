@@ -1,0 +1,134 @@
+{
+ "timeout": 240,
+ "mutants": [
+  {
+   "name": "R1 the wired effect is never installed",
+   "file": "game/gen/draft_emitter.gd",
+   "pairs": [
+    [
+     "\t\tcopy.effects.append_array(_wired_effects(draft, report, instance, trigger.key, false))\n",
+     ""
+    ]
+   ],
+   "test_file": "test_reinforcement.gd",
+   "tests": [
+    "test_the_first_lift_trigger_carries_the_remapped_activation_of_the_landmark_roster",
+    "test_the_roster_sleeps_until_the_first_lift_wakes_it_well_clear_and_a_re_lift_wakes_nothing_more"
+   ]
+  },
+  {
+   "name": "R2 the wire resolves into its own piece",
+   "file": "game/gen/draft_emitter.gd",
+   "pairs": [
+    [
+     "var resolved: Dictionary = _reference(report, w.to_instance, layer",
+     "var resolved: Dictionary = _reference(report, w.from_instance, layer"
+    ]
+   ],
+   "test_file": "test_reinforcement.gd",
+   "tests": [
+    "test_the_first_lift_trigger_carries_the_remapped_activation_of_the_landmark_roster"
+   ]
+  },
+  {
+   "name": "R3 any port may carry a wire",
+   "file": "game/gen/draft_emitter.gd",
+   "pairs": [
+    [
+     "if port == null or port.kind != PiecePort.KIND_UNLOCK:",
+     "if port == null:"
+    ]
+   ],
+   "test_file": "test_reinforcement.gd",
+   "tests": [
+    "test_the_emitter_refuses_a_wire_whose_cast_endpoints_do_not_fit"
+   ]
+  },
+  {
+   "name": "R4 duplicate dependencies pass lint",
+   "file": "game/gen/floor_recipe.gd",
+   "pairs": [
+    [
+     "\t\tif wired.has(identity):",
+     "\t\tif false and wired.has(identity):"
+    ]
+   ],
+   "test_file": "test_reinforcement.gd",
+   "tests": [
+    "test_the_recipe_lint_refuses_every_malformed_dependency"
+   ]
+  },
+  {
+   "name": "R5 the composer never wires",
+   "file": "game/gen/floor_composer.gd",
+   "pairs": [
+    [
+     "\t\t_wire(recipe, draft)\n",
+     ""
+    ]
+   ],
+   "test_file": "test_reinforcement.gd",
+   "tests": [
+    "test_the_first_lift_trigger_carries_the_remapped_activation_of_the_landmark_roster"
+   ]
+  },
+  {
+   "name": "R6 the reinforcement seals the player in",
+   "file": "game/content/floors/pieces/archive_landmark_crossing_guarded.tres",
+   "pairs": [
+    [
+     "confines_player = false",
+     "confines_player = true"
+    ]
+   ],
+   "test_file": "test_reinforcement.gd",
+   "tests": [
+    "test_the_first_lift_trigger_carries_the_remapped_activation_of_the_landmark_roster"
+   ]
+  },
+  {
+   "name": "R7 the reinforcement is a mandatory fight",
+   "file": "game/content/floors/pieces/archive_landmark_crossing_guarded.tres",
+   "pairs": [
+    [
+     "role = &\"optional\"",
+     "role = &\"mandatory\""
+    ]
+   ],
+   "test_file": "test_reinforcement.gd",
+   "tests": [
+    "test_integrity_holds_and_the_reinforcement_is_never_a_required_kill",
+    "test_the_first_lift_trigger_carries_the_remapped_activation_of_the_landmark_roster"
+   ]
+  },
+  {
+   "name": "R8 the reinforcement is present from the start",
+   "file": "game/content/floors/pieces/archive_landmark_crossing_guarded.tres",
+   "pairs": [
+    [
+     "spawn_at_floor_load = false",
+     "spawn_at_floor_load = true"
+    ]
+   ],
+   "test_file": "test_reinforcement.gd",
+   "tests": [
+    "test_the_roster_sleeps_until_the_first_lift_wakes_it_well_clear_and_a_re_lift_wakes_nothing_more",
+    "test_the_first_lift_trigger_carries_the_remapped_activation_of_the_landmark_roster"
+   ]
+  },
+  {
+   "name": "R9 every lift fires the watcher",
+   "file": "game/content/floors/pieces/archive_objective_key_vault.tres",
+   "pairs": [
+    [
+     "source_key = &\"K_KEY\"\neffects",
+     "source_key = &\"K_KEY\"\nonce = false\neffects"
+    ]
+   ],
+   "test_file": "test_reinforcement.gd",
+   "tests": [
+    "test_the_first_lift_trigger_carries_the_remapped_activation_of_the_landmark_roster"
+   ]
+  }
+ ]
+}

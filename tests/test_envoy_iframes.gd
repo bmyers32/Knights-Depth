@@ -26,6 +26,9 @@ const ALWAYS_ACTIVE := 10000
 
 var sim: SimWorld
 
+## Every state-waiting loop is capped (test-harness rule, 2026-10-27): a state that never arrives
+## fails an assertion instead of hanging the suite.
+const LOOP_BUDGET: int = 600
 
 func _envoy() -> EnvoyStats:
 	return ContentDB.get_resource(&"envoy", &"default")
@@ -342,8 +345,11 @@ func test_every_shipped_spike_pad_obeys_the_window() -> void:
 			world.register_spike_pad(pad.pad_id, pad.rect, pad.safe_ticks, pad.active_ticks, pad.phase_offset_ticks, pad.damage, pad.damage_type)
 			# Start on a SAFE tick, Envoy not yet placed: three cycles from there hold exactly three
 			# whole activations, never a partial one at each end.
-			while world.spike_pad_ticks_until_active(pad.pad_id) == 0:
+			var _budget_1: int = 0
+			while (world.spike_pad_ticks_until_active(pad.pad_id) == 0) and _budget_1 < LOOP_BUDGET:
+				_budget_1 += 1
 				world.tick([] as Array[Command], DT)
+			assert_lt(_budget_1, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 			assert_true(world.add_entity(PLAYER, Vector3(pad.rect.get_center().x, 0.0, pad.rect.get_center().y), 4.0, Vector3(0, 0, 1), 0.45))
 			world.register_combatant(PLAYER, 100000.0, &"envoy", _window(), 0.45, &"player")
 			var cycle: int = pad.safe_ticks + pad.active_ticks

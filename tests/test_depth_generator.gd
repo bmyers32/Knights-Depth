@@ -419,9 +419,9 @@ func test_ambient_territories_are_convex_so_straight_line_pursuit_never_needs_ro
 		# box, which is exactly what convex means for an axis-aligned union.
 		var step: float = 0.5
 		var x: float = bounding.position.x
-		while x <= bounding.end.x:
+		while x <= bounding.end.x:  # bounded: x steps by a fixed positive `step` toward a fixed end
 			var z: float = bounding.position.y
-			while z <= bounding.end.y:
+			while z <= bounding.end.y:  # bounded: z steps by a fixed positive `step` toward a fixed end
 				assert_true(territory.is_inside(Vector3(x, 0.0, z)),
 					"ambient encounter %d has a hole or notch at (%.1f, %.1f): straight-line pursuit inside it would need routing the AI does not have" % [encounter.encounter_id, x, z])
 				z += step

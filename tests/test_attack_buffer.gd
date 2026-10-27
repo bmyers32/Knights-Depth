@@ -22,6 +22,9 @@ const COMBO_RESET := 50
 const INPUT_BUFFER_TICKS := 4
 const HIT1_FIRE_INTERVAL := 10
 
+## Every state-waiting loop is capped (test-harness rule, 2026-10-27): a state that never arrives
+## fails an assertion instead of hanging the suite.
+const LOOP_BUDGET: int = 600
 
 func before_each() -> void:
 	sim = SimWorld.new()
@@ -84,8 +87,11 @@ func _events_of_kind(events: Array[Event], kind: String) -> Array:
 ## Advances noop ticks until exactly `remaining` ticks are left before ATTACKER_ID's
 ## cooldown clears -- avoids brittle hand-counted tick arithmetic in the tests below.
 func _advance_until_remaining(remaining: int) -> void:
-	while sim._next_fire_tick.get(ATTACKER_ID, 0) - sim.tick_count > remaining:
+	var _budget_1: int = 0
+	while (sim._next_fire_tick.get(ATTACKER_ID, 0) - sim.tick_count > remaining) and _budget_1 < LOOP_BUDGET:
+		_budget_1 += 1
 		_tick_noop()
+	assert_lt(_budget_1, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 
 
 func test_press_just_outside_buffer_window_is_still_rejected() -> void:
@@ -109,8 +115,11 @@ func test_buffered_press_materializes_automatically_on_the_tick_cooldown_clears(
 	_tap()  # hit1
 	_advance_until_remaining(INPUT_BUFFER_TICKS)
 	_press()  # buffered
-	while sim._melee_buffered_press.has(ATTACKER_ID):
+	var _budget_2: int = 0
+	while (sim._melee_buffered_press.has(ATTACKER_ID)) and _budget_2 < LOOP_BUDGET:
+		_budget_2 += 1
 		_tick_noop()
+	assert_lt(_budget_2, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 	assert_true(sim._melee_hold.has(ATTACKER_ID), "the hold must have opened automatically, with no released Command needed yet")
 	assert_eq(int(sim._melee_hold[ATTACKER_ID].charge_ticks), 0)
 
@@ -123,8 +132,11 @@ func test_release_before_buffer_matures_resolves_as_single_tap_at_materializatio
 	assert_eq(_hit_events(release_events).size(), 0, "nothing resolves yet -- still buffered")
 
 	var all_events: Array[Event] = []
-	while sim._melee_buffered_press.has(ATTACKER_ID):
+	var _budget_3: int = 0
+	while (sim._melee_buffered_press.has(ATTACKER_ID)) and _budget_3 < LOOP_BUDGET:
+		_budget_3 += 1
 		all_events.append_array(_tick_noop())
+	assert_lt(_budget_3, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 	var hits := _hit_events(all_events)
 	assert_eq(hits.size(), 1, "exactly one clean tap must resolve at materialization")
 	assert_eq(hits[0].payload.get("attack_profile_id"), "2", "the queued press continues the combo sequence")
@@ -135,8 +147,11 @@ func test_held_ticks_after_materialization_still_count_toward_charge() -> void:
 	_tap()  # hit1
 	_advance_until_remaining(INPUT_BUFFER_TICKS)
 	_press()  # buffered
-	while sim._melee_buffered_press.has(ATTACKER_ID):
+	var _budget_4: int = 0
+	while (sim._melee_buffered_press.has(ATTACKER_ID)) and _budget_4 < LOOP_BUDGET:
+		_budget_4 += 1
 		_tick_noop()
+	assert_lt(_budget_4, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 	assert_true(sim._melee_hold.has(ATTACKER_ID), "sanity: materialized")
 	for _i in range(CHARGE_THRESHOLD):
 		_hold()
@@ -205,8 +220,11 @@ func test_buffered_sequence_is_deterministic() -> void:
 
 		local_sim.tick([Command.new(local_sim.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "pressed"})], 1.0 / 30.0)
 		local_sim.tick([Command.new(local_sim.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "released"})], 1.0 / 30.0)
-		while local_sim._next_fire_tick.get(ATTACKER_ID, 0) - local_sim.tick_count > INPUT_BUFFER_TICKS:
+		var _budget_5: int = 0
+		while (local_sim._next_fire_tick.get(ATTACKER_ID, 0) - local_sim.tick_count > INPUT_BUFFER_TICKS) and _budget_5 < LOOP_BUDGET:
+			_budget_5 += 1
 			local_sim.tick([], 1.0 / 30.0)
+		assert_lt(_budget_5, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 		local_sim.tick([Command.new(local_sim.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "pressed"})], 1.0 / 30.0)
 		local_sim.tick([Command.new(local_sim.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "released"})], 1.0 / 30.0)
 		for _j in range(20):
@@ -242,8 +260,11 @@ func test_mid_swing_press_at_exactly_buffer_ticks_remaining_queues() -> void:
 	var s := _make_mid_swing_sim()
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "pressed"})], 1.0 / 30.0)
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "released"})], 1.0 / 30.0)
-	while int(s._melee_hold[ATTACKER_ID].end_tick) - s.tick_count > INPUT_BUFFER_TICKS:
+	var _budget_6: int = 0
+	while (int(s._melee_hold[ATTACKER_ID].end_tick) - s.tick_count > INPUT_BUFFER_TICKS) and _budget_6 < LOOP_BUDGET:
+		_budget_6 += 1
 		s.tick([], 1.0 / 30.0)
+	assert_lt(_budget_6, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 	var events := s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "pressed"})], 1.0 / 30.0)
 	assert_eq(events.filter(func(e): return e.kind == "attack_rejected").size(), 0)
 	assert_true(s._melee_buffered_press.has(ATTACKER_ID))
@@ -253,8 +274,11 @@ func test_mid_swing_press_one_tick_before_boundary_is_rejected_with_mid_swing() 
 	var s := _make_mid_swing_sim()
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "pressed"})], 1.0 / 30.0)
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "released"})], 1.0 / 30.0)
-	while int(s._melee_hold[ATTACKER_ID].end_tick) - s.tick_count > INPUT_BUFFER_TICKS + 1:
+	var _budget_7: int = 0
+	while (int(s._melee_hold[ATTACKER_ID].end_tick) - s.tick_count > INPUT_BUFFER_TICKS + 1) and _budget_7 < LOOP_BUDGET:
+		_budget_7 += 1
 		s.tick([], 1.0 / 30.0)
+	assert_lt(_budget_7, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 	var events := s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "pressed"})], 1.0 / 30.0)
 	var rejected := events.filter(func(e): return e.kind == "attack_rejected")
 	assert_eq(rejected.size(), 1)
@@ -271,16 +295,22 @@ func test_mid_swing_buffered_press_materializes_at_next_fire_tick_not_end_tick()
 	var s := _make_mid_swing_sim()
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "pressed"})], 1.0 / 30.0)
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "released"})], 1.0 / 30.0)
-	while int(s._melee_hold[ATTACKER_ID].end_tick) - s.tick_count > INPUT_BUFFER_TICKS:
+	var _budget_8: int = 0
+	while (int(s._melee_hold[ATTACKER_ID].end_tick) - s.tick_count > INPUT_BUFFER_TICKS) and _budget_8 < LOOP_BUDGET:
+		_budget_8 += 1
 		s.tick([], 1.0 / 30.0)
+	assert_lt(_budget_8, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "pressed"})], 1.0 / 30.0)  # buffered
 	var end_tick: int = int(s._melee_hold[ATTACKER_ID].end_tick)
 	while s.tick_count <= end_tick:
 		s.tick([], 1.0 / 30.0)
 	assert_true(s._melee_buffered_press.has(ATTACKER_ID), "must not materialize merely because the swing's own end_tick arrived")
 	assert_false(s._melee_hold.has(ATTACKER_ID), "sanity: the swing itself has naturally completed")
-	while s._melee_buffered_press.has(ATTACKER_ID):
+	var _budget_9: int = 0
+	while (s._melee_buffered_press.has(ATTACKER_ID)) and _budget_9 < LOOP_BUDGET:
+		_budget_9 += 1
 		s.tick([], 1.0 / 30.0)
+	assert_lt(_budget_9, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 	assert_true(s._melee_hold.has(ATTACKER_ID), "must materialize once _next_fire_tick (end_tick + fire_interval_ticks) actually clears")
 
 
@@ -301,15 +331,21 @@ func test_charged_finisher_then_buffered_press_materializes_as_combo_hit_1() -> 
 	var release_events := s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "released"})], 1.0 / 30.0)
 	assert_eq(release_events.filter(func(e): return e.kind == "hit")[0].payload.get("attack_profile_id"), "charge")
 
-	while s._next_fire_tick.get(ATTACKER_ID, 0) - s.tick_count > INPUT_BUFFER_TICKS:
+	var _budget_10: int = 0
+	while (s._next_fire_tick.get(ATTACKER_ID, 0) - s.tick_count > INPUT_BUFFER_TICKS) and _budget_10 < LOOP_BUDGET:
+		_budget_10 += 1
 		s.tick([], 1.0 / 30.0)
+	assert_lt(_budget_10, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "pressed"})], 1.0 / 30.0)  # buffered
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO, "phase": "released"})], 1.0 / 30.0)  # released before materialization
 	assert_true(s._melee_buffered_press.has(ATTACKER_ID))
 
 	var all_events: Array[Event] = []
-	while s._melee_buffered_press.has(ATTACKER_ID):
+	var _budget_11: int = 0
+	while (s._melee_buffered_press.has(ATTACKER_ID)) and _budget_11 < LOOP_BUDGET:
+		_budget_11 += 1
 		all_events.append_array(s.tick([], 1.0 / 30.0))
+	assert_lt(_budget_11, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 	var hits := all_events.filter(func(e): return e.kind == "hit")
 	assert_eq(hits.size(), 1)
 	assert_eq(hits[0].payload.get("attack_profile_id"), "1", "a press queued behind a charged finisher must materialize as combo hit 1")
@@ -338,8 +374,11 @@ func test_mid_swing_buffered_release_does_not_double_apply_the_original_swings_l
 
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3(0, 0, -1), "phase": "pressed"})], 1.0 / 30.0)
 	s.tick([Command.new(s.tick_count, ATTACKER_ID, "attack", {"aim": Vector3(0, 0, -1), "phase": "released"})], 1.0 / 30.0)
-	while int(s._melee_hold[ATTACKER_ID].end_tick) - s.tick_count > INPUT_BUFFER_TICKS:
+	var _budget_12: int = 0
+	while (int(s._melee_hold[ATTACKER_ID].end_tick) - s.tick_count > INPUT_BUFFER_TICKS) and _budget_12 < LOOP_BUDGET:
+		_budget_12 += 1
 		s.tick([], 1.0 / 30.0)
+	assert_lt(_budget_12, LOOP_BUDGET, "a waited-for state never arrived within %d ticks" % LOOP_BUDGET)
 
 	var per_tick_step: float = 6.0 / 12.0
 	var position_before: Vector3 = s.entities[ATTACKER_ID]

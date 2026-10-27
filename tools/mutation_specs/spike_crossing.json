@@ -1,0 +1,105 @@
+{
+ "timeout": 240,
+ "mutants": [
+  {
+   "name": "S1 band A is always active",
+   "file": "game/content/floors/pieces/archive_traversal_spike_crossing.tres",
+   "pairs": [
+    [
+     "key = &\"P_SOUTH_BAND\"\npad_id = 0\nrect = Rect2(-5, -13, 10, 4)\nsafe_ticks = 130",
+     "key = &\"P_SOUTH_BAND\"\npad_id = 0\nrect = Rect2(-5, -13, 10, 4)\nsafe_ticks = 0"
+    ]
+   ],
+   "test_file": "test_spike_crossing.gd",
+   "tests": [
+    "test_going_when_each_band_drops_crosses_unhit_from_every_arrival_phase",
+    "test_going_when_each_band_looks_calm_crosses_unhit_from_every_arrival_phase"
+   ]
+  },
+  {
+   "name": "S2 the bands fire together",
+   "file": "game/content/floors/pieces/archive_traversal_spike_crossing.tres",
+   "pairs": [
+    [
+     "phase_offset_ticks = 50",
+     "phase_offset_ticks = 130"
+    ]
+   ],
+   "test_file": "test_spike_crossing.gd",
+   "tests": [
+    "test_the_piece_is_two_full_width_bands_with_a_safe_island_and_safe_staging"
+   ]
+  },
+  {
+   "name": "S3 no island: the bands touch",
+   "file": "game/content/floors/pieces/archive_traversal_spike_crossing.tres",
+   "pairs": [
+    [
+     "rect = Rect2(-5, -6, 10, 4)",
+     "rect = Rect2(-5, -9, 10, 4)"
+    ]
+   ],
+   "test_file": "test_spike_crossing.gd",
+   "tests": [
+    "test_the_piece_is_two_full_width_bands_with_a_safe_island_and_safe_staging",
+    "test_going_when_each_band_drops_crosses_unhit_from_every_arrival_phase"
+   ]
+  },
+  {
+   "name": "S4 band B can be walked round",
+   "file": "game/content/floors/pieces/archive_traversal_spike_crossing.tres",
+   "pairs": [
+    [
+     "rect = Rect2(-5, -6, 10, 4)",
+     "rect = Rect2(-5, -6, 8, 4)"
+    ]
+   ],
+   "test_file": "test_spike_crossing.gd",
+   "tests": [
+    "test_the_piece_is_two_full_width_bands_with_a_safe_island_and_safe_staging"
+   ]
+  },
+  {
+   "name": "S5 the spikes hurt enemies too",
+   "file": "game/content/floors/pieces/archive_traversal_spike_crossing.tres",
+   "pairs": [
+    [
+     "damage = 10.0\n\n[sub_resource type=\"Resource\" id=\"body\"]",
+     "damage = 10.0\neligible_allegiances = Array[StringName]([&\"player\", &\"enemy\"])\n\n[sub_resource type=\"Resource\" id=\"body\"]"
+    ]
+   ],
+   "test_file": "test_spike_crossing.gd",
+   "tests": [
+    "test_the_piece_is_two_full_width_bands_with_a_safe_island_and_safe_staging"
+   ]
+  },
+  {
+   "name": "S6 the crossing is declared mandatory",
+   "file": "game/content/floors/recipes/proto_archive_fold_spikes.tres",
+   "pairs": [
+    [
+     "\"progression\": &\"optional\"",
+     "\"progression\": &\"mandatory\""
+    ]
+   ],
+   "test_file": "test_spike_crossing.gd",
+   "tests": [
+    "test_the_spike_fold_keeps_its_declarations_and_the_crossing_is_reachable_and_omittable"
+   ]
+  },
+  {
+   "name": "S7 the long way is measured through the crossing",
+   "file": "tools/route_metrics.gd",
+   "pairs": [
+    [
+     "passable[row * columns + column] = 1 if not avoided and bounds.fits",
+     "passable[row * columns + column] = 1 if bounds.fits"
+    ]
+   ],
+   "test_file": "test_spike_crossing.gd",
+   "tests": [
+    "test_with_the_key_in_hand_both_the_crossing_and_the_long_way_reach_the_door"
+   ]
+  }
+ ]
+}
