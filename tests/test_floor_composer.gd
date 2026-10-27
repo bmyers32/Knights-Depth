@@ -595,3 +595,50 @@ func test_the_onward_route_folds_back_on_the_far_side_from_the_fight() -> void:
 		assert_lt(signf(fight.x - landmark.x) * signf(exit.x - landmark.x), 0.0, "seed %d: the exit leaves the landmark's other side" % run_seed)
 		assert_lt(exit.y, landmark.y, "seed %d: and turns back down the floor" % run_seed)
 		assert_eq(report.routes["landmark>exit"]["shape"], FloorComposer.SHAPE_L, "seed %d: one turn" % run_seed)
+
+
+## B7 (S3b): THE MANDATORY WALK TURNS, read off a SUCCESSFUL floor's own geometry. Each leg is walked
+## under the doors the sim would have at that moment -- arrival to the plate (as authored), plate to
+## the key (after the clear), key to the door (after the lift), door to the exit (all open) -- and
+## the whole walk must hold all four headings: south down the floor, east out to the fight, north
+## home by the return, west through the key door (mirrored floors swap east and west). And the
+## onward leg itself turns: a key door that let straight onto the exit would collapse the fold.
+func test_a_composed_folds_mandatory_walk_holds_all_four_headings_and_its_onward_leg_turns() -> void:
+	var recipe: FloorRecipe = _fold()
+	var radius: float = float(_rules()["body_radius"])
+	for run_seed in [1, 7, 42, 0, 2, 3, 4, 5, 6, 8]:
+		var result: FloorComposer.ComposeResult = _compose(run_seed, recipe)
+		if not result.report.succeeded():
+			fail_test("seed %d: %s" % [run_seed, result.report.summary()])
+			continue
+		var plan: FloorPlan = _compiled(result.layout)
+		var closed: Array = []
+		for connection: TraversalConnection in plan.connections:
+			if not connection.starts_open:
+				closed.append(connection.connection_id)
+		var landmark: StringName = RouteMetrics.instance_of_node(recipe, result, &"landmark")
+		var pit: StringName = RouteMetrics.instance_of_node(recipe, result, &"encounter")
+		var door: int = RouteMetrics.connection_of(result, landmark, &"out")
+		var fight_door: int = RouteMetrics.connection_of(result, pit, &"out")
+		var plate: Rect2 = Rect2()
+		for trigger: FloorTrigger in plan.triggers:
+			for effect: Dictionary in trigger.effects:
+				if effect.get("kind", &"") == FloorLayers.EFFECT_ACTIVATE_ENCOUNTER:
+					plate = trigger.region
+		var key: Vector3 = plan.carriables[0].position
+		var receiver: Rect2 = _trigger_of_kind(plan, FloorLayers.TRIGGER_CARRIABLE_INSERTED).region
+		var legs: Array = [
+			RouteMetrics.walk(plan, RouteMetrics.open_except(plan, closed), Vector2(plan.entry_point.x, plan.entry_point.z), plate, radius),
+			RouteMetrics.walk(plan, RouteMetrics.open_except(plan, closed.filter(func(id: int) -> bool: return id != fight_door)), plate.get_center(), Rect2(key.x - 1.0, key.z - 1.0, 2.0, 2.0), radius),
+			RouteMetrics.walk(plan, RouteMetrics.open_except(plan, [door]), Vector2(key.x, key.z), receiver, radius),
+			RouteMetrics.walk(plan, RouteMetrics.open_except(plan, []), receiver.get_center(), _exit_pad(plan), radius),
+		]
+		var walked: Array = []
+		for leg: Dictionary in legs:
+			assert_gt(float(leg["length"]), 0.0, "seed %d: every mandatory leg is walkable" % run_seed)
+			walked.append_array(leg["path"])
+		var headings: PackedStringArray = RouteMetrics.headings(walked)
+		for heading: String in ["N", "S", "E", "W"]:
+			assert_true(heading in headings, "seed %d: the mandatory walk heads %s (%s)" % [run_seed, heading, "".join(headings)])
+		var onward: PackedStringArray = RouteMetrics.headings(legs[3]["path"])
+		assert_gte(onward.size(), 2, "seed %d: the onward leg turns (%s)" % [run_seed, "".join(onward)])

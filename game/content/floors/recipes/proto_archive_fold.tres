@@ -28,18 +28,22 @@ nodes = Array[Dictionary]([{
 }, {
 "key": &"landmark",
 "role": &"landmark",
+"progression": &"mandatory",
 "tags": [&"key_door"]
 }, {
 "key": &"encounter",
 "role": &"encounter",
+"progression": &"mandatory",
 "tags": [&"sealing"]
 }, {
 "key": &"objective",
 "role": &"objective",
+"progression": &"mandatory",
 "tags": [&"key_vault"]
 }, {
 "key": &"exit",
-"role": &"exit"
+"role": &"exit",
+"progression": &"mandatory"
 }])
 edges = Array[Dictionary]([{
 "from": &"entry",

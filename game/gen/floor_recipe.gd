@@ -15,9 +15,19 @@ extends Resource
 ## EVERY NUMBER IS MEASURED (ADR-001-S2-MEASUREMENTS.md) and provisional. Budgets are COUNTS,
 ## never time: elapsed time is reported, and nothing branches on it.
 
-## Node: {key: StringName, role: StringName, tags: Array[StringName]}. The first node is the
-## entry and stands at the origin as authored.
+## Node: {key: StringName, role: StringName, tags: Array[StringName], progression: StringName}.
+## The first node is the entry and stands at the origin as authored.
+##
+## `progression` DECLARES what the node is for, and ObjectiveIntegrity proves it on every composed
+## floor (S3b): MANDATORY -- the floor cannot be completed without the node's ground, nor without
+## its mandatory fights cleared, its keys lifted, its receivers fed; OPTIONAL -- its ground is
+## reachable, and the floor can still be completed without ever entering it. Absent means the node
+## supports the route and claims neither: an ambient roster or a corridor room is not promoted to
+## mandatory for holding enemies.
 @export var nodes: Array[Dictionary] = []
+const PROGRESSION_MANDATORY: StringName = &"mandatory"
+const PROGRESSION_OPTIONAL: StringName = &"optional"
+const PROGRESSIONS: Array[StringName] = [PROGRESSION_MANDATORY, PROGRESSION_OPTIONAL]
 ## Edge: {from, from_port, to, to_port, profile: StringName, closes_cycle: bool}.
 @export var edges: Array[Dictionary] = []
 @export var recipe_id: StringName = &""
@@ -88,6 +98,10 @@ func lint() -> Array[Dictionary]:
 		seen[key] = true
 		if not entry.get("role", &"") in FloorPiece.ROLES:
 			_finding(out, &"node_role_unknown", "FloorRecipe '%s': node '%s' has role '%s'" % [recipe_id, key, entry.get("role", &"")], {"node": key})
+		if entry.has("progression") and not entry["progression"] in PROGRESSIONS:
+			_finding(out, &"node_progression_unknown", "FloorRecipe '%s': node '%s' declares progression '%s' (one of %s, or none)" % [recipe_id, key, entry["progression"], PROGRESSIONS], {"node": key})
+		if index == 0 and entry.get("progression", &"") == PROGRESSION_OPTIONAL:
+			_finding(out, &"entry_optional", "FloorRecipe '%s': the entry is where every route starts; it cannot be optional" % recipe_id, {"node": key})
 		if index == 0 and entry.get("role", &"") != FloorPiece.ROLE_ENTRY:
 			_finding(out, &"entry_not_first", "FloorRecipe '%s': the first node must be the entry" % recipe_id, {"node": key})
 		elif index > 0:

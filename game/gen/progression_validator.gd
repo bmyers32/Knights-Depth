@@ -18,6 +18,12 @@ extends RefCounted
 ## eroded by the body, plus the exact strip two adjoining cells cover together), so a strip
 ## narrower than a body is passable only where neighbouring ground covers the rest of it.
 ##
+## TWO QUESTIONS, KEPT APART (S3b). `check` asks whether the floor can be finished and never gets
+## stuck. `check_objective` asks the integrity question: with a declared outcome FORBIDDEN (a fight
+## never cleared, a key never lifted or delivered, a piece of ground never entered), does ANY route
+## to the goal remain? It forbids an ACTION in the search; it never deletes a record from the floor,
+## so the floor under test is the floor that ships.
+##
 ## SUPPORTED ACTIONS -- each is one FloorLayers kind, applied as SimWorld applies it:
 ##   enter a region / group-occupancy trigger   (solo: one Envoy IS the party)
 ##   break a breakable from ground in attack reach    -> breakable_destroyed watchers
@@ -26,7 +32,9 @@ extends RefCounted
 ##   deliver the held carriable at an unfilled receiver the Envoy can stand in
 ##   clear an active encounter  (ASSUMED winnable; recorded as an assumption, never silent)
 ## An attack-type action while carrying first sets the key down where the Envoy stands (the sim:
-## that press drops, it never swings while carrying).
+## that press drops, it never swings while carrying). With the `set_down_anywhere` rule the search
+## also sets the key down VOLUNTARILY on any reachable ground (the sim's drop press), one point per
+## piece of ground -- opt-in, because it multiplies the state space by the ground a key can lie on.
 ##
 ## NOT A PUZZLE SOLVER. Anything outside those rules is either conservative (modelled as "cannot")
 ## or surfaced through a second, deliberately OPTIMISTIC search: if relaxing a rule the model
@@ -43,7 +51,9 @@ const _HOME: int = -3
 ##   attack_reach  melee reach (plus the target's own radius, as _breakables_in_cone adds it)
 ##   pickup_reach  the carry reach a lift is offered within
 ##   max_states    the search budget; exceeding it is reported, never silently truncated
-const DEFAULT_RULES: Dictionary = {"body_radius": 0.0, "attack_reach": 0.0, "pickup_reach": 0.0, "max_states": 20000}
+##   set_down_anywhere  a held key may be set down on any reachable piece of ground (the voluntary
+##                 drop press), not only where an attack or a fight forces it down
+const DEFAULT_RULES: Dictionary = {"body_radius": 0.0, "attack_reach": 0.0, "pickup_reach": 0.0, "max_states": 20000, "set_down_anywhere": false}
 
 ## Relaxations the optimistic search may switch on. Each names one thing the strict model
 ## refuses to establish; a verdict that needs one is UNSUPPORTED, and the finding says which.
@@ -53,12 +63,14 @@ const RELAX_RANGED_SWITCHES: StringName = &"ranged_switches"
 const RELAX_THIN_GROUND: StringName = &"thin_ground"
 const _RELAXATIONS_TO_TRY: Array = [[RELAX_RANGED_SWITCHES], [RELAX_THIN_GROUND], [RELAX_RANGED_SWITCHES, RELAX_THIN_GROUND]]
 
+const _LIMITATION_SET_DOWN: String = "a carried key is set down only where an attack or a fight happens, never elsewhere"
+const _LIMITATION_SET_DOWN_ANYWHERE: String = "a carried key may be set down on any reachable ground, one point per piece of it; a key knocked loose by a hit (the sim drops it where the carrier stood) is the same set-down, but enemy pressure itself is not modelled"
 const _STANDING_LIMITATIONS: Array[String] = [
 	"enemy bodies and hazards never block or harm the party (spike pads, rosters in doorways)",
 	"an active encounter is cleared whenever the party chooses, without modelling the fight",
 	"while a sealing encounter is active only clearing it is possible; confinement geometry is not checked",
 	"group occupancy is evaluated for a solo party (M3 party membership is not modelled)",
-	"a carried key is set down only where an attack or a fight happens, never elsewhere",
+	_LIMITATION_SET_DOWN,
 	"switches are activated by melee reach only (ranged activation is reported, not proven)",
 	"a body stands only where one piece of ground, or two adjoining pieces, cover its whole footprint",
 ]
@@ -66,9 +78,9 @@ const _STANDING_LIMITATIONS: Array[String] = [
 
 static func check(plan: FloorPlan, rules: Dictionary = {}) -> ProgressionReport:
 	var report := ProgressionReport.new()
-	report.limitations.assign(_STANDING_LIMITATIONS)
 	var settings: Dictionary = DEFAULT_RULES.duplicate()
 	settings.merge(rules, true)
+	report.limitations.assign(_limitations(settings))
 	var model := _Model.new(plan, settings, report)
 	if not model.ok:
 		report.outcome = ProgressionReport.OUTCOME_UNSUPPORTED if report.findings_of(&"entry_off_floor").is_empty() else ProgressionReport.OUTCOME_FAIL
@@ -132,6 +144,128 @@ static func check(plan: FloorPlan, rules: Dictionary = {}) -> ProgressionReport:
 	return report
 
 
+static func _limitations(settings: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for line: String in _STANDING_LIMITATIONS:
+		out.append(_LIMITATION_SET_DOWN_ANYWHERE if line == _LIMITATION_SET_DOWN and bool(settings["set_down_anywhere"]) else line)
+	return out
+
+
+# --- OBJECTIVE INTEGRITY (S3b) ---------------------------------------------------------------------
+
+## What may be forbidden, by the ids the plan uses:
+##   clear    Array[int] encounter ids that are never cleared (a sealing one, once active, holds the
+##            party for good -- exactly what "this fight is never won" means)
+##   lift     Array[int] carriable ids never lifted
+##   deliver  Array[int] receiver trigger ids never delivered to
+##   ground   Array[Rect2] ground the party never stands on (a piece's footprint)
+const FORBID_CLEAR: StringName = &"clear"
+const FORBID_LIFT: StringName = &"lift"
+const FORBID_DELIVER: StringName = &"deliver"
+const FORBID_GROUND: StringName = &"ground"
+## What the query asks to reach. {} is floor completion; {lift: id} is holding that key; {open: id}
+## is that connection standing open; {enter: Rect2} is standing on ground that touches the rect.
+const GOAL_COMPLETE: StringName = &"complete"
+const GOAL_LIFT: StringName = &"lift"
+const GOAL_OPEN: StringName = &"open"
+const GOAL_ENTER: StringName = &"enter"
+
+
+## THE ANSWER TO ONE INTEGRITY QUESTION, three ways and never blurred:
+##   ROUTE_NONE   exhaustive: no sequence of supported actions reaches the goal with the forbidden
+##                outcomes withheld, and no relaxation the model knows of finds one either
+##   ROUTE_FOUND  a route exists; `trace` is it, step by step (for a mandatory claim: the bypass)
+##   UNSUPPORTED  the budget ran out, the model could not be built, or only a RELAXED search finds a
+##                route -- the model cannot say either way, and `reason` says why
+## It says nothing about solvability: `check` answers that, and a caller reads both.
+class ObjectiveResult:
+	extends RefCounted
+	const ROUTE_NONE: StringName = &"route_none"
+	const ROUTE_FOUND: StringName = &"route_found"
+	const UNSUPPORTED: StringName = &"unsupported"
+	var verdict: StringName = UNSUPPORTED
+	var forbidden: Dictionary = {}
+	var goal: Dictionary = {}
+	var trace: Array[String] = []
+	var states_explored: int = 0
+	var reason: String = ""
+
+	func summary() -> String:
+		var line: String = "objective %s (goal %s, forbidding %s) after %d states" % [String(verdict).to_upper(), str(goal), str(forbidden), states_explored]
+		if reason != "":
+			line += ": " + reason
+		if not trace.is_empty():
+			line += "\n  route: " + " -> ".join(trace)
+		return line
+
+	func to_dict() -> Dictionary:
+		return {"verdict": String(verdict), "forbidden": str(forbidden), "goal": str(goal), "trace": trace.duplicate(),
+			"states_explored": states_explored, "reason": reason}
+
+
+static func check_objective(plan: FloorPlan, rules: Dictionary, forbidden: Dictionary, goal: Dictionary = {}) -> ObjectiveResult:
+	return ObjectiveSession.new(plan, rules).ask(forbidden, goal)
+
+
+## MANY INTEGRITY QUESTIONS ABOUT ONE FLOOR share one model: cutting the ground, eroding it by the
+## body and joining the pieces is the expensive part, and it does not depend on what is forbidden.
+## The relaxed point model is built once too, the first time a strict search finds nothing.
+class ObjectiveSession:
+	extends RefCounted
+	var _settings: Dictionary
+	var _model: _Model
+	var _rescuer: _Rescuer
+	var _failure: String = ""
+
+	func _init(plan: FloorPlan, rules: Dictionary) -> void:
+		_settings = ProgressionValidator.DEFAULT_RULES.duplicate()
+		_settings.merge(rules, true)
+		var scratch := ProgressionReport.new()
+		_model = _Model.new(plan, _settings, scratch)
+		if not _model.ok:
+			_failure = "the model could not be built: %s" % scratch.summary()
+		_rescuer = _Rescuer.new(plan, _settings, _model)
+
+	func ask(forbidden: Dictionary, goal: Dictionary = {}) -> ObjectiveResult:
+		var result := ObjectiveResult.new()
+		result.forbidden = forbidden.duplicate(true)
+		result.goal = goal.duplicate()
+		if _failure != "":
+			result.reason = _failure
+			return result
+		if ProgressionValidator._goal_kind(goal) == ProgressionValidator.GOAL_COMPLETE and _model.goal_triggers.is_empty():
+			result.reason = "no trigger completes this floor, so completion is not a question the model can ask"
+			return result
+		var constraints: Dictionary = {"forbid": forbidden, "goal": goal}
+		var strict := _Search.new(_model, false, constraints)
+		strict.run(_model.initial_state())
+		result.states_explored = strict.explored.size()
+		if strict.over_budget:
+			result.reason = "the search exceeded %d states before concluding" % int(_settings["max_states"])
+			return result
+		if strict.goal_key != "":
+			result.verdict = ObjectiveResult.ROUTE_FOUND
+			result.trace = strict.trace_to(strict.goal_key)
+			return result
+		var rescue: Dictionary = _rescuer.rescue(_model.initial_state(), constraints)
+		if not rescue.is_empty():
+			result.reason = "a route exists only if %s, which this model does not establish" % rescue["because"]
+			result.trace.assign(rescue["trace"])
+			return result
+		result.verdict = ObjectiveResult.ROUTE_NONE
+		return result
+
+
+static func _goal_kind(goal: Dictionary) -> StringName:
+	if goal.has(GOAL_LIFT):
+		return GOAL_LIFT
+	if goal.has(GOAL_OPEN):
+		return GOAL_OPEN
+	if goal.has(GOAL_ENTER):
+		return GOAL_ENTER
+	return GOAL_COMPLETE
+
+
 ## Whether some relaxation the strict model refuses would reach the exit from a state, and the
 ## smallest one that does. Tried one at a time first, so a finding names the single rule in
 ## question whenever one suffices. The point model is built once, only if it is ever needed.
@@ -148,12 +282,13 @@ class _Rescuer:
 		settings = the_settings
 		model = the_model
 
-	## {relaxation, because, trace}, or empty when no relaxation helps.
-	func rescue(state: Dictionary) -> Dictionary:
+	## {relaxation, because, trace}, or empty when no relaxation helps. `constraints` (forbidden
+	## outcomes, a goal) bind the relaxed search exactly as they bind the strict one.
+	func rescue(state: Dictionary, constraints: Dictionary = {}) -> Dictionary:
 		for relaxations: Array in _RELAXATIONS_TO_TRY:
 			var thin: bool = RELAX_THIN_GROUND in relaxations
 			var ranged: bool = RELAX_RANGED_SWITCHES in relaxations
-			var search := _Search.new(_point_model() if thin else model, ranged)
+			var search := _Search.new(_point_model() if thin else model, ranged, constraints)
 			search.run(_point_model().translate(model, state) if thin else state)
 			if search.goal_key == "":
 				continue
@@ -629,16 +764,69 @@ class _Search:
 	var goal_key: String = ""
 	var goal_keys: Array[String] = []
 	var over_budget: bool = false
+	## Integrity constraints, resolved to THIS model's indices (a point model cuts ground into
+	## different pieces, so ground is resolved per model, from the forbidden rects).
+	var no_clear: Dictionary = {}     # encounter index -> true
+	var no_lift: Dictionary = {}      # carriable index -> true
+	var no_deliver: Dictionary = {}   # trigger index -> true
+	var no_ground: Dictionary = {}    # piece id -> true
+	var goal_kind: StringName = ProgressionValidator.GOAL_COMPLETE
+	var goal_index: int = -1
+	var goal_rect: Rect2 = Rect2()
+	var set_down_anywhere: bool = false
 
-	func _init(the_model: _Model, ranged_switches: bool) -> void:
+	func _init(the_model: _Model, ranged_switches: bool, constraints: Dictionary = {}) -> void:
 		model = the_model
 		ranged = ranged_switches
+		set_down_anywhere = bool(model.rules.get("set_down_anywhere", false))
+		var forbid: Dictionary = constraints.get("forbid", {})
+		for encounter_id: int in forbid.get(ProgressionValidator.FORBID_CLEAR, []):
+			if model.encounter_index_of(encounter_id) >= 0:
+				no_clear[model.encounter_index_of(encounter_id)] = true
+		for carriable_id: int in forbid.get(ProgressionValidator.FORBID_LIFT, []):
+			if model.carriable_index_of(carriable_id) >= 0:
+				no_lift[model.carriable_index_of(carriable_id)] = true
+		for trigger_id: int in forbid.get(ProgressionValidator.FORBID_DELIVER, []):
+			if model.trigger_index_of(trigger_id) >= 0:
+				no_deliver[model.trigger_index_of(trigger_id)] = true
+		for ground: Rect2 in forbid.get(ProgressionValidator.FORBID_GROUND, []):
+			for piece in model.pieces:
+				if (piece["rect"] as Rect2).intersects(ground):
+					no_ground[int(piece["id"])] = true
+		var goal: Dictionary = constraints.get("goal", {})
+		goal_kind = ProgressionValidator._goal_kind(goal)
+		if goal_kind == ProgressionValidator.GOAL_LIFT:
+			goal_index = model.carriable_index_of(int(goal[ProgressionValidator.GOAL_LIFT]))
+		elif goal_kind == ProgressionValidator.GOAL_OPEN:
+			goal_index = model.connection_index_of(int(goal[ProgressionValidator.GOAL_OPEN]))
+		elif goal_kind == ProgressionValidator.GOAL_ENTER:
+			goal_rect = goal[ProgressionValidator.GOAL_ENTER]
+
+	## The goal the search stops at. Completion stops expansion (the floor is over); the other goals
+	## are states like any other and the search goes on past them.
+	func _is_goal(state: Dictionary) -> bool:
+		match goal_kind:
+			ProgressionValidator.GOAL_LIFT:
+				return goal_index >= 0 and int(state["c_at"][goal_index]) == _HELD
+			ProgressionValidator.GOAL_OPEN:
+				return goal_index >= 0 and bool(state["open"][goal_index])
+			ProgressionValidator.GOAL_ENTER:
+				for piece_id: int in _reachable(state):
+					if (model.pieces[piece_id]["rect"] as Rect2).intersects(goal_rect):
+						return true
+				return false
+		return bool(state["done"])
 
 	func run(start: Dictionary) -> void:
+		if no_ground.has(int(start["pos"])):
+			return  # arrival itself is forbidden ground: nothing can be reached
 		var queue: Array[Dictionary] = [start]
 		var start_key: String = _Model.key_of(start)
 		explored[start_key] = start
 		successors[start_key] = []
+		if goal_kind != ProgressionValidator.GOAL_COMPLETE and _is_goal(start):
+			goal_keys.append(start_key)
+			goal_key = start_key
 		# Arrival inside a live region fires it on the first tick, exactly as the sim's edge does:
 		# the un-fired arrival is not a state anyone can act in.
 		var arrival: Dictionary = _fire_if_standing_in_live_region(start, "arrive")
@@ -660,7 +848,8 @@ class _Search:
 
 	func _discover(move: Dictionary, from_key: String) -> bool:
 		var next: Dictionary = move["state"]
-		_canonicalise(next)
+		if not bool(move.get("canonical", false)):
+			_canonicalise(next)
 		var next_key: String = _Model.key_of(next)
 		successors[from_key].append(next_key)
 		if explored.has(next_key):
@@ -668,7 +857,7 @@ class _Search:
 		explored[next_key] = next
 		successors[next_key] = []
 		parent[next_key] = {"from": from_key, "action": move["action"]}
-		if bool(next["done"]):
+		if _is_goal(next):
 			goal_keys.append(next_key)
 			if goal_key == "":
 				goal_key = next_key
@@ -793,7 +982,7 @@ class _Search:
 				if seen.has(next):
 					continue
 				var cell: Dictionary = model.cell_of(next)
-				if not _enterable(state, cell) or _live_trigger(state, int(cell["trigger"])):
+				if not _enterable(state, cell) or _live_trigger(state, int(cell["trigger"])) or no_ground.has(next):
 					continue
 				seen[next] = true
 				queue.append(next)
@@ -803,16 +992,18 @@ class _Search:
 
 	func _moves(state: Dictionary) -> Array[Dictionary]:
 		var moves: Array[Dictionary] = []
-		# A SEALING ENCOUNTER HOLDS THE PARTY: until it is cleared nothing else is reachable.
+		# A SEALING ENCOUNTER HOLDS THE PARTY: until it is cleared nothing else is reachable -- and a
+		# fight forbidden to clear holds it for good.
 		if int(state["confined"]) >= 0:
-			moves.append(_clear_encounter(state, int(state["confined"])))
+			if not no_clear.has(int(state["confined"])):
+				moves.append(_clear_encounter(state, int(state["confined"])))
 			return moves
 		var reach: Dictionary = _reachable(state)
 		# 1. Step into a live region from ground beside it.
 		for piece in model.pieces:
 			var cell: Dictionary = model.cells[int(piece["cell"])]
 			var trigger_index: int = int(cell["trigger"])
-			if not _live_trigger(state, trigger_index) or not _enterable(state, cell):
+			if not _live_trigger(state, trigger_index) or not _enterable(state, cell) or no_ground.has(int(piece["id"])):
 				continue
 			if not _beside_reach(int(piece["id"]), reach):
 				continue
@@ -860,7 +1051,7 @@ class _Search:
 		if int(state["holding"]) < 0:
 			for index in model.carriables.size():
 				var at: int = int(state["c_at"][index])
-				if at == _HELD or at == _INSERTED or not bool(state["c_revealed"][index]):
+				if at == _HELD or at == _INSERTED or not bool(state["c_revealed"][index]) or no_lift.has(index):
 					continue
 				var key_point: Vector3 = model.carriables[index].position if at == _HOME else _centre(model.pieces[at]["rect"])
 				var from: int = _piece_within(reach, key_point, float(model.rules["pickup_reach"]))
@@ -876,7 +1067,7 @@ class _Search:
 		if int(state["holding"]) >= 0:
 			for index in model.triggers.size():
 				var trigger: FloorTrigger = model.triggers[index]
-				if trigger.kind != FloorLayers.TRIGGER_CARRIABLE_INSERTED or not _live_trigger(state, index):
+				if trigger.kind != FloorLayers.TRIGGER_CARRIABLE_INSERTED or not _live_trigger(state, index) or no_deliver.has(index):
 					continue
 				var from: int = _piece_overlapping(reach, trigger.region)
 				if from < 0:
@@ -890,9 +1081,37 @@ class _Search:
 				moves.append({"state": next, "action": "deliver carriable %d to receiver %d" % [model.carriables[held].carriable_id, trigger.trigger_id]})
 		# 6. Clear an active encounter (assumed winnable, recorded).
 		for index in model.encounters.size():
-			if int(state["enc"][index]) == 1:
+			if int(state["enc"][index]) == 1 and not no_clear.has(index):
 				moves.append(_clear_encounter(state, index))
+		# 7. Set the held key down on reachable ground (the voluntary drop; opt-in). Never inside a
+		# live receiver: there the same press delivers instead, exactly as in the sim. ONE POINT PER
+		# CELL, the lowest reachable piece of it: cells are exactly where doors, regions and masses
+		# cut the ground, so two set-downs in one cell differ in nothing progression can tell apart.
+		# The Envoy stays where it stood (its reachable ground is unchanged), so the state is
+		# already canonical and is not re-walked.
+		if set_down_anywhere and int(state["holding"]) >= 0:
+			var ids: Array = reach.keys()
+			ids.sort()
+			var cells_done: Dictionary = {}
+			for piece_id: int in ids:
+				var cell_id: int = int(model.pieces[piece_id]["cell"])
+				if cells_done.has(cell_id) or _in_live_receiver(state, piece_id):
+					continue
+				cells_done[cell_id] = true
+				var next: Dictionary = _copy(state)
+				var held: int = int(next["holding"])
+				next["holding"] = -1
+				next["c_at"][held] = piece_id
+				moves.append({"state": next, "action": "set down carriable %d" % model.carriables[held].carriable_id, "canonical": true})
 		return moves
+
+	func _in_live_receiver(state: Dictionary, piece_id: int) -> bool:
+		for index in model.triggers.size():
+			var trigger: FloorTrigger = model.triggers[index]
+			if trigger.kind == FloorLayers.TRIGGER_CARRIABLE_INSERTED and _live_trigger(state, index) \
+					and (model.pieces[piece_id]["rect"] as Rect2).intersects(trigger.region, true):
+				return true
+		return false
 
 	func _clear_encounter(state: Dictionary, index: int) -> Dictionary:
 		var encounter: EncounterSite = model.encounters[index]

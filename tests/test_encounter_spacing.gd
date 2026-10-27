@@ -7,7 +7,7 @@ extends GutTest
 
 const LAYOUTS := ["archive_prototype", "archive_roundabout", "foundry_assembly", "terminal"]
 const PIECES_DIR := "res://game/content/floors/pieces/"
-const RECIPES := ["proto_archive", "proto_archive_dogleg"]
+const RECIPES := ["proto_archive", "proto_archive_dogleg", "proto_archive_fold"]
 const SWEEP: int = 20
 const DEPTH: int = 1
 
@@ -131,3 +131,73 @@ func test_composed_floors_of_both_recipes_spawn_safely() -> void:
 			judged += 1
 			assert_eq(EncounterSpacing.findings(result.layout, reaches), [] as Array[Dictionary], "%s seed %d" % [recipe_id, run_seed])
 		assert_gt(judged, 0, "%s composed something to judge" % recipe_id)
+
+
+# --- in the composer (S3b) -----------------------------------------------------------------------
+
+## A recipe whose destination is the rejected S2 gallery: its guards wake 2.0 and 2.2 from the plate.
+func _gallery_recipe() -> FloorRecipe:
+	var recipe := FloorRecipe.new()
+	recipe.recipe_id = &"fixture_unsafe_gallery"
+	recipe.stratum = load("res://game/content/strata/archive.tres")
+	recipe.fallback = load("res://game/content/layouts/archive_prototype.tres")
+	recipe.pieces = [_piece("archive_entry_hall"), _piece("archive_exit_gallery")] as Array[FloorPiece]
+	recipe.profiles = [load("res://game/content/floors/profiles/approach.tres")] as Array[TraversalProfile]
+	recipe.nodes = [{"key": &"entry", "role": &"entry"}, {"key": &"exit", "role": &"exit"}] as Array[Dictionary]
+	recipe.edges = [{"from": &"entry", "from_port": &"out", "to": &"exit", "to_port": &"in", "profile": &"approach"}] as Array[Dictionary]
+	return recipe
+
+
+## SPACING IS A COMPOSITION REJECTION when the reaches are supplied: the same seed composes without
+## them and falls back with them, naming the rule; never silently "fixed".
+func test_the_composer_rejects_a_floor_whose_plate_wakes_a_roster_inside_its_reach() -> void:
+	var recipe: FloorRecipe = _gallery_recipe()
+	assert_eq(recipe.lint(), [] as Array[Dictionary])
+	var unjudged: FloorComposer.ComposeResult = FloorComposer.compose(recipe, SeedMix.derive(1, DEPTH), DEPTH)
+	assert_true(unjudged.report.succeeded(), "without reaches the composer does not judge spawns: " + unjudged.report.summary())
+	var judged: FloorComposer.ComposeResult = FloorComposer.compose(recipe, SeedMix.derive(1, DEPTH), DEPTH, {}, _reaches())
+	assert_true(judged.report.fallback, judged.report.summary())
+	assert_eq(judged.report.failing_validator, "EncounterSpacing")
+	assert_gt(int(judged.report.rejections.get(EncounterSpacing.RULE_SPAWN_WITHIN_REACH, 0)), 0, str(judged.report.rejections))
+	assert_true(judged.report.log.size() > 0 and Array(judged.report.log).any(func(line: String) -> bool: return line.contains("spawns")), "the finding is in the log")
+
+
+## Safe content is untouched by the rule: the fold composes the same floor with spacing in the loop.
+func test_the_fold_composes_the_same_floors_with_spacing_in_the_loop() -> void:
+	var recipe: FloorRecipe = load("res://game/content/floors/recipes/proto_archive_fold.tres")
+	for run_seed in [1, 7, 42]:
+		var plain: FloorComposer.ComposeResult = FloorComposer.compose(recipe, SeedMix.derive(run_seed, DEPTH), DEPTH)
+		var judged: FloorComposer.ComposeResult = FloorComposer.compose(recipe, SeedMix.derive(run_seed, DEPTH), DEPTH, {}, _reaches())
+		assert_true(judged.report.succeeded(), judged.report.summary())
+		assert_eq(judged.report.spatial_signature(), plain.report.spatial_signature(), "seed %d" % run_seed)
+
+
+## WHAT THE RULE DOES NOT PROVE, pinned so it cannot be over-read: a wave woken by a CLEAR (not by a
+## region) is not judged, however close it spawns -- later waves remain unproven.
+func test_a_wave_woken_by_a_clear_is_not_judged_by_the_spacing_rule() -> void:
+	var layout := AuthoredLayout.new()
+	layout.layout_id = &"fixture_wave"
+	var wave := EncounterSite.new()
+	wave.key = &"E_WAVE_2"
+	wave.encounter_id = 1
+	wave.regions = [Rect2(-5, -5, 10, 10)] as Array[Rect2]
+	wave.roster = [{"enemy_key": &"fang", "position": Vector3(0, 0, 0)}] as Array[Dictionary]
+	layout.encounters = [wave] as Array[EncounterSite]
+	var after_clear := FloorTrigger.new()
+	after_clear.key = &"T_NEXT_WAVE"
+	after_clear.trigger_id = 0
+	after_clear.kind = FloorLayers.TRIGGER_ENCOUNTER_CLEARED
+	after_clear.source_id = 0
+	after_clear.effects = [{"kind": FloorLayers.EFFECT_ACTIVATE_ENCOUNTER, "target_key": &"E_WAVE_2"}] as Array[Dictionary]
+	layout.triggers = [after_clear] as Array[FloorTrigger]
+	assert_eq(EncounterSpacing.findings(layout, _reaches()), [] as Array[Dictionary], "not judged -- which is a limitation, not a pass")
+
+
+## THE TOOLS JUDGE BY THE SAME NUMBERS: the sweep and the debug playground derive reaches by path
+## (tools/spawn_reaches.gd), the tests through ContentDB -- two derivations, one answer.
+func test_the_tools_derive_the_same_reaches_the_tests_do() -> void:
+	var tools: Dictionary = preload("res://tools/spawn_reaches.gd").for_keys([&"fang", &"ooze", &"watcher"])
+	var ours: Dictionary = _reaches()
+	assert_eq(tools.keys().size(), 3)
+	for key: StringName in ours:
+		assert_almost_eq(float(tools[key]), float(ours[key]), 0.0001, String(key))

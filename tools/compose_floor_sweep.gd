@@ -15,9 +15,16 @@ extends SceneTree
 ## mandatory leg under the door states the sim would have at that moment, the carry with its
 ## closing edges shut (what the return saves), the pieces the carry crosses, and the headings
 ## of the whole mandatory walk. Diagnostics only: nothing here is a pass/fail verdict.
+##
+## S3b: spawn spacing is IN the composer (the reaches are passed to compose), and every composed
+## floor of a recipe that declares progression is held to its declarations by ObjectiveIntegrity,
+## with keys set down anywhere. Two spacing margins are reported per floor, kept apart on purpose:
+## from the activating region's CENTRE (what the composer rejects on) and from the region's NEAREST
+## POINT (a stricter reading, diagnostic only -- three accepted shipped rooms fail it).
 
 const RECIPE_DIR := "res://game/content/floors/recipes/"
 const RouteMetrics := preload("res://tools/route_metrics.gd")
+const SpawnReaches := preload("res://tools/spawn_reaches.gd")
 
 
 func _init() -> void:
@@ -33,7 +40,12 @@ func _init() -> void:
 	var times: Array[float] = []
 	var radius: float = float(rules["body_radius"])
 	var metrics: Dictionary = {}
-	var totals: Dictionary = {"composed": 0, "fallback": 0, "structural": 0, "reseeded": 0, "progression_pass": 0, "progression_fail": 0, "progression_unsupported": 0, "spawn_unsafe": 0}
+	var totals: Dictionary = {"composed": 0, "fallback": 0, "structural": 0, "reseeded": 0, "progression_pass": 0, "progression_fail": 0, "progression_unsupported": 0, "spawn_unsafe": 0,
+		"integrity_pass": 0, "integrity_fail": 0, "integrity_unsupported": 0, "integrity_undeclared": 0}
+	var integrity_rules: Dictionary = rules.duplicate()
+	integrity_rules["set_down_anywhere"] = true
+	var integrity_times: Array[float] = []
+	var declares: bool = recipe.nodes.any(func(node: Dictionary) -> bool: return node.has("progression"))
 	var rejections: Dictionary = {}
 	var signatures: Dictionary = {}
 	var casts: Dictionary = {}
@@ -41,7 +53,7 @@ func _init() -> void:
 	var lengths: Dictionary = {}
 	for run_seed: int in seeds:
 		var floor_seed: int = SeedMix.derive(run_seed, depth)
-		var result: FloorComposer.ComposeResult = FloorComposer.compose(recipe, floor_seed, depth, radii)
+		var result: FloorComposer.ComposeResult = FloorComposer.compose(recipe, floor_seed, depth, radii, reaches)
 		var report: GenerationReport = result.report
 		var row: Dictionary = report.to_dict()
 		row["run_seed"] = run_seed
@@ -78,7 +90,20 @@ func _init() -> void:
 			row["spawn_findings"] = spacing.size()
 			if not spacing.is_empty():
 				totals["spawn_unsafe"] += 1
+			if declares:
+				var started: int = Time.get_ticks_usec()
+				var integrity: ObjectiveIntegrity.Report = ObjectiveIntegrity.check(recipe, result, plan, integrity_rules)
+				integrity_times.append((Time.get_ticks_usec() - started) / 1000.0)
+				row["integrity"] = String(integrity.outcome)
+				row["integrity_claims"] = integrity.claims.size()
+				row["integrity_baseline_states"] = integrity.baseline.states_explored
+				if integrity.outcome != ObjectiveIntegrity.OUTCOME_PASS:
+					row["integrity_summary"] = integrity.summary()
+				totals["integrity_" + String(integrity.outcome)] += 1
+			else:
+				totals["integrity_undeclared"] += 1
 			var measured: Dictionary = RouteMetrics.topology(plan, result.layout)
+			measured.merge(_spacing_margins(result.layout, reaches))
 			measured.merge(_route_metrics(recipe, result, plan, radius))
 			row["metrics"] = measured
 			for name: String in measured:
@@ -97,6 +122,7 @@ func _init() -> void:
 		"distinct_signatures": signatures.size(), "casts": casts, "shapes": shapes,
 		"lengths": _bands(lengths), "metrics": _bands(metrics),
 		"time_ms": {"p50": _percentile(times, 0.50), "p90": _percentile(times, 0.90), "p99": _percentile(times, 0.99), "max": times[times.size() - 1] if not times.is_empty() else 0.0},
+		"integrity_time_ms": _time_band(integrity_times),
 	}
 	print(JSON.stringify(aggregate, "  "))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://build"))
@@ -130,23 +156,8 @@ func _radii(recipe: FloorRecipe) -> Dictionary:
 	return radii
 
 
-## Each roster member's ARRIVAL REACH (EncounterSpacing) from its own stats, its natural weapons'
-## shortest windup, the Envoy's body and reaction allowance, and the project's tick rate.
 func _reaches(recipe: FloorRecipe) -> Dictionary:
-	var envoy: Resource = load("res://game/content/envoy/envoy_stats.tres")
-	var ticks_per_second: float = float(ProjectSettings.get_setting("physics/common/physics_ticks_per_second"))
-	var reaches: Dictionary = {}
-	for key: StringName in recipe.stratum.enemy_keys:
-		var stats: Resource = load("res://game/content/enemies/%s/%s_stats.tres" % [key, key])
-		if stats == null:
-			continue
-		var windup: int = -1
-		for action_id: StringName in stats.action_ids:
-			var weapon: Resource = load("res://game/content/enemies/natural_weapons/%s.tres" % action_id)
-			if weapon != null and (windup < 0 or weapon.windup_ticks < windup):
-				windup = weapon.windup_ticks
-		reaches[key] = EncounterSpacing.arrival_reach(envoy.combat_radius, stats.combat_radius, stats.preferred_attack_distance, stats.move_speed, maxi(windup, 0), envoy.spawn_reaction_ticks, ticks_per_second)
-	return reaches
+	return SpawnReaches.for_keys(recipe.stratum.enemy_keys)
 
 
 func _percentile(sorted_values: Array[float], fraction: float) -> float:
@@ -229,6 +240,40 @@ func _route_metrics(recipe: FloorRecipe, result: FloorComposer.ComposeResult, pl
 		out["return_saving"] = float(carry_shut["length"]) - float(carry["length"])
 		out["return_ratio"] = float(carry["length"]) / float(carry_shut["length"])
 	return out
+
+
+func _time_band(values: Array[float]) -> Dictionary:
+	if values.is_empty():
+		return {}
+	values.sort()
+	return {"p50": _percentile(values, 0.50), "p99": _percentile(values, 0.99), "max": values[values.size() - 1]}
+
+
+## The smallest margin (distance minus arrival reach) of any plate-woken spawn, measured from the
+## activating region's centre (the composer's rule) and from its nearest point (diagnostic). Empty
+## when nothing on the floor is woken by a region.
+func _spacing_margins(layout: AuthoredLayout, reaches: Dictionary) -> Dictionary:
+	var centre_margin: float = INF
+	var boundary_margin: float = INF
+	for trigger: FloorTrigger in layout.triggers:
+		if trigger.region.get_area() <= 0.0:
+			continue
+		for effect: Dictionary in trigger.effects:
+			if effect.get("kind", &"") != FloorLayers.EFFECT_ACTIVATE_ENCOUNTER:
+				continue
+			for site: EncounterSite in layout.encounters:
+				if site.key != effect.get("target_key", &"") and site.encounter_id != int(effect.get("target_id", -2)):
+					continue
+				for member: Dictionary in site.roster:
+					var reach: float = float(reaches.get(member.get("enemy_key", &""), 0.0))
+					var at: Vector3 = member.get("position", Vector3.ZERO)
+					var point := Vector2(at.x, at.z)
+					centre_margin = minf(centre_margin, point.distance_to(EncounterSpacing.activation_point(trigger.region)) - reach)
+					var nearest := Vector2(clampf(point.x, trigger.region.position.x, trigger.region.end.x), clampf(point.y, trigger.region.position.y, trigger.region.end.y))
+					boundary_margin = minf(boundary_margin, point.distance_to(nearest) - reach)
+	if centre_margin == INF:
+		return {}
+	return {"spawn_margin_from_centre": centre_margin, "spawn_margin_from_region_edge": boundary_margin}
 
 
 func _distinct(headings: PackedStringArray) -> int:

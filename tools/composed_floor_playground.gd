@@ -9,10 +9,15 @@ extends Node
 ## (`tools/play_composed_floor.ps1 -Seed 7 -Recipe proto_archive_dogleg` wraps both.)
 ##
 ## A scene rather than a -s script because the Arena needs the ContentDB autoload.
+##
+## Composed with the SAME spawn-spacing rejection the sweep uses (S3b): a floor whose plate wakes a
+## roster inside its arrival reach is refused here too, so nothing the composer would reject can
+## be played by accident.
 
 const ARENA := preload("res://game/arena/arena.tscn")
 const RECIPE_DIR := "res://game/content/floors/recipes/"
 const DEPTH: int = 1
+const SpawnReaches := preload("res://tools/spawn_reaches.gd")
 
 
 func _ready() -> void:
@@ -23,7 +28,9 @@ func _ready() -> void:
 		var stats: Resource = ContentDB.get_resource(&"enemy", key)
 		if stats != null:
 			radii[key] = stats.combat_radius
-	var result: FloorComposer.ComposeResult = FloorComposer.compose(recipe, SeedMix.derive(run_seed, DEPTH), DEPTH, radii)
+	var reaches: Dictionary = SpawnReaches.for_keys(recipe.stratum.enemy_keys)
+	var result: FloorComposer.ComposeResult = FloorComposer.compose(recipe, SeedMix.derive(run_seed, DEPTH), DEPTH, radii, reaches)
+	print("playground: spawn spacing judged for ", reaches.keys())
 	print("playground: ", result.report.summary())
 	print("playground: ", result.report.spatial_signature())
 	var plan := FloorPlan.new()

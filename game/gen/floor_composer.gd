@@ -58,7 +58,14 @@ const _EPSILON: float = 0.0001
 
 ## `body_radii` (enemy key -> combat radius) feeds FloorPlan's aperture-clearance rule exactly as
 ## DepthGenerator supplies it; gen/ reaches no autoload, so the caller looks the radii up.
-static func compose(recipe: FloorRecipe, floor_seed: int, depth: int, body_radii: Dictionary = {}) -> ComposeResult:
+##
+## `spawn_reaches` (enemy key -> EncounterSpacing.arrival_reach), when supplied, makes spawn safety
+## a COMPOSITION REJECTION (S3b): an attempt whose emitted floor puts a plate-woken roster member
+## inside its arrival reach of the plate's centre is refused like a plan violation. What that rule
+## judges is exactly what EncounterSpacing judges -- region-triggered activations, measured from the
+## region's centre -- and nothing more: waves woken by a clear, and activation from anywhere else
+## on a threshold zone, are not proven safe by it.
+static func compose(recipe: FloorRecipe, floor_seed: int, depth: int, body_radii: Dictionary = {}, spawn_reaches: Dictionary = {}) -> ComposeResult:
 	var started: int = Time.get_ticks_usec()
 	var result := ComposeResult.new()
 	var report := GenerationReport.new()
@@ -106,6 +113,15 @@ static func compose(recipe: FloorRecipe, floor_seed: int, depth: int, body_radii
 				report.reject(StringName("plan_%s" % violation["rule"]))
 				report.note("attempt %d: %s" % [attempt, violation["message"]])
 			continue
+		if not spawn_reaches.is_empty():
+			var unsafe: Array[Dictionary] = EncounterSpacing.findings(emitted.layout, spawn_reaches)
+			if not unsafe.is_empty():
+				report.structural = true
+				report.failing_validator = "EncounterSpacing"
+				for finding: Dictionary in unsafe:
+					report.reject(StringName(finding["rule"]))
+					report.note("attempt %d: %s" % [attempt, finding["message"]])
+				continue
 		report.structural = false
 		report.failing_validator = ""
 		result.layout = emitted.layout

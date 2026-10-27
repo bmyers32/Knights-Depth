@@ -117,6 +117,12 @@ const _RECEIVER_THICKNESS: float = 0.08
 ## A socket's glow: dim while empty, bright when it is the press's target or has been filled.
 const _RECEIVER_IDLE_GLOW: float = 0.2
 const _RECEIVER_LIT_GLOW: float = 0.9
+## THE DOOR IS THE LOCK (owner ruling 2026-10-26): a receiver standing on the threshold of the gate
+## it opens is drawn as a lock plate ON that gate, on the receiver's side, instead of a socket on
+## the floor. Its size reads at a glance beside a 2.6-high gate; nothing in the sim depends on it.
+const _LOCK_SIZE_ALONG: float = 1.3
+const _LOCK_SIZE_HIGH: float = 1.3
+const _LOCK_DEPTH: float = 0.2
 ## The focus ring: restrained by ruling -- a thin halo that says "this press lifts it", no more.
 const _FOCUS_COLOR: Color = Color(0.92, 0.96, 0.85)
 const _FOCUS_RING_RADIUS: float = 0.55
@@ -131,8 +137,11 @@ var _gate_barriers: Dictionary = {}  # connection_id -> the sim's authoritative 
 var _plates: Dictionary = {}         # trigger_id -> plate mesh
 var _breakables: Dictionary = {}     # breakable_id -> mesh
 var _carriables: Dictionary = {}     # carriable_id -> key mesh
-var _receivers: Dictionary = {}      # trigger_id -> socket mesh
+var _receivers: Dictionary = {}      # trigger_id -> socket or lock mesh
 var _receiver_centres: Dictionary = {}  # trigger_id -> world centre, where a delivered key sits
+var _receiver_gates: Dictionary = {}  # trigger_id -> connection_id, for a lock drawn on its gate
+var _gate_lines: Dictionary = {}      # connection_id -> {centre: Vector3, along_x: bool, span: float}
+var _seated: Dictionary = {}          # trigger_id -> carriable_id delivered into it
 var _focus_ring: MeshInstance3D = null
 var _exit_pad_centre: Vector3 = Vector3.ZERO
 var _exit_console: Node3D = null
@@ -184,7 +193,7 @@ func build(plan: FloorPlan, first_actor_id: int, gate_barriers: Dictionary = {})
 		_build_carriable(carriable)
 	for trigger in plan.triggers:
 		if trigger.kind == FloorLayers.TRIGGER_CARRIABLE_INSERTED:
-			_build_receiver(trigger)
+			_build_receiver(trigger, plan)
 	_build_focus_ring()
 	# A PLATE IS A PICTURE OF A TRIGGER, exactly as a gate is a picture of a rule: the sim fires
 	# on occupancy whether or not this mesh exists. It is drawn from the trigger itself so the
@@ -233,6 +242,9 @@ func clear_floor() -> void:
 	_carriables.clear()
 	_receivers.clear()
 	_receiver_centres.clear()
+	_receiver_gates.clear()
+	_gate_lines.clear()
+	_seated.clear()
 	_focus_ring = null
 	_exit_pad_centre = Vector3.ZERO
 	_exit_console = null
@@ -258,9 +270,17 @@ func elevation_at(position: Vector3) -> float:
 
 
 ## Mirrors the sim's authoritative connection state. Presentation never decides a route is shut.
+## A lock drawn on a gate goes with the gate: when the door opens, the lock and the key seated in
+## it are gone with it -- the key was spent opening it.
 func set_gate_closed(connection_id: int, closed: bool) -> void:
 	if _gates.has(connection_id):
 		_gates[connection_id].visible = closed
+	for trigger_id: int in _receiver_gates:
+		if int(_receiver_gates[trigger_id]) != connection_id:
+			continue
+		_receivers[trigger_id].visible = closed
+		if _seated.has(trigger_id) and _carriables.has(_seated[trigger_id]):
+			_carriables[_seated[trigger_id]].visible = closed
 
 
 func set_plate_visible(trigger_id: int, shown: bool) -> void:
@@ -289,6 +309,7 @@ func place_carriable(carriable_id: int, at: Vector3) -> void:
 
 ## A delivered key sits in its socket for good, and the socket lights.
 func seat_carriable(carriable_id: int, trigger_id: int) -> void:
+	_seated[trigger_id] = carriable_id
 	if _carriables.has(carriable_id) and _receiver_centres.has(trigger_id):
 		place_carriable(carriable_id, _receiver_centres[trigger_id])
 	if _receivers.has(trigger_id):
@@ -463,6 +484,7 @@ func _build_connection(connection: TraversalConnection, plan: FloorPlan) -> void
 	var gate := _add_box(size, at, _GATE_CLOSED_COLOR)
 	gate.visible = not connection.starts_open
 	_gates[connection.connection_id] = gate
+	_gate_lines[connection.connection_id] = {"centre": at, "along_x": size.x >= size.z, "span": maxf(size.x, size.z)}
 
 
 func _patch_elevation(plan: FloorPlan, patch_id: int) -> float:
@@ -594,9 +616,72 @@ func _build_carriable(carriable: CarriablePlan) -> void:
 	_carriables[carriable.carriable_id] = mesh
 
 
+## THE DOOR IS THE RECEIVER when the receiver stands on the threshold of a closed gate it opens:
+## the lock is drawn on that gate, facing the side the receiver is on, where the player stands to
+## use it. Otherwise (a receiver away from any gate it opens) the socket below is drawn, unchanged.
+## Which door is the receiver's is read from the receiver's OWN effects -- never matched by key.
+func _build_receiver(trigger: FloorTrigger, plan: FloorPlan) -> void:
+	var door: int = lock_gate_of(trigger, plan)
+	if door >= 0 and _gate_lines.has(door):
+		_build_lock(trigger, door)
+		return
+	_build_socket(trigger)
+
+
+## The closed, barriered gate this receiver opens and whose aperture its region touches, or -1.
+static func lock_gate_of(trigger: FloorTrigger, plan: FloorPlan) -> int:
+	for effect: Dictionary in trigger.effects:
+		if effect.get("kind", &"") != FloorLayers.EFFECT_OPEN_CONNECTION:
+			continue
+		for connection: TraversalConnection in plan.connections:
+			if connection.connection_id == int(effect.get("target_id", -1)) and connection.has_barrier \
+					and not connection.starts_open and connection.aperture.intersects(trigger.region, true):
+				return connection.connection_id
+	return -1
+
+
+func _build_lock(trigger: FloorTrigger, door: int) -> void:
+	var line: Dictionary = _gate_lines[door]
+	var centre: Vector3 = line["centre"]
+	var along_x: bool = line["along_x"]
+	var half_span: float = float(line["span"]) * 0.5
+	var region_centre: Vector2 = trigger.region.get_center()
+	# On the receiver's side of the barrier, opposite the receiver along the door's line.
+	var side: float = signf((region_centre.y - centre.z) if along_x else (region_centre.x - centre.x))
+	var push: float = side * (_WALL_THICKNESS + _LOCK_DEPTH) * 0.5
+	var at: Vector3 = centre
+	var size: Vector3
+	if along_x:
+		at.x = clampf(region_centre.x, centre.x - half_span + _LOCK_SIZE_ALONG * 0.5, centre.x + half_span - _LOCK_SIZE_ALONG * 0.5)
+		at.z = centre.z + push
+		size = Vector3(_LOCK_SIZE_ALONG, _LOCK_SIZE_HIGH, _LOCK_DEPTH)
+	else:
+		at.z = clampf(region_centre.y, centre.z - half_span + _LOCK_SIZE_ALONG * 0.5, centre.z + half_span - _LOCK_SIZE_ALONG * 0.5)
+		at.x = centre.x + push
+		size = Vector3(_LOCK_DEPTH, _LOCK_SIZE_HIGH, _LOCK_SIZE_ALONG)
+	var lock: MeshInstance3D = _add_box(size, at, _RECEIVER_COLOR)
+	lock.material_override.emission_enabled = true
+	lock.material_override.emission = _RECEIVER_COLOR
+	lock.material_override.emission_energy_multiplier = _RECEIVER_IDLE_GLOW
+	_receivers[trigger.trigger_id] = lock
+	_receiver_gates[trigger.trigger_id] = door
+	# A delivered key sits in the lock's face, half proud of it.
+	var face := Vector3(0.0, 0.0, push * 2.0) if along_x else Vector3(push * 2.0, 0.0, 0.0)
+	_receiver_centres[trigger.trigger_id] = at + face - Vector3(0.0, _KEY_SIZE.y * 0.5, 0.0)
+
+
+## Where a receiver's lock or socket is drawn, for tests and presentation contracts.
+func receiver_mesh(trigger_id: int) -> MeshInstance3D:
+	return _receivers.get(trigger_id, null)
+
+
+func receiver_gate(trigger_id: int) -> int:
+	return int(_receiver_gates.get(trigger_id, -1))
+
+
 ## THE MESH IS EXACTLY THE RECEIVER'S REGION, for the plate's reason: delivery is decided by
 ## standing in that region, so the picture of where to stand must be the region itself.
-func _build_receiver(trigger: FloorTrigger) -> void:
+func _build_socket(trigger: FloorTrigger) -> void:
 	var region: Rect2 = trigger.region
 	var centre := Vector3(region.get_center().x, 0.0, region.get_center().y)
 	centre.y = elevation_at(centre)
