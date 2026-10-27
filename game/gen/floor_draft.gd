@@ -59,12 +59,27 @@ class Joint:
 	var rect_index: int = -1
 
 
+## A CROSS-PIECE DEPENDENCY: the record a source piece's `unlock` port names gains one more
+## effect, acting on a record of ANOTHER placed piece, named by its local key there. The emitter
+## installs it (after the record's own effects, in wire order) and resolves the target through
+## the same id table every other reference uses. Only the record the unlock port names is ever
+## touched; nothing in either piece is otherwise changed.
+class Wire:
+	extends RefCounted
+	var from_instance: StringName = &""
+	var unlock_port: StringName = &""
+	var to_instance: StringName = &""
+	var effect_kind: StringName = &""
+	var target_key: StringName = &""
+
+
 var draft_id: StringName = &""
 var place_label: String = ""
 var stratum_id: StringName = &""
 var instances: Array[PieceInstance] = []
 var hallways: Array[HallwayFragment] = []
 var joints: Array[Joint] = []
+var wires: Array[Wire] = []
 
 
 func place(piece: FloorPiece, origin: Vector2, transform: StringName = FloorPiece.TRANSFORM_IDENTITY) -> StringName:
@@ -100,18 +115,29 @@ func bind(instance_id: StringName, port_key: StringName, hallway_id: StringName,
 	return joint.joint_id
 
 
+func wire(from_instance: StringName, unlock_port: StringName, to_instance: StringName, effect_kind: StringName, target_key: StringName) -> void:
+	var w := Wire.new()
+	w.from_instance = from_instance
+	w.unlock_port = unlock_port
+	w.to_instance = to_instance
+	w.effect_kind = effect_kind
+	w.target_key = target_key
+	wires.append(w)
+
+
 ## UNDO TO A MARK. The search places, routes, binds -- and takes it all back when a child cannot
 ## be placed. Ids are allocated from array sizes, so what is truncated away is re-allocated
 ## identically by the next attempt: the draft after an undo is byte-for-byte the draft before
 ## the commit.
 func mark() -> Dictionary:
-	return {"instances": instances.size(), "hallways": hallways.size(), "joints": joints.size()}
+	return {"instances": instances.size(), "hallways": hallways.size(), "joints": joints.size(), "wires": wires.size()}
 
 
 func rewind(to: Dictionary) -> void:
 	instances.resize(int(to["instances"]))
 	hallways.resize(int(to["hallways"]))
 	joints.resize(int(to["joints"]))
+	wires.resize(int(to.get("wires", wires.size())))
 
 
 func instance_of(instance_id: StringName) -> PieceInstance:

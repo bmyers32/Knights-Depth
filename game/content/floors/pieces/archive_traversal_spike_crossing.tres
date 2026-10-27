@@ -1,0 +1,67 @@
+[gd_resource type="Resource" script_class="FloorPiece" format=3]
+
+[ext_resource type="Script" path="res://game/gen/floor_piece.gd" id="piece"]
+[ext_resource type="Script" path="res://game/gen/piece_port.gd" id="port"]
+[ext_resource type="Script" path="res://game/gen/authored_layout.gd" id="layout"]
+[ext_resource type="Script" path="res://game/gen/walkable_patch.gd" id="patch"]
+[ext_resource type="Script" path="res://game/gen/spike_pad_plan.gd" id="pad"]
+
+[sub_resource type="Resource" id="patch_p_crossing"]
+script = ExtResource("patch")
+key = &"P_CROSSING"
+patch_id = 0
+rect = Rect2(-5, -15, 10, 15)
+
+[sub_resource type="Resource" id="pad_p_south"]
+script = ExtResource("pad")
+key = &"P_SOUTH_BAND"
+pad_id = 0
+rect = Rect2(-5, -13, 10, 4)
+safe_ticks = 130
+active_ticks = 30
+phase_offset_ticks = 130
+damage = 10.0
+
+[sub_resource type="Resource" id="pad_p_north"]
+script = ExtResource("pad")
+key = &"P_NORTH_BAND"
+pad_id = 1
+rect = Rect2(-5, -6, 10, 4)
+safe_ticks = 130
+active_ticks = 30
+phase_offset_ticks = 50
+damage = 10.0
+
+[sub_resource type="Resource" id="body"]
+script = ExtResource("layout")
+layout_id = &"archive_traversal_spike_crossing"
+patches = Array[ExtResource("patch")]([SubResource("patch_p_crossing")])
+spike_pads = Array[ExtResource("pad")]([SubResource("pad_p_south"), SubResource("pad_p_north")])
+
+[sub_resource type="Resource" id="port_in"]
+script = ExtResource("port")
+key = &"in"
+kind = &"connector"
+edge = &"south"
+offset = 2
+width = 6
+patch_key = &"P_CROSSING"
+
+[sub_resource type="Resource" id="port_out"]
+script = ExtResource("port")
+key = &"out"
+kind = &"connector"
+edge = &"north"
+offset = 2
+width = 6
+patch_key = &"P_CROSSING"
+
+[resource]
+script = ExtResource("piece")
+piece_id = &"archive_traversal_spike_crossing"
+role = &"landmark"
+body = SubResource("body")
+footprint = Rect2(-5, -15, 10, 15)
+allowed_transforms = Array[StringName]([&"identity", &"mirror_x"])
+ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_out")])
+tags = Array[StringName]([&"spike_crossing"])

@@ -63,6 +63,12 @@ offset = 5
 width = 6
 patch_key = &"P_VAULT"
 
+[sub_resource type="Resource" id="port_lift_signal"]
+script = ExtResource("port")
+key = &"lift_signal"
+kind = &"unlock"
+trigger_key = &"T_LIFT"
+
 [resource]
 script = ExtResource("piece")
 piece_id = &"archive_objective_key_vault"
@@ -70,5 +76,5 @@ role = &"objective"
 body = SubResource("body")
 footprint = Rect2(-8, -16, 16, 16)
 allowed_transforms = Array[StringName]([&"identity", &"mirror_x"])
-ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_back")])
+ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_back"), SubResource("port_lift_signal")])
 tags = Array[StringName]([&"key_vault"])

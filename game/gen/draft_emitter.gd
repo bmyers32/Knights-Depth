@@ -18,6 +18,11 @@ extends RefCounted
 ## Keys become `iNN.KEY` so the emitted layout stays legible and stays unambiguous. `@port` on a
 ## connection effect resolves to the joint bound at that port.
 ##
+## CROSS-PIECE WIRES (G3 iteration, 2026-10-27) are the one place a reference leaves its piece: the
+## record a source piece's `unlock` port names gains an effect whose target is a record of ANOTHER
+## placed piece, resolved through that piece's own entries in the same table. Only the effect kinds
+## in WIRABLE_EFFECTS may be wired, and every endpoint is checked before anything is emitted.
+##
 ## SENTINELS ARE NEVER REMAPPED. -1 means "no target" (FloorLayers.NO_TARGET) and survives
 ## untouched where a reference is permitted to be absent; a -1 where a target is required is an
 ## error. The exit console is one plan field registered under the sim's fixed console id, in a
@@ -76,11 +81,14 @@ class EmitReport:
 
 
 const _EPSILON: float = 0.0001
+## What a wire may do, by consumer. One today: a key's first lift waking a roster elsewhere.
+const WIRABLE_EFFECTS: Array[StringName] = [FloorLayers.EFFECT_ACTIVATE_ENCOUNTER]
 
 
 static func emit(draft: FloorDraft) -> EmitReport:
 	var report := EmitReport.new()
 	_check_draft(draft, report)
+	_check_wires(draft, report)
 	if not report.errors.is_empty():
 		return report
 	_allocate(draft, report)
@@ -161,6 +169,53 @@ static func _check_draft(draft: FloorDraft, report: EmitReport) -> void:
 				elif a_footprint.intersection(rect).get_area() > 0.0:
 					_error(report, &"hallway_inside_footprint", "DraftEmitter: hallway '%s' rect %s enters the footprint of '%s' %s"
 						% [hallway.hallway_id, rect, a.instance_id, a_footprint], {"hallway": hallway.hallway_id, "instance": a.instance_id})
+
+
+## Every wire's endpoints exist and are of the right kind: a placed source whose named port is an
+## `unlock` port naming a real trigger or switch, a placed target that is a DIFFERENT instance, an
+## effect kind that may be wired, and a target key naming a record of that effect's layer there.
+static func _check_wires(draft: FloorDraft, report: EmitReport) -> void:
+	for w: FloorDraft.Wire in draft.wires:
+		var refs: Dictionary = {"from": w.from_instance, "port": w.unlock_port, "to": w.to_instance, "target": w.target_key}
+		var source: FloorDraft.PieceInstance = draft.instance_of(w.from_instance)
+		var target: FloorDraft.PieceInstance = draft.instance_of(w.to_instance)
+		if source == null or target == null:
+			_error(report, &"wire_endpoint_unknown", "DraftEmitter: wire %s.%s -> %s names an instance that is not placed" % [w.from_instance, w.unlock_port, w.to_instance], refs)
+			continue
+		if source == target:
+			_error(report, &"wire_same_piece", "DraftEmitter: wire %s.%s targets its own piece; a piece's own records are its body's business" % [w.from_instance, w.unlock_port], refs)
+			continue
+		var port: PiecePort = source.piece.port(w.unlock_port)
+		if port == null or port.kind != PiecePort.KIND_UNLOCK:
+			_error(report, &"wire_port_not_unlock", "DraftEmitter: wire names port '%s' of '%s' (%s), which is not an unlock port" % [w.unlock_port, w.from_instance, source.piece.piece_id], refs)
+			continue
+		if not w.effect_kind in WIRABLE_EFFECTS:
+			_error(report, &"wire_effect_unsupported", "DraftEmitter: wire %s.%s asks for effect '%s'; wirable: %s" % [w.from_instance, w.unlock_port, w.effect_kind, WIRABLE_EFFECTS], refs)
+			continue
+		var layer: StringName = LayoutCompiler._EFFECT_TARGET_LAYER[w.effect_kind]
+		var found: bool = false
+		for record: Resource in target.piece.body.records_in(layer):
+			found = found or record.key == w.target_key
+		if not found:
+			_error(report, &"wire_target_unknown", "DraftEmitter: wire %s.%s -> %s names %s '%s', which that piece (%s) does not contain"
+				% [w.from_instance, w.unlock_port, w.to_instance, layer, w.target_key, target.piece.piece_id], refs)
+
+
+## The effects wired onto one source record (a trigger or a switch, named by local key), resolved
+## into the target piece's global ids, in wire order.
+static func _wired_effects(draft: FloorDraft, report: EmitReport, instance: FloorDraft.PieceInstance, record_key: StringName, is_switch: bool) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for w: FloorDraft.Wire in draft.wires:
+		if w.from_instance != instance.instance_id:
+			continue
+		var port: PiecePort = instance.piece.port(w.unlock_port)
+		var named: StringName = port.switch_key if is_switch else port.trigger_key
+		if named != record_key or named == &"":
+			continue
+		var layer: StringName = LayoutCompiler._EFFECT_TARGET_LAYER[w.effect_kind]
+		var resolved: Dictionary = _reference(report, w.to_instance, layer, w.target_key, -1, true, "wire from %s.%s" % [w.from_instance, w.unlock_port])
+		out.append({"kind": w.effect_kind, "target_key": resolved["key"], "target_id": int(resolved["id"])})
+	return out
 
 
 # --- 2. IDENTITIES ----------------------------------------------------------------------------
@@ -367,6 +422,7 @@ static func _emit_instance(draft: FloorDraft, instance: FloorDraft.PieceInstance
 		copy.starts_enabled = trigger.starts_enabled
 		copy.renders_as_plate = trigger.renders_as_plate
 		copy.effects = _effects(report, id, bound, trigger.effects, "trigger '%s'" % trigger.key)
+		copy.effects.append_array(_wired_effects(draft, report, instance, trigger.key, false))
 		layout.triggers.append(copy)
 	for site: EncounterSite in body.encounters:
 		var copy := EncounterSite.new()
@@ -404,6 +460,7 @@ static func _emit_instance(draft: FloorDraft, instance: FloorDraft.PieceInstance
 		copy.radius = hit_switch.radius
 		copy.mode = hit_switch.mode
 		copy.effects = _effects(report, id, bound, hit_switch.effects, "switch '%s'" % hit_switch.key)
+		copy.effects.append_array(_wired_effects(draft, report, instance, hit_switch.key, true))
 		copy.starts_hidden = hit_switch.starts_hidden
 		layout.hit_switches.append(copy)
 	for obstacle: ObstaclePlan in body.obstacles:

@@ -30,6 +30,11 @@ const PROGRESSION_OPTIONAL: StringName = &"optional"
 const PROGRESSIONS: Array[StringName] = [PROGRESSION_MANDATORY, PROGRESSION_OPTIONAL]
 ## Edge: {from, from_port, to, to_port, profile: StringName, closes_cycle: bool}.
 @export var edges: Array[Dictionary] = []
+## CROSS-PIECE DEPENDENCIES (G3 iteration, 2026-10-27): {from, from_port, to, effect, target_key}.
+## The record the `from` node's piece names with its unlock port `from_port` also performs `effect`
+## on the record `target_key` of the `to` node's piece. Installed by the composer as draft wires;
+## the pieces actually cast are checked by the emitter, the shape of the entry here.
+@export var dependencies: Array[Dictionary] = []
 @export var recipe_id: StringName = &""
 @export var place_label: String = ""
 ## The stratum the floor belongs to; its enemy pool is the roster lint's pool.
@@ -118,6 +123,22 @@ func lint() -> Array[Dictionary]:
 			_finding(out, &"edge_profile_unknown", "FloorRecipe '%s': edge names profile '%s', which the recipe does not carry" % [recipe_id, edge.get("profile", &"")], {"edge": edge})
 		if edge.get("from_port", &"") == &"" or edge.get("to_port", &"") == &"":
 			_finding(out, &"edge_port_missing", "FloorRecipe '%s': an edge must name both ports" % recipe_id, {"edge": edge})
+	var wired: Dictionary = {}
+	for dependency: Dictionary in dependencies:
+		var label: String = "%s.%s -> %s" % [dependency.get("from", &""), dependency.get("from_port", &""), dependency.get("to", &"")]
+		for end: String in ["from", "to"]:
+			if _index_of(dependency.get(end, &"")) < 0:
+				_finding(out, &"dependency_node_unknown", "FloorRecipe '%s': dependency %s names node '%s', which does not exist" % [recipe_id, label, dependency.get(end, &"")], {"dependency": dependency})
+		if dependency.get("from", &"") == dependency.get("to", &""):
+			_finding(out, &"dependency_same_node", "FloorRecipe '%s': dependency %s stays inside one node; its piece's own effects say that" % [recipe_id, label], {"dependency": dependency})
+		if dependency.get("from_port", &"") == &"" or dependency.get("target_key", &"") == &"":
+			_finding(out, &"dependency_endpoint_missing", "FloorRecipe '%s': dependency %s must name its unlock port and its target key" % [recipe_id, label], {"dependency": dependency})
+		if not dependency.get("effect", &"") in DraftEmitter.WIRABLE_EFFECTS:
+			_finding(out, &"dependency_effect_unsupported", "FloorRecipe '%s': dependency %s asks for '%s'; wirable: %s" % [recipe_id, label, dependency.get("effect", &""), DraftEmitter.WIRABLE_EFFECTS], {"dependency": dependency})
+		var identity: String = "%s|%s|%s|%s|%s" % [dependency.get("from", &""), dependency.get("from_port", &""), dependency.get("to", &""), dependency.get("effect", &""), dependency.get("target_key", &"")]
+		if wired.has(identity):
+			_finding(out, &"dependency_duplicate", "FloorRecipe '%s': dependency %s is listed twice" % [recipe_id, label], {"dependency": dependency})
+		wired[identity] = true
 	for candidate: TraversalProfile in profiles:
 		out.append_array(candidate.lint())
 	var ids: Dictionary = {}

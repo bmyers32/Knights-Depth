@@ -92,6 +92,7 @@ static func compose(recipe: FloorRecipe, floor_seed: int, depth: int, body_radii
 		if draft == null:
 			report.note("attempt %d: search exhausted" % attempt)
 			continue
+		_wire(recipe, draft)
 		var emitted: DraftEmitter.EmitReport = DraftEmitter.emit(draft)
 		if not emitted.is_ok():
 			# The emitter refusing a draft the search accepted is a STRUCTURAL failure: the
@@ -131,6 +132,16 @@ static func compose(recipe: FloorRecipe, floor_seed: int, depth: int, body_radii
 		report.elapsed_usec = Time.get_ticks_usec() - started
 		return result
 	return _fall_back(recipe, result, started)
+
+
+## The recipe's cross-piece dependencies as draft wires, in recipe order. Instances are allocated
+## in node order, so node i IS instance i; which pieces were cast is the emitter's to check.
+static func _wire(recipe: FloorRecipe, draft: FloorDraft) -> void:
+	for dependency: Dictionary in recipe.dependencies:
+		var from_index: int = recipe._index_of(dependency["from"])
+		var to_index: int = recipe._index_of(dependency["to"])
+		draft.wire(draft.instances[from_index].instance_id, dependency["from_port"], draft.instances[to_index].instance_id,
+			dependency["effect"], dependency["target_key"])
 
 
 static func _fall_back(recipe: FloorRecipe, result: ComposeResult, started: int) -> ComposeResult:
