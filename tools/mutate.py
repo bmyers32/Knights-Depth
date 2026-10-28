@@ -12,7 +12,7 @@ VERDICTS, never blurred:
   SURVIVED      every relevant test ran to completion and passed
   TIMEOUT       a run hit its timeout -- NOT a catch
   CRASH         a script/parse error, or a run that produced no GUT totals -- NOT a catch
-  REFUSED       another Godot process was running -- nothing was tested
+  REFUSED       another Godot process was running, or the host was short of memory -- nothing was tested
   NOT_APPLIED   a pattern did not occur exactly once -- nothing was tested
 The first CAUGHT stops that mutant's remaining runs (one assertion catch is the evidence).
 
@@ -67,7 +67,7 @@ def run_mutant(mutant, timeout, out_dir):
                                     "-gunit_test_name=" + test_name], "mutant " + mutant["name"], timeout, log)
             entry = {"test": test_name, "outcome": result["outcome"], "wall": round(result["wall"], 1), "counts": result["counts"]}
             runs.append(entry)
-            if result["outcome"] == "refused":
+            if result["outcome"] in ("refused", "refused_memory"):
                 verdict = "REFUSED"
                 break
             if result["outcome"] == "timeout":
@@ -125,7 +125,7 @@ def main(argv):
             print("RESTORATION FAILED for %s -- stopping" % mutant["file"], flush=True)
             break
         if result["verdict"] == "REFUSED":
-            print("REFUSED: a Godot process is running -- stopping", flush=True)
+            print("REFUSED: a Godot process is running or memory is short -- stopping", flush=True)
             break
     caught = sum(1 for r in results if r["verdict"] == "CAUGHT")
     print("mutation %s: %d/%d caught, %.0f s total" % (stem, caught, len(results), time.time() - started))

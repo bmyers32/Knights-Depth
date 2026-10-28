@@ -34,6 +34,9 @@ var routes: Dictionary = {}
 var extent: Rect2 = Rect2()
 var elapsed_usec: int = 0
 var log: PackedStringArray = []
+## S4: one dictionary per recipe visibility edge on the floor that was returned (VisibilityValidator),
+## empty when no camera was supplied or the floor fell back.
+var visibility: Array = []
 
 
 func succeeded() -> bool:
@@ -90,5 +93,5 @@ func to_dict() -> Dictionary:
 		"fallback": fallback, "structural": structural, "failing_validator": failing_validator,
 		"cast": cast.duplicate(true), "routes": routes.duplicate(true),
 		"extent": {"x": extent.position.x, "z": extent.position.y, "w": extent.size.x, "d": extent.size.y},
-		"elapsed_usec": elapsed_usec, "signature": spatial_signature(),
+		"elapsed_usec": elapsed_usec, "signature": spatial_signature(), "visibility": visibility.duplicate(true),
 	}

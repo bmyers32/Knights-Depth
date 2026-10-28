@@ -28,10 +28,26 @@ extends SceneTree
 ##   --integrity=fast   the same claims, the voluntary set-down not modelled
 ##   --integrity=off    no integrity at all -- reported NOT_EVALUATED, never as a pass
 ##   --metrics=on|off   route and topology metrics (default on) -- off is reported NOT_EVALUATED
+##
+## S4: the shared camera (game/content/camera/expedition_framing.tres) is passed to compose, so a
+## recipe's mandatory reveals are enforced exactly as on a played floor; every visibility edge is
+## tallied, and with metrics on each REVEAL edge is also judged along a WALKED route -- from the
+## entry under the floor's starting door states when the anchor's ground is reachable then, else
+## from the vantage with every door open: where along the walk the anchor is first seen, the share
+## of the walk it is seen from, and how far the declared vantage lies from the walked line.
+##
+## THE VERDICT IS MACHINE-CHECKED (owner review, 2026-10-28). A full-coverage sweep ends with a
+## `certification` block and EXITS 1 when it fails, so "the step ran" can never be read as "the
+## recipe passed". It passes only when every seed composed the REQUESTED recipe (a fallback is
+## counted apart, never as a success), nothing was structural, progression and declared integrity
+## passed on every composed floor, no spawn was unsafe, and every declared-mandatory reveal held AND
+## was confirmed enforceable on every seed -- an unenforceable mandatory reveal is a failure, never
+## an optional one. Reseeds are reported, not failed. A reduced sweep says NOT_CERTIFIED, exits 0.
 
 const RECIPE_DIR := "res://game/content/floors/recipes/"
 const RouteMetrics := preload("res://tools/route_metrics.gd")
 const SpawnReaches := preload("res://tools/spawn_reaches.gd")
+const CAMERA_PATH := "res://game/content/camera/expedition_framing.tres"
 
 
 func _init() -> void:
@@ -43,6 +59,9 @@ func _init() -> void:
 	var rules: Dictionary = _rules()
 	var radii: Dictionary = _radii(recipe)
 	var reaches: Dictionary = _reaches(recipe)
+	var camera: CameraFraming = load(CAMERA_PATH)
+	var sight_tallies: Dictionary = {}
+	var visibility_times: Array[float] = []
 	var rows: Array[Dictionary] = []
 	var times: Array[float] = []
 	var radius: float = float(rules["body_radius"])
@@ -57,6 +76,8 @@ func _init() -> void:
 	if integrity_mode != "full" or metrics_mode != "on":
 		print("REDUCED COVERAGE: integrity=%s metrics=%s -- not a certification sweep" % [integrity_mode, metrics_mode])
 	var integrity_times: Array[float] = []
+	# Where a sweep's wall time goes, per phase (R10, 2026-10-28) -- measured, never assumed.
+	var phase_times: Dictionary = {}
 	var declares: bool = recipe.nodes.any(func(node: Dictionary) -> bool: return node.has("progression"))
 	var rejections: Dictionary = {}
 	var signatures: Dictionary = {}
@@ -65,7 +86,7 @@ func _init() -> void:
 	var lengths: Dictionary = {}
 	for run_seed: int in seeds:
 		var floor_seed: int = SeedMix.derive(run_seed, depth)
-		var result: FloorComposer.ComposeResult = FloorComposer.compose(recipe, floor_seed, depth, radii, reaches)
+		var result: FloorComposer.ComposeResult = FloorComposer.compose(recipe, floor_seed, depth, radii, reaches, camera, rules)
 		var report: GenerationReport = result.report
 		var row: Dictionary = report.to_dict()
 		row["run_seed"] = run_seed
@@ -94,10 +115,31 @@ func _init() -> void:
 			var plan := FloorPlan.new()
 			plan.stratum_id = result.layout.stratum_id
 			LayoutCompiler.compile(result.layout, plan)
+			var phase_started: int = Time.get_ticks_usec()
 			var progression: ProgressionReport = ProgressionValidator.check(plan, rules)
+			_phase(phase_times, "progression", phase_started)
 			row["progression"] = String(progression.outcome)
 			row["progression_steps"] = progression.trace.size()
 			totals["progression_" + String(progression.outcome)] += 1
+			# Certification asks every declared-mandatory relationship (ENFORCE_ALWAYS); the composer
+			# asked it only where a reveal failed. Timed apart from generation.
+			var certified: Array = []
+			if not recipe.visibility.is_empty():
+				var sight_started: int = Time.get_ticks_usec()
+				certified = VisibilityValidator.check(recipe, result.draft, result.emit, plan, camera, rules, VisibilityValidator.ENFORCE_ALWAYS).to_dicts()
+				visibility_times.append((Time.get_ticks_usec() - sight_started) / 1000.0)
+				_phase(phase_times, "visibility_certify", sight_started)
+				row["visibility_certified"] = certified
+			for sight: Dictionary in certified:
+				var tally: Dictionary = sight_tallies.get(sight["edge"], {"holds": 0, "fails": 0, "mandatory": 0, "unenforceable": 0, "errors": 0})
+				tally["holds" if sight["holds"] else "fails"] += 1
+				if sight["mandatory"]:
+					tally["mandatory"] += 1
+				elif sight["declared_mandatory"]:
+					tally["unenforceable"] += 1
+				if sight["verdict"] == "error":
+					tally["errors"] += 1
+				sight_tallies[sight["edge"]] = tally
 			var spacing: Array[Dictionary] = EncounterSpacing.findings(result.layout, reaches)
 			row["spawn_findings"] = spacing.size()
 			if not spacing.is_empty():
@@ -108,6 +150,7 @@ func _init() -> void:
 				var started: int = Time.get_ticks_usec()
 				var integrity: ObjectiveIntegrity.Report = ObjectiveIntegrity.check(recipe, result, plan, integrity_rules)
 				integrity_times.append((Time.get_ticks_usec() - started) / 1000.0)
+				_phase(phase_times, "integrity", started)
 				row["integrity"] = String(integrity.outcome)
 				row["integrity_claims"] = integrity.claims.size()
 				row["integrity_baseline_states"] = integrity.baseline.states_explored
@@ -118,9 +161,16 @@ func _init() -> void:
 				totals["integrity_undeclared"] += 1
 			var measured: Dictionary = {}
 			if metrics_mode == "on":
+				phase_started = Time.get_ticks_usec()
 				measured = RouteMetrics.topology(plan, result.layout)
 				measured.merge(_spacing_margins(result.layout, reaches))
+				_phase(phase_times, "topology_spacing", phase_started)
+				phase_started = Time.get_ticks_usec()
 				measured.merge(_route_metrics(recipe, result, plan, radius))
+				_phase(phase_times, "route_metrics", phase_started)
+				phase_started = Time.get_ticks_usec()
+				measured.merge(_reveal_walks(recipe, result, plan, radius, camera))
+				_phase(phase_times, "reveal_walks", phase_started)
 				row["metrics"] = measured
 			else:
 				row["metrics"] = "not_evaluated"
@@ -137,10 +187,12 @@ func _init() -> void:
 	times.sort()
 	var aggregate: Dictionary = {
 		"recipe": recipe_id, "seeds": seeds, "depth": depth, "totals": totals, "rejections": rejections,
-		"distinct_signatures": signatures.size(), "casts": casts, "shapes": shapes,
+		"distinct_signatures": signatures.size(), "casts": casts, "shapes": shapes, "visibility": sight_tallies,
+		"visibility_certify_time_ms": _time_bands(visibility_times),
 		"lengths": _bands(lengths), "metrics": _bands(metrics),
 		"time_ms": {"p50": _percentile(times, 0.50), "p90": _percentile(times, 0.90), "p99": _percentile(times, 0.99), "max": times[times.size() - 1] if not times.is_empty() else 0.0},
 		"integrity_time_ms": _time_band(integrity_times),
+		"phase_time_ms": _phase_bands(phase_times, times),
 		"coverage": {"integrity": integrity_mode if declares else "undeclared", "metrics": metrics_mode},
 	}
 	if declares and integrity_mode == "off":
@@ -148,13 +200,62 @@ func _init() -> void:
 			totals[key] = "NOT_EVALUATED"
 	if metrics_mode == "off":
 		aggregate["metrics"] = "NOT_EVALUATED"
+	var certification: Dictionary = _certify(totals, sight_tallies, seeds, declares, integrity_mode == "full" and metrics_mode == "on")
+	aggregate["certification"] = certification
 	print(JSON.stringify(aggregate, "  "))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://build"))
 	var file := FileAccess.open(out_path, FileAccess.WRITE)
 	file.store_string(JSON.stringify({"aggregate": aggregate, "rows": rows}, "\t"))
 	file.close()
 	print("wrote ", out_path)
-	quit()
+	print("CERTIFICATION %s%s" % [certification["verdict"], "" if certification["failures"].is_empty() else ": " + "; ".join(certification["failures"])])
+	quit(1 if certification["verdict"] == "FAIL" else 0)
+
+
+## The pass criteria of a certification sweep (header), each failure named.
+func _certify(totals: Dictionary, sight_tallies: Dictionary, seeds: int, declares: bool, full: bool) -> Dictionary:
+	if not full:
+		return {"verdict": "NOT_CERTIFIED", "failures": ["reduced coverage"], "requested_recipe_composed": totals["composed"], "fallbacks": totals["fallback"]}
+	var failures: PackedStringArray = []
+	var composed: int = int(totals["composed"])
+	if composed != seeds:
+		failures.append("requested recipe composed on %d/%d seeds (%d fallbacks, %d structural)" % [composed, seeds, totals["fallback"], totals["structural"]])
+	if int(totals["progression_pass"]) != composed:
+		failures.append("progression passed on %d/%d composed floors" % [totals["progression_pass"], composed])
+	if declares and int(totals["integrity_pass"]) != composed:
+		failures.append("integrity passed on %d/%d composed floors" % [totals["integrity_pass"], composed])
+	if int(totals["spawn_unsafe"]) > 0:
+		failures.append("%d floors with unsafe spawns" % totals["spawn_unsafe"])
+	for edge: String in sight_tallies:
+		var tally: Dictionary = sight_tallies[edge]
+		if int(tally["mandatory"]) + int(tally["unenforceable"]) == 0:
+			continue
+		if int(tally["unenforceable"]) > 0:
+			failures.append("mandatory %s unenforceable on %d seeds" % [edge, tally["unenforceable"]])
+		if int(tally["fails"]) > 0 or int(tally["errors"]) > 0 or int(tally["holds"]) != composed:
+			failures.append("mandatory %s held on %d/%d seeds (%d errors)" % [edge, tally["holds"], composed, tally["errors"]])
+	return {"verdict": "PASS" if failures.is_empty() else "FAIL", "failures": Array(failures), "requested_recipe_composed": composed,
+		"fallbacks": totals["fallback"], "reseeded": totals["reseeded"]}
+
+
+func _phase(phase_times: Dictionary, name: String, started_usec: int) -> void:
+	if not phase_times.has(name):
+		phase_times[name] = [] as Array[float]
+	phase_times[name].append((Time.get_ticks_usec() - started_usec) / 1000.0)
+
+
+## Per phase: total and mean ms, so the dominant cost of a sweep is named, not guessed.
+func _phase_bands(phase_times: Dictionary, compose_times: Array[float]) -> Dictionary:
+	var out: Dictionary = {}
+	var all: Dictionary = phase_times.duplicate()
+	all["compose"] = compose_times
+	for name: String in all:
+		var values: Array = all[name]
+		var total: float = 0.0
+		for value: float in values:
+			total += value
+		out[name] = {"total_ms": total, "mean_ms": total / maxf(1.0, float(values.size())), "count": values.size()}
+	return out
 
 
 func _arg(name: String, fallback: String) -> String:
@@ -178,6 +279,69 @@ func _radii(recipe: FloorRecipe) -> Dictionary:
 		if stats != null:
 			radii[key] = stats.combat_radius
 	return radii
+
+
+## Each REVEAL edge judged along a walked route (header). Diagnostics only.
+func _reveal_walks(recipe: FloorRecipe, result: FloorComposer.ComposeResult, plan: FloorPlan, radius: float, camera: CameraFraming) -> Dictionary:
+	var out: Dictionary = {}
+	var extent: Rect2 = VisibilityValidator.extent_of(plan)
+	var starting: Dictionary = {}
+	for connection: TraversalConnection in plan.connections:
+		if connection.starts_open or not connection.has_barrier:
+			starting[connection.connection_id] = true
+	for index: int in recipe.visibility.size():
+		var edge: Dictionary = recipe.visibility[index]
+		if edge.get("intent", VisibilityValidator.INTENT_REVEAL) != VisibilityValidator.INTENT_REVEAL or index >= result.report.visibility.size():
+			continue
+		var judged: Dictionary = result.report.visibility[index]
+		var vantage := Vector3(judged["vantage"][0], judged["vantage"][1], judged["vantage"][2])
+		var anchor := Vector3(judged["anchor"][0], judged["anchor"][1], judged["anchor"][2])
+		var door: int = -1
+		var along: Vector3 = Vector3.ZERO
+		if edge.get("door_port", &"") != &"":
+			var target: FloorDraft.PieceInstance = result.draft.instances[recipe._index_of(edge["to"])]
+			door = RouteMetrics.connection_of(result, target.instance_id, edge["door_port"])
+			along = Vector3(1, 0, 0) if PiecePort.runs_along_x(FloorDraft.world_edge(target, target.piece.port(edge["door_port"]).edge)) else Vector3(0, 0, 1)
+		var blockers: Array[Dictionary] = VisibilityValidator.occluders(plan, camera, [door] if door >= 0 else [])
+		var goal := Rect2(anchor.x - 2.0, anchor.z - 2.0, 4.0, 4.0)
+		var mode: String = "from_entry"
+		var walked: Dictionary = RouteMetrics.walk(plan, starting, Vector2(plan.entry_point.x, plan.entry_point.z), goal, radius)
+		if float(walked["length"]) < 0.0:
+			mode = "from_vantage_open"
+			walked = RouteMetrics.walk(plan, RouteMetrics.open_except(plan, []), Vector2(vantage.x, vantage.z), goal, radius)
+		var prefix: String = "reveal_%d_" % index
+		out[prefix + "mode"] = mode if float(walked["length"]) >= 0.0 else "unwalkable"
+		var path: Array = walked["path"]
+		if path.is_empty():
+			continue
+		var travelled: float = 0.0
+		var first_seen: float = -1.0
+		var seen: int = 0
+		var nearest: float = INF
+		for step: int in path.size():
+			var point: Vector2 = path[step]
+			if step > 0:
+				travelled += point.distance_to(path[step - 1])
+			nearest = minf(nearest, point.distance_to(Vector2(vantage.x, vantage.z)))
+			var sight: VisibilityValidator.Sight = VisibilityValidator.look(camera, extent, blockers, Vector3(point.x, 0.0, point.y), anchor, along)
+			if sight.seen(camera.reveal_min_visible_share):
+				seen += 1
+				if first_seen < 0.0:
+					first_seen = travelled
+		out[prefix + "walk_m"] = travelled
+		out[prefix + "first_seen_m"] = first_seen
+		out[prefix + "seen_to_go_m"] = travelled - first_seen if first_seen >= 0.0 else -1.0
+		out[prefix + "seen_share"] = float(seen) / float(path.size())
+		out[prefix + "vantage_offset_m"] = nearest
+	return out
+
+
+func _time_bands(values: Array[float]) -> Dictionary:
+	if values.is_empty():
+		return {}
+	var sorted_values: Array[float] = values.duplicate()
+	sorted_values.sort()
+	return {"p50": _percentile(sorted_values, 0.5), "p99": _percentile(sorted_values, 0.99), "max": sorted_values[sorted_values.size() - 1]}
 
 
 func _reaches(recipe: FloorRecipe) -> Dictionary:

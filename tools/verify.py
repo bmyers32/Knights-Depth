@@ -92,6 +92,9 @@ def main(argv):
         if r["outcome"] == "refused":
             print("STOPPED: a Godot process is open (the owner's editor or game?) -- nothing further was run")
             break
+        if r["outcome"] == "refused_memory":
+            print("STOPPED: the host is short of physical memory (close the browser?) -- nothing further was run")
+            break
     bad = [r for r in results if r["outcome"] != "ok"]
     print("tier %d: %d step(s), %d not ok, %.1f s total" % (tier, len(results), len(bad), time.time() - started))
     return 1 if bad else 0

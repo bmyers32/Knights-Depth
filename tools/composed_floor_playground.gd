@@ -29,10 +29,18 @@ func _ready() -> void:
 		if stats != null:
 			radii[key] = stats.combat_radius
 	var reaches: Dictionary = SpawnReaches.for_keys(recipe.stratum.enemy_keys)
-	var result: FloorComposer.ComposeResult = FloorComposer.compose(recipe, SeedMix.derive(run_seed, DEPTH), DEPTH, radii, reaches)
+	# The same camera and rules the sweep composes with (S4), so a mandatory reveal the composer
+	# would reject cannot be played by accident either.
+	var envoy: Resource = load("res://game/content/envoy/envoy_stats.tres")
+	var sword: Resource = load("res://game/content/weapons/sword_stats.tres")
+	var rules: Dictionary = {"body_radius": envoy.combat_radius, "attack_reach": sword.reach, "pickup_reach": envoy.pickup_reach}
+	var result: FloorComposer.ComposeResult = FloorComposer.compose(recipe, SeedMix.derive(run_seed, DEPTH), DEPTH, radii, reaches,
+		load("res://game/content/camera/expedition_framing.tres"), rules)
 	print("playground: spawn spacing judged for ", reaches.keys())
 	print("playground: ", result.report.summary())
 	print("playground: ", result.report.spatial_signature())
+	for sight: Dictionary in result.report.visibility:
+		print("playground: visibility ", sight)
 	var plan := FloorPlan.new()
 	plan.run_seed = run_seed
 	plan.depth = DEPTH

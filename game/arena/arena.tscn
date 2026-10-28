@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" path="res://game/ui/resync_overlay.tscn" id="6_resync_overlay"]
 [ext_resource type="Script" path="res://game/arena/floor_builder.gd" id="7_floor_builder"]
 [ext_resource type="Script" path="res://game/arena/follow_camera.gd" id="8_follow_camera"]
+[ext_resource type="Resource" path="res://game/content/camera/expedition_framing.tres" id="14_framing"]
 [ext_resource type="PackedScene" path="res://game/ui/arrival_card.tscn" id="9_arrival_card"]
 [ext_resource type="PackedScene" path="res://game/ui/run_summary_overlay.tscn" id="10_run_summary"]
 [ext_resource type="PackedScene" path="res://game/ui/descent_overlay.tscn" id="11_descent_overlay"]
@@ -23,6 +24,7 @@ script = ExtResource("7_floor_builder")
 transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 12, 12)
 current = true
 script = ExtResource("8_follow_camera")
+framing = ExtResource("14_framing")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.8660254, 0.38302222, -0.32139382, 0, 0.64278764, 0.76604444, 0.5, -0.66341394, 0.5566704, 0, 0, 0)

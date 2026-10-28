@@ -261,8 +261,13 @@ func test_a_key_set_down_on_the_return_is_lifted_again_and_delivered() -> void:
 ## landing at the end of its key door's hall: the door is now in the east wall, its receiver still on
 ## the threshold inside, the press from inside still delivers, and the lock is drawn on that door's
 ## inner face.
+##
+## Since ADR O6 was enforced for camera-sensitive pieces (2026-10-28) the shipped crossing no longer
+## opts in to mirroring, so the fixture is a copy that does: what this proves is the EMITTER's law --
+## a mirrored key door keeps its receiver and lock -- which holds for any piece that may mirror.
 func test_a_mirrored_key_door_keeps_its_threshold_receiver_and_its_lock() -> void:
-	var piece: FloorPiece = load(CROSSING)
+	var piece: FloorPiece = (load(CROSSING) as FloorPiece).duplicate(true)
+	piece.allowed_transforms = [FloorPiece.TRANSFORM_IDENTITY, FloorPiece.TRANSFORM_MIRROR_X] as Array[StringName]
 	var draft := FloorDraft.new()
 	draft.draft_id = &"mirrored_key_door"
 	draft.stratum_id = &"archive"

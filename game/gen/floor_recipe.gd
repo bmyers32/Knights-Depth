@@ -35,6 +35,12 @@ const PROGRESSIONS: Array[StringName] = [PROGRESSION_MANDATORY, PROGRESSION_OPTI
 ## on the record `target_key` of the `to` node's piece. Installed by the composer as draft wires;
 ## the pieces actually cast are checked by the emitter, the shape of the entry here.
 @export var dependencies: Array[Dictionary] = []
+## VISIBILITY EDGES (S4): {from, from_port, to, to_port, intent, mandatory, door_port}. From a vantage
+## port to an anchor port; `intent` reveal|conceal (VisibilityValidator). `mandatory` is a promise:
+## lint refuses it unless every piece the two nodes can cast carries the vantage, the anchor and a
+## gate `door_port` opened only by key receivers; on a placed floor it rejects when unseen, and
+## certification fails when the progression validator cannot confirm the lock.
+@export var visibility: Array[Dictionary] = []
 @export var recipe_id: StringName = &""
 @export var place_label: String = ""
 ## The stratum the floor belongs to; its enemy pool is the roster lint's pool.
@@ -139,6 +145,31 @@ func lint() -> Array[Dictionary]:
 		if wired.has(identity):
 			_finding(out, &"dependency_duplicate", "FloorRecipe '%s': dependency %s is listed twice" % [recipe_id, label], {"dependency": dependency})
 		wired[identity] = true
+	for sight: Dictionary in visibility:
+		var sight_label: String = "%s.%s -> %s.%s" % [sight.get("from", &""), sight.get("from_port", &""), sight.get("to", &""), sight.get("to_port", &"")]
+		for end: String in ["from", "to"]:
+			if _index_of(sight.get(end, &"")) < 0:
+				_finding(out, &"visibility_node_unknown", "FloorRecipe '%s': visibility %s names node '%s', which does not exist" % [recipe_id, sight_label, sight.get(end, &"")], {"visibility": sight})
+		if sight.get("from_port", &"") == &"" or sight.get("to_port", &"") == &"":
+			_finding(out, &"visibility_endpoint_missing", "FloorRecipe '%s': visibility %s must name its vantage and anchor ports" % [recipe_id, sight_label], {"visibility": sight})
+		if not sight.get("intent", VisibilityValidator.INTENT_REVEAL) in VisibilityValidator.INTENTS:
+			_finding(out, &"visibility_intent_unknown", "FloorRecipe '%s': visibility %s has intent '%s' (one of %s)" % [recipe_id, sight_label, sight.get("intent", &""), VisibilityValidator.INTENTS], {"visibility": sight})
+		if bool(sight.get("mandatory", false)) and sight.get("intent", VisibilityValidator.INTENT_REVEAL) != VisibilityValidator.INTENT_REVEAL:
+			_finding(out, &"visibility_conceal_mandatory", "FloorRecipe '%s': visibility %s: only a reveal can be mandatory; a concealment is reported" % [recipe_id, sight_label], {"visibility": sight})
+		if bool(sight.get("mandatory", false)) and sight.get("door_port", &"") == &"":
+			_finding(out, &"visibility_mandatory_without_door", "FloorRecipe '%s': visibility %s is mandatory but names no door_port; only a locked door is an enforceable reveal" % [recipe_id, sight_label], {"visibility": sight})
+		elif bool(sight.get("mandatory", false)):
+			for end: Array in [[&"from", &"vantage", sight.get("from_port", &"")], [&"to", &"anchor", sight.get("to_port", &"")]]:
+				var castable: Array[FloorPiece] = _castable(sight.get(end[0], &""))
+				if castable.is_empty():
+					_finding(out, &"visibility_mandatory_unenforceable", "FloorRecipe '%s': visibility %s: no pool piece can be cast for node '%s'" % [recipe_id, sight_label, sight.get(end[0], &"")], {"visibility": sight})
+				for piece: FloorPiece in castable:
+					var fault: String = VisibilityValidator.declaration_fault(piece, end[1], end[2], sight.get("door_port", &""))
+					if fault != "":
+						_finding(out, &"visibility_mandatory_unenforceable", "FloorRecipe '%s': mandatory visibility %s: %s" % [recipe_id, sight_label, fault], {"visibility": sight, "piece": piece.piece_id})
+					# ADR O6: a piece carrying a camera-sensitive promise does not opt in to mirroring.
+					if piece.allows(&"mirror_x"):
+						_finding(out, &"visibility_mandatory_mirrored", "FloorRecipe '%s': mandatory visibility %s: piece '%s' allows mirror_x (ADR O6)" % [recipe_id, sight_label, piece.piece_id], {"visibility": sight, "piece": piece.piece_id})
 	for candidate: TraversalProfile in profiles:
 		out.append_array(candidate.lint())
 	var ids: Dictionary = {}
@@ -149,6 +180,20 @@ func lint() -> Array[Dictionary]:
 		if ids.has(piece.piece_id):
 			_finding(out, &"piece_id_duplicate", "FloorRecipe '%s': piece '%s' is in the pool twice" % [recipe_id, piece.piece_id], {"piece": piece.piece_id})
 		ids[piece.piece_id] = true
+	return out
+
+
+## Every pool piece the composer could cast for a node, at any depth: its role and its tags.
+func _castable(node_key: StringName) -> Array[FloorPiece]:
+	var wanted: Dictionary = node(node_key)
+	var out: Array[FloorPiece] = []
+	if wanted.is_empty():
+		return out
+	var tags: Array[StringName] = []
+	tags.assign(wanted.get("tags", []))
+	for piece: FloorPiece in pieces:
+		if piece != null and piece.role == wanted.get("role", &"") and piece.carries(tags):
+			out.append(piece)
 	return out
 
 

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="CameraFraming" format=3]
+
+[ext_resource type="Script" path="res://game/gen/camera_framing.gd" id="1_framing"]
+
+[resource]
+script = ExtResource("1_framing")
+offset = Vector3(0, 12, 12)
+pitch_degrees = -45.0
+fov_degrees = 75.0
+edge_margin_x = 6.0
+edge_margin_z = 6.0
+viewport_size = Vector2(1152, 648)
+reveal_safe_margin = 0.05
+reveal_min_visible_share = 0.6
+reveal_sample_spread = 0.5
+occluder_wall_height = 2.2
+occluder_wall_thickness = 0.6
+occluder_gate_height = 2.6
+occluder_breakable_scale = 1.6
+occluder_blocker_height = 1.8
+near = 0.05

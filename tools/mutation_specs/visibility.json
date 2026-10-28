@@ -1,0 +1,262 @@
+{
+ "timeout": 240,
+ "mutants": [
+  {
+   "name": "V1 walls are not occluders",
+   "file": "game/gen/visibility_validator.gd",
+   "pairs": [
+    [
+     "\tfor segment: Dictionary in plan.solid_segments():",
+     "\tfor segment: Dictionary in []:"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_door_reveal_matches_the_drawn_lock_and_the_real_meshes",
+    "test_a_blocked_mandatory_reveal_rejects_every_attempt_deterministically"
+   ]
+  },
+  {
+   "name": "V2 occlusion is never tested",
+   "file": "game/gen/visibility_validator.gd",
+   "pairs": [
+    [
+     "\t\t\t\tif (blocker[\"box\"] as AABB).intersects_segment(sight.camera, point) != null:",
+     "\t\t\t\tif false and (blocker[\"box\"] as AABB).intersects_segment(sight.camera, point) != null:"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_an_opaque_box_between_camera_and_target_hides_it_and_a_low_one_does_not",
+    "test_a_blocked_mandatory_reveal_rejects_every_attempt_deterministically"
+   ]
+  },
+  {
+   "name": "V3 the safe band admits anything",
+   "file": "game/gen/camera_framing.gd",
+   "pairs": [
+    [
+     "\treturn screen.x >= inset.x and",
+     "\treturn true or screen.x >= inset.x and"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_an_opaque_box_between_camera_and_target_hides_it_and_a_low_one_does_not"
+   ]
+  },
+  {
+   "name": "V4 projection ignores the aspect",
+   "file": "game/gen/camera_framing.gd",
+   "pairs": [
+    [
+     "\tvar aspect: float = viewport_size.x / viewport_size.y",
+     "\tvar aspect: float = 1.0"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_projection_matches_the_real_follow_camera_on_floor_2"
+   ]
+  },
+  {
+   "name": "V5 the validator camera skips the edge stop",
+   "file": "game/gen/camera_framing.gd",
+   "pairs": [
+    [
+     "\treturn clamp_focus(stand, extent, edge_margin_x, edge_margin_z) + offset",
+     "\treturn stand + offset"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_projection_matches_the_real_follow_camera_on_floor_2",
+    "test_the_door_reveal_matches_the_drawn_lock_and_the_real_meshes"
+   ]
+  },
+  {
+   "name": "V6 the live camera ignores the shared fov",
+   "file": "game/arena/follow_camera.gd",
+   "pairs": [
+    [
+     "\t\tfov = framing.fov_degrees",
+     "\t\tfov = 70.0"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_expedition_camera_reads_the_shared_framing_and_keeps_the_m1_framing",
+    "test_the_projection_matches_the_real_follow_camera_on_floor_2"
+   ]
+  },
+  {
+   "name": "V7 the composer never rejects an unseen reveal",
+   "file": "game/gen/floor_composer.gd",
+   "pairs": [
+    [
+     "\t\t\tif not unseen.is_empty():",
+     "\t\t\tif false and not unseen.is_empty():"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_a_blocked_mandatory_reveal_rejects_every_attempt_deterministically"
+   ]
+  },
+  {
+   "name": "V8 lint accepts a door that something besides a key opens",
+   "file": "game/gen/visibility_validator.gd",
+   "pairs": [
+    [
+     "\tif receivers == 0 or not others.is_empty():",
+     "\tif false:"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_declaration_lint_knows_what_makes_a_door_locked"
+   ]
+  },
+  {
+   "name": "V9 an optional reveal rejects",
+   "file": "game/gen/visibility_validator.gd",
+   "pairs": [
+    [
+     "\t\treturn mandatory() and not holds()",
+     "\t\treturn not holds()"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_an_unseen_optional_reveal_is_reported_and_never_rejects"
+   ]
+  },
+  {
+   "name": "V10 the far side is never checked",
+   "file": "game/gen/visibility_validator.gd",
+   "pairs": [
+    [
+     "\tif past.verdict != ProgressionValidator.ObjectiveResult.ROUTE_NONE:",
+     "\tif past.verdict == ProgressionValidator.ObjectiveResult.ROUTE_NONE:"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_locked_door_is_seen_from_the_landmark_approach_and_the_relationship_is_enforced"
+   ]
+  },
+  {
+   "name": "V11 the door the anchor shows occludes itself",
+   "file": "game/gen/visibility_validator.gd",
+   "pairs": [
+    [
+     "every_occluder if door < 0 else",
+     "every_occluder if true else"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_locked_door_is_seen_from_the_landmark_approach_and_the_relationship_is_enforced"
+   ]
+  },
+  {
+   "name": "V12 conceal means seen",
+   "file": "game/gen/visibility_validator.gd",
+   "pairs": [
+    [
+     "\t\treturn verdict == (VERDICT_SEEN if intent == INTENT_REVEAL else VERDICT_UNSEEN)",
+     "\t\treturn verdict == VERDICT_SEEN"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_conceal_holds_only_when_the_anchor_is_unseen"
+   ]
+  },
+  {
+   "name": "V13 the anchor is on a wall with no door",
+   "file": "game/content/floors/pieces/archive_landmark_crossing_guarded.tres",
+   "pairs": [
+    [
+     "position = Vector3(-10, 1.3, -15)",
+     "position = Vector3(10, 1.3, -15)"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_door_reveal_matches_the_drawn_lock_and_the_real_meshes",
+    "test_the_locked_door_is_seen_from_the_landmark_approach_and_the_relationship_is_enforced"
+   ]
+  },
+  {
+   "name": "V14 the vantage is a debug point inside a pillar",
+   "file": "game/content/floors/pieces/archive_landmark_crossing_guarded.tres",
+   "pairs": [
+    [
+     "position = Vector3(0, 0, -2.5)",
+     "position = Vector3(3.5, 0, -10.5)"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_locked_door_is_seen_from_the_landmark_approach_and_the_relationship_is_enforced"
+   ]
+  },
+  {
+   "name": "V15 a toggle is not counted as an opener",
+   "file": "game/gen/visibility_validator.gd",
+   "pairs": [
+    [
+     "const _OPENERS: Array[StringName] = [FloorLayers.EFFECT_OPEN_CONNECTION, FloorLayers.EFFECT_TOGGLE_CONNECTION]",
+     "const _OPENERS: Array[StringName] = [FloorLayers.EFFECT_OPEN_CONNECTION]"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_declaration_lint_knows_what_makes_a_door_locked"
+   ]
+  },
+  {
+   "name": "V16 breakables are not occluders",
+   "file": "game/gen/visibility_validator.gd",
+   "pairs": [
+    [
+     "\tfor breakable: BreakablePlan in plan.breakables:",
+     "\tfor breakable: BreakablePlan in []:"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_intact_breakables_occlude_at_their_drawn_size"
+   ]
+  },
+  {
+   "name": "V17 recipe lint skips the mandatory declaration",
+   "file": "game/gen/floor_recipe.gd",
+   "pairs": [
+    [
+     "\t\telif bool(sight.get(\"mandatory\", false)):",
+     "\t\telif false:"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_a_mandatory_reveal_of_a_door_no_key_locks_is_refused_never_optional"
+   ]
+  },
+  {
+   "name": "V18 a mirrorable piece may carry a mandatory reveal",
+   "file": "game/gen/floor_recipe.gd",
+   "pairs": [
+    [
+     "\t\t\t\t\tif piece.allows(&\"mirror_x\"):",
+     "\t\t\t\t\tif false:"
+    ]
+   ],
+   "test_file": "test_visibility.gd",
+   "tests": [
+    "test_the_recipe_lint_refuses_malformed_visibility"
+   ]
+  }
+ ]
+}

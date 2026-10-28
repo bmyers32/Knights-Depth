@@ -29,6 +29,12 @@ extends Camera3D
 @export var edge_margin_x: float = 6.0
 @export var edge_margin_z: float = 6.0
 
+## THE SHARED FRAMING (ADR-001 O1). When set it supplies offset, pitch, field of view and edge
+## margins -- the same resource gen/ validates reveals against -- so the camera the player sees
+## and the camera a floor is checked with are one fact. Unset (the hubs' closer camera), the
+## exports above stand exactly as before.
+@export var framing: CameraFraming = null
+
 ## Interpolation rate. _process, not _physics_process: this is presentation smoothing over
 ## sim state, exactly what Prime Directive 2 reserves _process for. 0.0 = hard snap.
 @export var follow_lerp_per_second: float = 12.0
@@ -45,6 +51,12 @@ func _ready() -> void:
 	# Turning it off here is the correct resolution: the interpolation we want is the one
 	# written above, against sim-mirrored state.
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	if framing != null:
+		offset = framing.offset
+		edge_margin_x = framing.edge_margin_x
+		edge_margin_z = framing.edge_margin_z
+		fov = framing.fov_degrees
+		rotation = Vector3(deg_to_rad(framing.pitch_degrees), 0.0, 0.0)
 
 
 func set_target(target: Node3D) -> void:
@@ -82,11 +94,6 @@ func _process(delta: float) -> void:
 ## so the camera centres on the floor rather than jittering between two impossible bounds --
 ## which is also what keeps a combat room the width of M1's arena framed exactly as M1 framed
 ## it, with the Envoy centred.
+## The rule itself lives in CameraFraming.clamp_focus so gen/ applies the identical stop.
 func _resolve_position(target_position: Vector3) -> Vector3:
-	var focus := Vector2(target_position.x, target_position.z)
-	if _floor_extent.size.x > 0.0 and _floor_extent.size.y > 0.0:
-		var minimum := Vector2(_floor_extent.position.x + edge_margin_x, _floor_extent.position.y + edge_margin_z)
-		var maximum := Vector2(_floor_extent.end.x - edge_margin_x, _floor_extent.end.y - edge_margin_z)
-		focus.x = (minimum.x + maximum.x) * 0.5 if minimum.x > maximum.x else clampf(focus.x, minimum.x, maximum.x)
-		focus.y = (minimum.y + maximum.y) * 0.5 if minimum.y > maximum.y else clampf(focus.y, minimum.y, maximum.y)
-	return Vector3(focus.x, target_position.y, focus.y) + offset
+	return CameraFraming.clamp_focus(target_position, _floor_extent, edge_margin_x, edge_margin_z) + offset

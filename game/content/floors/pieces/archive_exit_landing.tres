@@ -63,6 +63,12 @@ offset = 1
 width = 6
 patch_key = &"P_LANDING"
 
+[sub_resource type="Resource" id="port_pad"]
+script = ExtResource("port")
+key = &"pad"
+kind = &"anchor"
+position = Vector3(0, 0.05, -12.5)
+
 [resource]
 script = ExtResource("piece")
 piece_id = &"archive_exit_landing"
@@ -70,4 +76,4 @@ role = &"exit"
 body = SubResource("body")
 footprint = Rect2(-8, -16, 16, 16)
 allowed_transforms = Array[StringName]([&"identity", &"mirror_x"])
-ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_side")])
+ports = Array[ExtResource("port")]([SubResource("port_in"), SubResource("port_side"), SubResource("port_pad")])

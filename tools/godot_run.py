@@ -8,21 +8,49 @@ run(). It:
     whole process tree it launched (the console exe spawns a child);
   * checks afterwards that nothing it launched is still alive;
   * appends one row per run to build/test_timing.csv: when, label, wall seconds, exit code,
-    outcome (ok / failed / timeout / refused), GUT test counts when the output has them.
+    outcome (ok / failed / timeout / refused / refused_memory), GUT test counts when the output
+    has them.
+  * REFUSES to start when the host has less than MIN_FREE_MB of physical memory free
+    (2026-10-28: an S4 tier-3 run was killed by the host for memory while Godot itself held a
+    flat ~100 MB -- the pressure came from other processes, so the guard is on the host, not Godot).
+  * keeps build/.gdignore in place: without it `--import` scans build/ and imports
+    test_timing.csv as a translation table.
 
-A TIMEOUT IS ITS OWN OUTCOME. It is never a pass, and a mutation driver must not read it as a
-caught mutant.
+A TIMEOUT IS ITS OWN OUTCOME, and so is a memory refusal. Neither is ever a pass, and a mutation
+driver must not read either as a caught mutant.
 
 CLI:  python -I tools/godot_run.py --label NAME [--timeout SECONDS] [--log FILE] -- <godot args...>
       (the Godot executable is supplied here; pass only its arguments)
 """
-import csv, os, re, subprocess, sys, time
+import csv, ctypes, os, re, subprocess, sys, time
 
 GODOT = r"C:\Godot\Godot_v4.7-stable_win64_console.exe"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TIMING_CSV = os.path.join(REPO, "build", "test_timing.csv")
 EXIT_REFUSED = 90
 EXIT_TIMEOUT = 91
+EXIT_REFUSED_MEMORY = 92
+MIN_FREE_MB = 1500
+
+
+class _MemoryStatus(ctypes.Structure):
+    _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong), ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong), ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong), ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+
+def free_memory_mb():
+    status = _MemoryStatus()
+    status.dwLength = ctypes.sizeof(_MemoryStatus)
+    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+    return int(status.ullAvailPhys // (1024 * 1024))
+
+
+def _ensure_gdignore():
+    path = os.path.join(REPO, "build", ".gdignore")
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").close()
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
@@ -77,6 +105,12 @@ def run(args, label, timeout=600, log_path=None):
         names = "; ".join("%s pid %d '%s'" % (image, pid, title) for pid, image, title in running)
         _record(label, 0.0, EXIT_REFUSED, "refused", {}, args)
         return {"outcome": "refused", "exit": EXIT_REFUSED, "wall": 0.0, "output": "REFUSED: Godot already running: " + names, "counts": {}}
+    free = free_memory_mb()
+    if free < MIN_FREE_MB:
+        _record(label, 0.0, EXIT_REFUSED_MEMORY, "refused_memory", {}, args)
+        return {"outcome": "refused_memory", "exit": EXIT_REFUSED_MEMORY, "wall": 0.0,
+                "output": "REFUSED: host has %d MB physical memory free, below %d MB" % (free, MIN_FREE_MB), "counts": {}}
+    _ensure_gdignore()
     started = time.time()
     proc = subprocess.Popen([GODOT] + list(args), cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="replace")
@@ -121,7 +155,7 @@ def main(argv):
         else:
             print("unknown option", opts[i]); return 2
     result = run(godot_args, label, timeout, log_path)
-    if result["outcome"] == "refused":
+    if result["outcome"] in ("refused", "refused_memory"):
         print(result["output"])
     else:
         tail = _ANSI.sub("", result["output"]).strip().splitlines()[-12:]

@@ -98,3 +98,26 @@ candidates_per_piece = 3
 placement_budget = 300
 reseed_budget = 3
 fallback = ExtResource("fallback")
+visibility = Array[Dictionary]([{
+"from": &"landmark",
+"from_port": &"approach",
+"to": &"landmark",
+"to_port": &"door_lock",
+"intent": &"reveal",
+"mandatory": true,
+"door_port": &"out"
+}, {
+"from": &"landmark",
+"from_port": &"approach",
+"to": &"exit",
+"to_port": &"pad",
+"intent": &"conceal",
+"mandatory": false
+}, {
+"from": &"landmark",
+"from_port": &"at_door",
+"to": &"exit",
+"to_port": &"pad",
+"intent": &"reveal",
+"mandatory": false
+}])

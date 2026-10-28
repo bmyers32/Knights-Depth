@@ -65,7 +65,13 @@ const _EPSILON: float = 0.0001
 ## judges is exactly what EncounterSpacing judges -- region-triggered activations, measured from the
 ## region's centre -- and nothing more: waves woken by a clear, and activation from anywhere else
 ## on a threshold zone, are not proven safe by it.
-static func compose(recipe: FloorRecipe, floor_seed: int, depth: int, body_radii: Dictionary = {}, spawn_reaches: Dictionary = {}) -> ComposeResult:
+##
+## `camera` (the shared CameraFraming, O1), when supplied with the progression `rules`, makes every
+## recipe VISIBILITY edge a check on the emitted floor (S4): an enforceable mandatory reveal that is
+## not seen rejects the attempt like a plan violation; every other edge is reported on the floor that
+## is returned (GenerationReport.visibility) and never rejects.
+static func compose(recipe: FloorRecipe, floor_seed: int, depth: int, body_radii: Dictionary = {}, spawn_reaches: Dictionary = {},
+		camera: CameraFraming = null, rules: Dictionary = {}) -> ComposeResult:
 	var started: int = Time.get_ticks_usec()
 	var result := ComposeResult.new()
 	var report := GenerationReport.new()
@@ -123,8 +129,20 @@ static func compose(recipe: FloorRecipe, floor_seed: int, depth: int, body_radii
 					report.reject(StringName(finding["rule"]))
 					report.note("attempt %d: %s" % [attempt, finding["message"]])
 				continue
+		var sights: VisibilityValidator.Report = null
+		if camera != null and not recipe.visibility.is_empty():
+			sights = VisibilityValidator.check(recipe, draft, emitted, plan, camera, rules)
+			var unseen: Array = sights.rejecting()
+			if not unseen.is_empty():
+				report.structural = true
+				report.failing_validator = "VisibilityValidator"
+				for edge: VisibilityValidator.EdgeResult in unseen:
+					report.reject(&"visibility_mandatory_unseen")
+					report.note("attempt %d: mandatory reveal %s %s: %s %s" % [attempt, edge.label(), edge.verdict, edge.detail, edge.sight.misses if edge.sight != null else []])
+				continue
 		report.structural = false
 		report.failing_validator = ""
+		report.visibility = sights.to_dicts() if sights != null else []
 		result.layout = emitted.layout
 		result.draft = draft
 		result.emit = emitted
