@@ -194,3 +194,65 @@ func test_earliest_hit_selection_is_deterministic_when_volumes_compete() -> void
 				if event.kind == "hit" and struck == -1:
 					struck = int(event.payload.get("target_id", -1))
 		assert_eq(struck, 5, "the NEARER body along the segment must always be the one struck, every run")
+
+
+# --- real content: wand_A against a real Ooze body (2026-10-28) -----------------------
+
+## The Ooze canary used to be the only trace of the REAL wand, registered through the production
+## path, landing on a REAL Ooze body. Its scenario now fires behind a held shield, so that coverage
+## moved here. Each case builds its own fresh sim; outcomes only, no damage or position snapshots.
+func _real_wand_sim() -> SimWorld:
+	var world := SimWorld.new()
+	world.seed_combat_rng(0)
+	var envoy: EnvoyStats = ContentDB.get_resource(&"envoy", &"default")
+	world.add_entity(SHOOTER_ID, Vector3.ZERO, envoy.move_speed)
+	world.register_combatant(SHOOTER_ID, envoy.max_health, envoy.family, 0, envoy.combat_radius, &"player")
+	var shield: ShieldStats = ContentDB.get_resource(&"shield", &"default")
+	world.register_shield(SHOOTER_ID, shield.meter_max, shield.regen_per_tick, shield.break_recovery_delay_ticks, shield.knockback_distance)
+	ContentRegistrar.register_enemy_body(world, TARGET_ID, &"ooze", Vector3(0.0, 0.0, -6.0))
+	ContentRegistrar.register_weapon(world, &"wand_A")
+	world.set_equipped_weapon(SHOOTER_ID, &"wand_A")
+	var matrix: DamageMatrix = ContentDB.get_resource(&"combat", &"damage_matrix")
+	world.set_damage_matrix(matrix.families, matrix.weak_multiplier, matrix.resist_multiplier)
+	return world
+
+
+func _fire_and_collect(world: SimWorld, block_held: bool) -> Array[Event]:
+	var events: Array[Event] = []
+	events.append_array(world.tick([Command.new(world.tick_count, SHOOTER_ID, "block", {"held": block_held})], DT))
+	events.append_array(world.tick([
+		Command.new(world.tick_count, SHOOTER_ID, "attack", {"aim": Vector3(0, 0, -1)}),
+		Command.new(world.tick_count, SHOOTER_ID, "block", {"held": block_held}),
+	], DT))
+	for _t in 60:
+		events.append_array(world.tick([Command.new(world.tick_count, SHOOTER_ID, "block", {"held": block_held})], DT))
+	return events
+
+
+func test_real_wand_shot_lands_on_a_real_ooze_body_with_the_shield_lowered() -> void:
+	var events: Array[Event] = _fire_and_collect(_real_wand_sim(), false)
+	var fired: Array = events.filter(func(e): return e.kind == "projectile_fired")
+	assert_eq(fired.size(), 1, "exactly one real wand shot")
+	if fired.size() != 1:
+		return
+	assert_eq(fired[0].payload.get("weapon_id"), "wand_A")
+	assert_eq(int(fired[0].payload.get("attacker_id", -1)), SHOOTER_ID)
+	var projectile_id: int = int(fired[0].payload.get("projectile_id", -1))
+	var hits: Array = events.filter(func(e): return e.kind == "hit")
+	assert_eq(hits.size(), 1, "the shot lands exactly once")
+	if hits.size() != 1:
+		return
+	assert_eq(int(hits[0].payload.get("projectile_id", -2)), projectile_id, "the hit is THIS projectile's")
+	assert_eq(int(hits[0].payload.get("target_id", -1)), TARGET_ID)
+	assert_eq(StringName(hits[0].payload.get("family")), &"ooze")
+
+
+func test_real_wand_press_behind_a_held_shield_fires_nothing() -> void:
+	var events: Array[Event] = _fire_and_collect(_real_wand_sim(), true)
+	var rejected: Array = events.filter(func(e): return e.kind == "attack_rejected")
+	assert_eq(rejected.size(), 1)
+	if rejected.size() == 1:
+		assert_eq(rejected[0].payload.get("reason"), "blocking")
+	assert_eq(events.filter(func(e): return e.kind in ["projectile_fired", "hit"]).size(), 0,
+		"no projectile is created and nothing is hit")
+

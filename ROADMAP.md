@@ -4442,6 +4442,32 @@ Automated certification only -- not a human full-floor acceptance.
 **Open owner numbers (O4):** fallback rate, diversity floor, safe screen band, grid cell, profile bands --
 measured before any is locked. Seed policy is P50 (O3), scheduled with S5.
 
+### P54 — Melee moveset backlog (sword combat pass, 2026-10-28)
+**Status:** DEFERRED — recorded during the M1 sword-combat coherence pass. Nothing here is authorized;
+each item needs a demonstrated dependency (content or playtest evidence) first.
+**Open decision carried with it — melee reach vs body (D1):** sword reach is measured centre-to-centre,
+while the lunge clamp, Burn spread, bump and projectiles all use `combat_radius` (BRAIN: one predicate for
+bodies). Against the Ooze (radius 1.45) hit 1's knockback leaves hit 2 out of reach: the combo lands 1, miss, 3
+(`test_full_combo_connects_against_an_ooze_body`, pending). Body-aware reach changes every melee attacker,
+enemies included, so AI bands and the P17/P29 baselines are in its blast radius.
+**D1 RULING (owner, 2026-10-28): PLAYTEST FIRST, UNRESOLVED.** No reach-semantics change, no knockback or
+reach tuning, M1 numeric fence untouched, baselines untouched. In the next sword playtest, run the full combo
+on the Ooze at normal engagement distance, with and without repositioning between swings, and record whether a
+hit-2 miss comes from hit-1 knockback, player movement, target movement, or something else. **Acceptance:** the
+intended basic combo with reasonable positioning lands 1-2-3 consistently on a stationary, non-evading target
+(enemy movement and deliberate evasion may legitimately break it). If it fails and frustrates, evaluate a
+content-level change first (hit-1 knockback, hit-2 reach/lunge) before any body-aware reach proposal.
+**Backlog:** two-hit heavy vs three-hit agile swords · weapon-specific combo lengths · sweep/thrust/line/
+projectile sword identities · enemy weight and knockback resistance · knockdown as a stronger reaction ·
+intentional switch-reset techniques (today a switch pays the canceled swing's cooldown, like a shield cancel) ·
+multi-stage charged attacks · repeat-hit eligibility across damage stages · multi-hit status proc policy and
+RNG consumption · health i-frames vs repeated hits · shield absorb/break across multi-stage attacks · co-op
+flinch chaining and control economy · statuses that alter attack geometry or enemy movement · enemy
+defensive AI keyed to attack traits, not weapon class · traversal from attack movement · weapon balance from
+realized damage/control, not profile numbers.
+**Before any multi-hit charge:** resolve same-target hit eligibility, stage timing, i-frames, knockback,
+status procs, shield interaction, cancellation and deterministic event order. No generic multi-hit framework.
+
 ## Graveyard
 (One-line tombstones of SHIPPED/REJECTED proposals, pruned at milestone completion.
 Full text lives in git history — `git log -p ROADMAP.md` resurrects anything.)

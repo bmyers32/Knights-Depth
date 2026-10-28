@@ -53,9 +53,14 @@ func _enemy_attacks() -> Command:
 	return Command.new(sim.tick_count, ENEMY_ID, "attack", {"aim": Vector3(0, 0, 1)})
 
 
+## The punish LOWERS the shield first: attacking and blocking never coexist, so a press
+## behind a raised shield is refused (2026-10-28). Same tick, block ahead of the attack.
 func _player_attacks() -> Array[Event]:
 	sim.set_equipped_weapon(PLAYER_ID, &"sword")
-	return sim.tick([Command.new(sim.tick_count, PLAYER_ID, "attack", {"aim": Vector3(0, 0, -1)})], DT)
+	return sim.tick([
+		Command.new(sim.tick_count, PLAYER_ID, "block", {"held": false}),
+		Command.new(sim.tick_count, PLAYER_ID, "attack", {"aim": Vector3(0, 0, -1)}),
+	], DT)
 
 
 func _of(events: Array[Event], kind: String) -> Array:

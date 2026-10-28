@@ -1,0 +1,49 @@
+{
+ "timeout": 240,
+ "mutants": [
+  {
+   "name": "S1 a press behind a raised shield is accepted",
+   "file": "game/sim/sim_world.gd",
+   "pairs": [
+    [
+     "if phase == \"pressed\" and _shield_state.get(actor_id, \"\") == \"held\":",
+     "if false:"
+    ]
+   ],
+   "test_file": "test_pending_attack_cancellation.gd",
+   "tests": [
+    "test_press_while_shield_held_is_rejected_and_opens_nothing",
+    "test_flat_weapon_press_while_shield_held_is_rejected"
+   ]
+  },
+  {
+   "name": "S2 a switch cancels a committed swing without arming its cooldown",
+   "file": "game/sim/sim_world.gd",
+   "pairs": [
+    [
+     "var events: Array[Event] = _cancel_open_melee_hold(actor_id, true)\n\tevents.append_array(_clear_attack_input_state(actor_id))",
+     "var events: Array[Event] = _clear_attack_input_state(actor_id)"
+    ]
+   ],
+   "test_file": "test_pending_attack_cancellation.gd",
+   "tests": [
+    "test_post_hit_weapon_switch_arms_the_swings_cooldown",
+    "test_switch_back_mid_recovery_does_not_open_a_free_swing"
+   ]
+  },
+  {
+   "name": "S3 the real wand fires behind a raised shield",
+   "file": "game/sim/sim_world.gd",
+   "pairs": [
+    [
+     "if phase == \"pressed\" and _shield_state.get(actor_id, \"\") == \"held\":",
+     "if false:"
+    ]
+   ],
+   "test_file": "test_projectile_geometry.gd",
+   "tests": [
+    "test_real_wand_press_behind_a_held_shield_fires_nothing"
+   ]
+  }
+ ]
+}

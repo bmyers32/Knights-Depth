@@ -17,6 +17,16 @@ extends GutTest
 ## restore would erase. The premise holds again -- but narrowly, since cardinal steering is still
 ## a live design candidate and would require the same treatment if authorized.
 ##
+## RE-BASELINED 2026-10-28 (owner ruling), Ooze only, scenario unchanged. The sim now refuses an
+## attack "pressed" behind a held shield, and this scenario holds block from tick 130 without ever
+## releasing it, so its wand presses from tick 156 are `attack_rejected` reason `blocking`. The
+## RETIRED HISTORICAL TRACE is `ai_canary_ooze_pre_block_refusal.json` (209 events, kept as evidence,
+## never overwritten); this ACTIVE artifact has 207. Events before tick 156 are byte-identical; the
+## only differences are the 8 presses and the 2 wand hits that refused shots can no longer produce.
+## No `moved` row changed: wand_A carries zero knockback, no status (no combat RNG draw) and no flinch.
+## COVERAGE CONSEQUENCE: this canary NO LONGER EXERCISES A SUCCESSFUL WAND PROJECTILE. Real-content
+## wand_A -> Ooze coverage lives in test_projectile_geometry.gd instead.
+##
 ## NO FAMILY CURRENTLY QUALIFIES AS AN UNTOUCHED CANARY, recorded honestly rather than
 ## manufactured: Fang carries burrow, and P33 authored `avoid_commit_ticks = 45` onto BOTH Ooze
 ## and Watcher, so local avoidance is live for them. Zeroing Watcher's purely to create a clean

@@ -30,6 +30,10 @@ const SCENARIO_PATH: String = "res://tests/helpers/family_locomotion_scenario.gd
 ## ai_canary_ooze_pre_cardinal.json -- evidence, never overwritten -- and this path now holds the
 ## post-cardinal recording.
 ##
+## RETIRED AGAIN 2026-10-28 (block refusal): the previous stream is kept as
+## ai_canary_ooze_pre_block_refusal.json, the retired historical trace. The active Ooze artifact was
+## re-recorded by a one-off Ooze-only script, not by this tool (see test_ai_canary_ooze.gd).
+##
 ## OPEN QUESTION, flagged rather than decided: the canary is meant to sit on a family that
 ## identity work does NOT touch, and Ooze no longer qualifies. Watcher is the remaining
 ## untouched family. Relocating the guard is a judgement about what it should watch, so it is

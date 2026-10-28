@@ -239,7 +239,7 @@ func test_enemy_interrupt_arms_the_same_cooldown_a_completed_attack_would_have()
 	_tap()
 	var resolve_tick: int = sim.tick_count
 	sim.tick([Command.new(resolve_tick, ENEMY_ID, "attack", {"aim": Vector3.ZERO})], 1.0 / 30.0)
-	assert_eq(sim._next_fire_tick[ATTACKER_ID], resolve_tick + FIRE_INTERVAL_TICKS)
+	assert_eq(sim._next_fire_tick.get(ATTACKER_ID, 0), resolve_tick + FIRE_INTERVAL_TICKS)
 
 
 # --- Combo-state interaction ---
@@ -289,4 +289,120 @@ func test_weapon_switch_during_windup_clears_the_record() -> void:
 	assert_eq(sim._melee_hold[ATTACKER_ID].state, "windup")
 	var events := sim.tick([Command.new(sim.tick_count, ATTACKER_ID, "switch_weapon")], 1.0 / 30.0)
 	assert_eq(events.filter(func(e): return e.kind == "melee_hold_canceled").size(), 1)
+	assert_false(sim._melee_hold.has(ATTACKER_ID))
+
+
+func _switch() -> Array[Event]:
+	return sim.tick([Command.new(sim.tick_count, ATTACKER_ID, "switch_weapon")], 1.0 / 30.0)
+
+
+func _rejections(events: Array[Event]) -> Array:
+	return events.filter(func(e): return e.kind == "attack_rejected").map(func(e): return e.payload.reason)
+
+
+## The switch is a cancel like the block rising edge and the enemy interrupt, so it pays
+## the same cooldown. Before this, switching away mid-recovery and straight back opened a
+## fresh hit 1 at once -- the one cancel that charged nothing.
+func test_post_hit_weapon_switch_arms_the_swings_cooldown() -> void:
+	sim.set_weapon_loadout(ATTACKER_ID, [WEAPON_ID, &"other_weapon"])
+	sim.register_weapon(&"other_weapon", 3.0, &"force", 2.0, 60.0, 0.0)
+	_tap()
+	for _i in range(HIT_ACTIVE_TICKS):
+		_tick_noop()
+	assert_true(sim._melee_hold.has(ATTACKER_ID), "sanity: post-hit, still in recovery")
+	var switch_tick: int = sim.tick_count
+	_switch()
+	assert_eq(sim._next_fire_tick.get(ATTACKER_ID, 0), switch_tick + FIRE_INTERVAL_TICKS,
+		"a cancel arms the profile's fire interval from the cancel tick, as block and enemy interrupt do")
+	var events := sim.tick([Command.new(sim.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO})], 1.0 / 30.0)
+	assert_eq(_rejections(events), ["on_cooldown"], "the other weapon may not fire inside the canceled swing's cooldown")
+
+
+func test_switch_back_mid_recovery_does_not_open_a_free_swing() -> void:
+	sim.set_weapon_loadout(ATTACKER_ID, [WEAPON_ID, &"other_weapon"])
+	sim.register_weapon(&"other_weapon", 3.0, &"force", 2.0, 60.0, 0.0)
+	_tap()
+	for _i in range(HIT_ACTIVE_TICKS):
+		_tick_noop()
+	_switch()
+	_switch()  # straight back to the sword
+	var cooldown_end: int = sim._next_fire_tick.get(ATTACKER_ID, 0)
+	_press()
+	# Inside the input-buffer window the press QUEUES rather than being refused -- either
+	# way it must not open a swing before the canceled swing's cooldown has run.
+	assert_false(sim._melee_hold.has(ATTACKER_ID), "switching away and back must not reset the sword's commitment")
+	assert_true(sim._melee_buffered_press.has(ATTACKER_ID), "the press waits in the buffer")
+	for _i in range(cooldown_end - sim.tick_count):
+		_tick_noop()
+	assert_false(sim._melee_hold.has(ATTACKER_ID), "still nothing before the cooldown clears")
+	_tick_noop()
+	assert_true(sim._melee_hold.has(ATTACKER_ID), "the queued press opens once the cooldown clears")
+
+
+func test_pre_hit_weapon_switch_lands_no_hit_and_arms_cooldown() -> void:
+	sim.set_weapon_loadout(ATTACKER_ID, [WEAPON_ID, &"other_weapon"])
+	sim.register_weapon(&"other_weapon", 3.0, &"force", 2.0, 60.0, 0.0)
+	_tap()
+	var health_before: float = sim._health[TARGET_ID]
+	var events := _switch()
+	assert_eq(events.filter(func(e): return e.kind == "melee_hold_canceled").size(), 1, "exactly one cancel event, not one per clearing path")
+	for _i in range(HIT_ACTIVE_TICKS + LUNGE_DURATION_TICKS):
+		events.append_array(_tick_noop())
+	assert_eq(_hit_events(events).size(), 0, "the canceled swing never lands")
+	assert_almost_eq(sim._health[TARGET_ID], health_before, 0.001)
+
+
+func test_switch_during_charging_arms_no_cooldown_and_release_fires_nothing() -> void:
+	sim.set_weapon_loadout(ATTACKER_ID, [WEAPON_ID, &"other_weapon"])
+	sim.register_weapon(&"other_weapon", 3.0, &"force", 2.0, 60.0, 0.0)
+	_press()
+	_hold_n_ticks(CHARGE_THRESHOLD)
+	var switch_tick: int = sim.tick_count
+	_switch()
+	assert_lte(sim._next_fire_tick.get(ATTACKER_ID, 0), switch_tick, "an unreleased hold was never a committed swing")
+	var events := _release()
+	assert_eq(events.filter(func(e): return e.kind in ["melee_swing", "hit", "projectile_fired"]).size(), 0,
+		"the release that follows a switch must not fall back to any attack")
+
+
+# --- Attacking behind a raised shield ---
+
+func test_press_while_shield_held_is_rejected_and_opens_nothing() -> void:
+	_block(true)
+	var events := _press()
+	assert_eq(_rejections(events), ["blocking"])
+	assert_false(sim._melee_hold.has(ATTACKER_ID), "no hold opens behind the shield")
+	events = _release()
+	for _i in range(HIT_ACTIVE_TICKS + LUNGE_DURATION_TICKS):
+		events.append_array(_tick_noop())
+	assert_eq(events.filter(func(e): return e.kind == "melee_swing").size(), 0)
+	assert_eq(sim._shield_state[ATTACKER_ID], "held", "the shield stays up; only the attack was refused")
+
+
+func test_flat_weapon_press_while_shield_held_is_rejected() -> void:
+	sim.register_weapon(&"flat_weapon", 3.0, &"force", 2.0, 60.0, 0.0)
+	sim.set_equipped_weapon(ATTACKER_ID, &"flat_weapon")
+	_block(true)
+	var health_before: float = sim._health[TARGET_ID]
+	var events := sim.tick([Command.new(sim.tick_count, ATTACKER_ID, "attack", {"aim": Vector3.ZERO})], 1.0 / 30.0)
+	assert_eq(_rejections(events), ["blocking"], "the rule is about the shield, not the weapon class")
+	assert_almost_eq(sim._health[TARGET_ID], health_before, 0.001)
+
+
+func test_press_after_lowering_the_shield_is_accepted() -> void:
+	_block(true)
+	_block(false)
+	assert_eq(_rejections(_press()), [])
+	assert_eq(sim._melee_hold[ATTACKER_ID].state, "charging")
+
+
+func test_press_queued_mid_swing_never_materializes_behind_a_raised_shield() -> void:
+	_tap()
+	_press()  # mid-swing, inside the buffer window -> queued
+	assert_true(sim._melee_buffered_press.has(ATTACKER_ID), "sanity: the press queued")
+	_block(true)
+	var events: Array[Event] = []
+	for _i in range(HIT_ACTIVE_TICKS + LUNGE_DURATION_TICKS + FIRE_INTERVAL_TICKS + 2):
+		events.append_array(_block(true))
+	assert_eq(events.filter(func(e): return e.kind == "melee_swing").size(), 0, "the queued press was flushed with the cancel")
 	assert_false(sim._melee_hold.has(ATTACKER_ID))

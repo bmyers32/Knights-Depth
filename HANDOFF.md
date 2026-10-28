@@ -37,15 +37,15 @@ picked by DEPTH (authored; the seed changes nothing spatial). Four goldens uncha
   sorted-then-weighted; positions FROM THE ROUTE; depth-first `mark()/rewind()`; cycle-closing I/L/Z/U; fallback APART).
 - **Playtest verdict:** better than the first authored rooms; seed 42 best; areas narrow, routes want interest; the exit
   gallery's sealing fight woke enemies ON the player and packed fight + switch + key + receiver + exit into 12x8.
-- **S2.5 (`6d252cd`; human ITERATE: arena better, dogleg no exploration, shortcut flat, crate opening ruled out):** `game/gen/encounter_spacing.gd` ARRIVAL REACH = envoy body + enemy body + attack band + speed x
-  (shortest windup + `EnvoyStats.spawn_reaction_ticks` 15)/30 from the region's CENTRE (nearest-point flagged 3 accepted
-  shipped rooms -- BRAIN); fang 5.7 / ooze 6.35 / watcher 5.63; every shipped room passes, the gallery (2.0, 2.2) fails.
-  Pit 20x26 (spawns 12.5-15.1 ahead of the plate, cover pillar); `archive_exit_landing` (pad+console, `in` + west `side`)
-  replaces the gallery in BOTH recipes (gallery kept as the S1 fixture); `link_turn` 16-32 one bend; `proto_archive_dogleg`
-  (landmark.side -LINK_TURN-> encounter; landmark.out -DETOUR-> objective; objective.out -SHORTCUT-> exit.side). Tools
-  take `--recipe=` (build/compose_sweep_<recipe>.json, build/composed/<recipe>/). 200 seeds each: column 200/0 fallback/
-  p99 52 ms; dogleg 200/0/p99 59 ms; 0 spawn findings; all PASS S0. **Found, unchanged:** `SimWorld._activate_encounter`
-  makes a roster present AND active the same tick with no engagement opener (`_acquire_aggro` arms one) -- owner's call.
+- **S2.5 (`6d252cd`, human ITERATE):** ARRIVAL REACH in `encounter_spacing.gd`; pit, `archive_exit_landing`, dogleg recipe; numbers
+  in ADR-001-S2-MEASUREMENTS §S2.5. **Found, unchanged:** `_activate_encounter` has no engagement opener -- owner's call.
+## SWORD COMBAT COHERENCE PASS 2026-10-28 — UNCOMMITTED, awaiting /gate + owner commit consent
+- **Fixed (sim):** a "pressed" behind a HELD shield is refused (`attack_rejected` reason `blocking`, every weapon);
+  a weapon switch that cancels a windup/executing swing now arms that swing's cooldown like block/interrupt do
+  (was: hit -> switch -> gun 2 ticks later). Tests +8 cancellation, +3 per-family spacing, +2 real wand_A->Ooze. Mutants 3/3.
+- **Ooze canary RE-BASELINED (owner ruling):** retired trace `ai_canary_ooze_pre_block_refusal.json` (209); active 207. Pre-156
+  byte-identical; 8 wand presses now `blocking`, 2 wand hits gone; no `moved` drift (wand_A: 0 knockback, no status, no flinch).
+- **D1 OPEN, playtest first** (ruling + acceptance criterion in ROADMAP P54): Ooze combo lands 1, miss, 3. No reach/knockback tuning.
 ## Next action
 1. **G3 FINAL 2026-10-27: segment ACCEPTED** (fold, key, two-band spike crossing, long return, Fang reinforcement on first lift; `8bc02ea`, harness `3fecd90`). NOT a full floor; do not retune without evidence. S4 visibility TECHNICAL PASS (`e600f8d`); the Index Descent blueprint is the working design (`-Recipe proto_archive_fold_spikes_guarded`). Fold: `proto_archive_fold` + `archive_entry_hall`/`_landmark_crossing`/
    `_objective_key_vault` + `return` profile + `tools/route_metrics.gd` (ADR §7 "S3a as built"). 200/0/0, p99 14 ms. Play:

@@ -34,15 +34,19 @@ var sim: SimWorld
 
 
 func before_each() -> void:
+	_build(&"fang", TARGET_POSITION)
+
+
+func _build(enemy_key: StringName, target_position: Vector3) -> void:
 	sim = SimWorld.new()
 	sim.seed_combat_rng(0)
 	var envoy: EnvoyStats = ContentDB.get_resource(&"envoy", &"default")
 	sim.add_entity(ATTACKER_ID, Vector3.ZERO, envoy.move_speed)
 	sim.register_combatant(ATTACKER_ID, envoy.max_health, envoy.family, 0, envoy.combat_radius, &"player")
-	# Real Fang BODY only -- real max_health, real iframe_ticks_on_hit, real
+	# Real enemy BODY only -- real max_health, real iframe_ticks_on_hit, real
 	# combat_radius, no engagement AI. A stationary target isolates cadence from
 	# movement; the defenses under test are the authored ones, not zeroed stand-ins.
-	ContentRegistrar.register_enemy_body(sim, TARGET_ID, &"fang", TARGET_POSITION)
+	ContentRegistrar.register_enemy_body(sim, TARGET_ID, enemy_key, target_position)
 	ContentRegistrar.register_weapon(sim, &"sword_burn_A")
 	sim.set_equipped_weapon(ATTACKER_ID, &"sword_burn_A")
 	var matrix: DamageMatrix = ContentDB.get_resource(&"combat", &"damage_matrix")
@@ -108,3 +112,42 @@ func test_target_iframes_stay_below_the_authored_combo_gap() -> void:
 		smallest_gap = min(smallest_gap, int(first_three[i].tick) - int(first_three[i - 1].tick))
 	assert_lt(fang.iframe_ticks_on_hit, smallest_gap,
 		"iframe_ticks_on_hit (%d) must stay strictly below the smallest authored inter-hit gap (%d) or the combo absorbs its own hits" % [fang.iframe_ticks_on_hit, smallest_gap])
+
+
+## SEQUENCE COHERENCE (2026-10-28): the combo must work as a sequence against every M1
+## body, not only the Fang. Each target starts just outside its real contact distance, so
+## hit 1's lunge clamps and every later step has to close the gap hit 1's knockback opened.
+## Asserts only WHICH steps land -- no positions or damage -- so a retune that keeps the
+## sequence intact never fails here.
+func _first_cycle_profiles(enemy_key: StringName) -> Array:
+	var envoy: EnvoyStats = ContentDB.get_resource(&"envoy", &"default")
+	var stats: Resource = ContentDB.get_resource(&"enemy", enemy_key)
+	_build(enemy_key, Vector3(0, 0, -(envoy.combat_radius + stats.combat_radius + 0.1)))
+	var landed: Array = []
+	for entry in _run_fast_combo():
+		if entry.profile == "3":
+			landed.append(entry.profile)
+			break
+		landed.append(entry.profile)
+	return landed
+
+
+func test_full_combo_connects_against_a_fang_body() -> void:
+	assert_eq(_first_cycle_profiles(&"fang"), ["1", "2", "3"])
+
+
+func test_full_combo_connects_against_a_watcher_body() -> void:
+	assert_eq(_first_cycle_profiles(&"watcher"), ["1", "2", "3"])
+
+
+## KNOWN INCOHERENCE, awaiting a design decision (HANDOFF). Measured 2026-10-28: hit 1's
+## knockback leaves the Ooze's centre 2.9 away; hit 2's lunge closes only to 2.3 by its hit
+## tick, and sword reach (2.0) is measured CENTRE-to-centre while the lunge clamp stops at
+## BODY contact (0.45 + 1.45 = 1.9). Result: 1, miss, 3. Kept as a pending test rather than
+## a frozen failure so the evidence stays visible until the reach rule is decided.
+func test_full_combo_connects_against_an_ooze_body() -> void:
+	var landed: Array = _first_cycle_profiles(&"ooze")
+	if landed == ["1", "2", "3"]:
+		assert_eq(landed, ["1", "2", "3"])
+	else:
+		pending("Ooze combo lands %s -- hit 2 out of centre-measured reach (design decision open)" % [landed])

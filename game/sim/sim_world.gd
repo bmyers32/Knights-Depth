@@ -2362,6 +2362,15 @@ func _apply_attack(command: Command) -> Array[Event]:
 	if _carrying.has(actor_id):
 		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "carrying"})]
 
+	# ATTACKING AND BLOCKING NEVER COEXIST (Slice B lock, see _apply_block). The rising edge
+	# already cancels any attack in progress; this is the other half -- no NEW attack opens
+	# behind a raised shield. The sim enforces it rather than envoy.gd because a client
+	# message is a request (§4.2): a press sent while blocking must be refused here, where a
+	# server would refuse it. Only "pressed" opens anything; with no hold or queued press
+	# able to exist under a held shield, "held"/"released" already have nothing to act on.
+	if phase == "pressed" and _shield_state.get(actor_id, "") == "held":
+		return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "blocking"})]
+
 	var weapon_id: String = _equipped_weapon.get(actor_id, "")
 	var is_phased_melee: bool = _melee_combo_profiles.has(weapon_id)
 	if not is_phased_melee and not _weapons.has(weapon_id):
@@ -3673,7 +3682,13 @@ func _apply_switch_weapon(command: Command) -> Array[Event]:
 	# survives a weapon swap in M1. _clear_attack_input_state's own "melee_hold_
 	# canceled" Event (if a hold was actually open) is a real observable transition,
 	# distinct from -- and always alongside -- "weapon_switched".
-	var events: Array[Event] = _clear_attack_input_state(actor_id)
+	# A switch that cancels a committed swing (windup/executing) arms the same cooldown as
+	# every other cancel of one -- block rising edge, enemy interrupt. Without it the switch
+	# was the one cancel that charged nothing: a sword hit, switch, and the gun fired two
+	# ticks later, skipping the swing's recovery and the finisher's own fire interval. A
+	# "charging" hold carries no profile, so canceling it stays cooldown-free as before.
+	var events: Array[Event] = _cancel_open_melee_hold(actor_id, true)
+	events.append_array(_clear_attack_input_state(actor_id))
 	_equipped_weapon[actor_id] = next_weapon_id
 	events.append(Event.new(tick_count, "weapon_switched", {"actor_id": actor_id, "weapon_id": next_weapon_id}))
 	return events
