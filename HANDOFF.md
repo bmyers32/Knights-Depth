@@ -32,21 +32,21 @@ picked by DEPTH (authored; the seed changes nothing spatial). Four goldens uncha
 ## ADR-001 PROCEDURAL FLOORS — S0 `6631ed8`, S1 `5b588c6`, S2 `a4f87dd`; S2.5 `6d252cd` (human ITERATE); S3a `2879d07`; S3b `1a7a18e` G2 PASS; G3 FINAL: SEGMENT ACCEPTED `8bc02ea`, NOT A FULL FLOOR
 - `ADR-001-PROCEDURAL-FLOORS.md` is the design of record (ROADMAP P53); numbers in `ADR-001-S2-MEASUREMENTS.md` (+§S2.5).
   Stages are authorized ONE AT A TIME; **S4 (visibility) TECHNICAL PASS 2026-10-28, committed `e600f8d`** (automated certification: sweeps 3/3, suite 1309/1309, mutants 34/34, boots, guard; godot_run refuses below 1.5 GB free). Not a human full-floor acceptance. **Next: E0 piece playground -> E1-p editor proof -> F1 macro feasibility**, each gated.
-- **S2 (committed):** `seed_mix.gd` (a `-s` tool cannot compile anything reaching ContentDB), `traversal_profile.gd`,
-  `floor_recipe.gd`, `generation_report.gd`, `floor_composer.gd` (`compose(recipe, floor_seed, depth, radii)`: cast
-  sorted-then-weighted; positions FROM THE ROUTE; depth-first `mark()/rewind()`; cycle-closing I/L/Z/U; fallback APART).
-- **Playtest verdict:** better than the first authored rooms; seed 42 best; areas narrow, routes want interest; the exit
-  gallery's sealing fight woke enemies ON the player and packed fight + switch + key + receiver + exit into 12x8.
+- **S2 (committed):** composer/recipes/profiles/report -- see ADR-001 §7 and `floor_composer.gd`.
+- **Playtest verdict (S2):** better than authored rooms; seed 42 best; areas narrow; exit gallery cramped (fixed in S2.5).
 - **S2.5 (`6d252cd`, human ITERATE):** ARRIVAL REACH in `encounter_spacing.gd`; pit, `archive_exit_landing`, dogleg recipe; numbers
   in ADR-001-S2-MEASUREMENTS §S2.5. **Found, unchanged:** `_activate_encounter` has no engagement opener -- owner's call.
-## SWORD COMBAT COHERENCE PASS 2026-10-28 — UNCOMMITTED, awaiting /gate + owner commit consent
-- **Fixed (sim):** a "pressed" behind a HELD shield is refused (`attack_rejected` reason `blocking`, every weapon);
-  a weapon switch that cancels a windup/executing swing now arms that swing's cooldown like block/interrupt do
-  (was: hit -> switch -> gun 2 ticks later). Tests +8 cancellation, +3 per-family spacing, +2 real wand_A->Ooze. Mutants 3/3.
-- **Ooze canary RE-BASELINED (owner ruling):** retired trace `ai_canary_ooze_pre_block_refusal.json` (209); active 207. Pre-156
-  byte-identical; 8 wand presses now `blocking`, 2 wand hits gone; no `moved` drift (wand_A: 0 knockback, no status, no flinch).
-- **D1 OPEN, playtest first** (ruling + acceptance criterion in ROADMAP P54): Ooze combo lands 1, miss, 3. No reach/knockback tuning.
+## SWORD COMBAT PASS — COMMITTED `88c84f3` 2026-10-28 (M1 carry). SWORD FEEL GATE NOT PLAYED
+- **Sim:** an attack "pressed" behind a HELD shield is refused (`attack_rejected` `blocking`, every weapon). A weapon
+  switch that cancels a windup/executing swing arms that swing's cooldown (as block/enemy-interrupt cancels do).
+  Everything else in the sword review was ALREADY built + tested (combo, buffer, 3 shield-cancel timings, lunge clamp,
+  flinch/pressure; hit 3 = guaranteed windup interrupt, flinch only via pressure/vulnerable). Charge 40 ticks unchanged.
+- **Ooze canary re-baselined (owner ruling):** retired `ai_canary_ooze_pre_block_refusal.json` 209 -> active 207; real-wand coverage moved to test_projectile_geometry.
+- **D1 OPEN, playtest first (ROADMAP P54):** Ooze combo lands 1, miss, 3 (pending test). No reach/knockback tuning.
+- **Open choice:** release block + press attack on the SAME tick -> press refused (envoy sends attack before block).
 ## Next action
+0. **Sword playtest (owner-chosen next):** full combo vs all 3 families; Ooze with/without repositioning (why hit 2 misses);
+   retaliation after hit 3; block cancels; release-block-then-attack; mid-swing switch; charge speed. Log in P54; no tuning first.
 1. **G3 FINAL 2026-10-27: segment ACCEPTED** (fold, key, two-band spike crossing, long return, Fang reinforcement on first lift; `8bc02ea`, harness `3fecd90`). NOT a full floor; do not retune without evidence. S4 visibility TECHNICAL PASS (`e600f8d`); the Index Descent blueprint is the working design (`-Recipe proto_archive_fold_spikes_guarded`). Fold: `proto_archive_fold` + `archive_entry_hall`/`_landmark_crossing`/
    `_objective_key_vault` + `return` profile + `tools/route_metrics.gd` (ADR §7 "S3a as built"). 200/0/0, p99 14 ms. Play:
    `.\tools\play_composed_floor.ps1 -Seed 7 -Recipe proto_archive_fold -Diagram`. Integrity 200/200 (S3b). 2. Commons plan (P52).
@@ -85,12 +85,12 @@ P45 descent preloading · P47/P48 co-op revival + carry-through · P38 party/loa
 - **`Rect2.has_point` far edge EXCLUSIVE; `WalkableBounds.contains` INCLUSIVE.** Abutting patches JOIN.
 - **Presentation is test-exempt, so it is the blind spot** -- `test_presentation_contracts.gd`; check what
   the renderer draws before re-authoring content (BRAIN). **Never re-record `ai_baseline_pre_p29.json` or
-  the P17 Fang baseline.** **Never round-trip source through PowerShell Get-Content/Set-Content.**
+  the P17 Fang baseline.** A canary re-record = one-off Ooze-only script (BRAIN procedure). **Never round-trip source through PowerShell Get-Content/Set-Content.**
   A Bash `cd` into a subfolder breaks the `scripts/guard.py` pre-edit hook -- cd back to root.
 
 ## Commands
 - **Automated runs: `python -I tools/verify.py --tier 1|2|3` / `tools/godot_run.py` (refuses while any Godot is open).**
-- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1295, ~4 min,
+- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1322 = 1321 + 1 pending, ~4 min,
   35 orphans is the baseline). Headless sim CI: `-gselect=test_sim_world
   -gunit_test_name=test_ticks_1000_times_headless`. Boot: `--headless --path . --quit-after 300`.
 - Guard: `python -I scripts/guard.py --scan` (2 pre-existing `knight` warnings). Goldens:
@@ -117,4 +117,4 @@ zero health as the downed state · commit-at-incapacitation · party predicate v
 finalized once at the run boundary · transition priority in one function · **scene root vs autoload for
 navigation** · **latched one-shot requests** · **remove_child before queue_free** · **GUI focus vs gameplay
 input** · **a cut under an already-dark screen** · **renderer rules hidden behind content** · **positions from the
-route, not the route from positions** · **undo by mark** · **a fixture proved impossible, not assumed**.
+route, not the route from positions** · **undo by mark** · **a fixture proved impossible, not assumed** · **level inputs declared every tick** · **retired trace vs active canary**.

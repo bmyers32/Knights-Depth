@@ -1319,3 +1319,19 @@ and keep the modelling choice that separates them; pin the tightest accepted mar
 next allowance change names the room it would contradict.
 **Where else:** any threshold derived from stats (reach, visibility, leash); any lint added after a
 playtest finding.
+
+### A scripted driver must send what the real client sends every tick
+**Incident (sword pass, 2026-10-28, twice in one change):** the sim began refusing an attack press
+behind a held shield. Two fixtures broke: the Ooze canary scenario sent `block held=true` for 25 ticks
+and then simply STOPPED sending block, and the P16 parry fixture punished without ever lowering the
+shield. `envoy.gd` sends `block` every tick, so a real player who stops holding the button reports
+`held=false` on the next tick -- neither fixture's state is reachable by a real client. **Mechanism:**
+level-style inputs (block, move) are declared every tick precisely so the sim never depends on a
+missed edge; a driver that sends only the edges leaves the sim in the LAST declared state forever.
+**Failure if ignored:** fixtures and recorded baselines quietly certify behaviour of an impossible
+player, then go red when a rule about that state is tightened -- forcing a re-baseline that is really
+a fixture defect, and hiding the coverage that silently vanished (the canary lost its only real wand
+hit). **The rule:** a test driver states each level input every tick it is meant to be true or false,
+exactly like the shipping driver; holding a state is an explicit `held=true`, never an omission.
+**Where else:** M3 bots and replay drivers, server-side command validation (a client that stops
+sending must not stay "blocking"), any new level-style input (aim-lock, sprint, carry).
