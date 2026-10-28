@@ -31,7 +31,7 @@ picked by DEPTH (authored; the seed changes nothing spatial). Four goldens uncha
 
 ## ADR-001 PROCEDURAL FLOORS — S0 `6631ed8`, S1 `5b588c6`, S2 `a4f87dd`; S2.5 `6d252cd` (human ITERATE); S3a `2879d07`; S3b `1a7a18e` G2 PASS; G3 FINAL: SEGMENT ACCEPTED `8bc02ea`, NOT A FULL FLOOR
 - `ADR-001-PROCEDURAL-FLOORS.md` is the design of record (ROADMAP P53); numbers in `ADR-001-S2-MEASUREMENTS.md` (+§S2.5).
-  Stages are authorized ONE AT A TIME; **S4 (visibility) AUTHORIZED 2026-10-27 to a NO-COMMIT gate; mandatory reveal = the LOCKED DOOR from the landmark approach, NOT the exit.**
+  Stages are authorized ONE AT A TIME; **S4 (visibility) TECHNICAL PASS 2026-10-28, committed `e600f8d`** (automated certification: sweeps 3/3, suite 1309/1309, mutants 34/34, boots, guard; godot_run refuses below 1.5 GB free). Not a human full-floor acceptance. **Next: E0 piece playground -> E1-p editor proof -> F1 macro feasibility**, each gated.
 - **S2 (committed):** `seed_mix.gd` (a `-s` tool cannot compile anything reaching ContentDB), `traversal_profile.gd`,
   `floor_recipe.gd`, `generation_report.gd`, `floor_composer.gd` (`compose(recipe, floor_seed, depth, radii)`: cast
   sorted-then-weighted; positions FROM THE ROUTE; depth-first `mark()/rewind()`; cycle-closing I/L/Z/U; fallback APART).
@@ -47,7 +47,7 @@ picked by DEPTH (authored; the seed changes nothing spatial). Four goldens uncha
   p99 52 ms; dogleg 200/0/p99 59 ms; 0 spawn findings; all PASS S0. **Found, unchanged:** `SimWorld._activate_encounter`
   makes a roster present AND active the same tick with no engagement opener (`_acquire_aggro` arms one) -- owner's call.
 ## Next action
-1. **G3 FINAL 2026-10-27: segment ACCEPTED** (fold, key, two-band spike crossing, long return, Fang reinforcement on first lift; `8bc02ea`, harness `3fecd90`). NOT a full floor; do not retune without evidence. S4 visibility next (no-commit gate), then the directed-expedition blueprint (`-Recipe proto_archive_fold_spikes_guarded`). Fold: `proto_archive_fold` + `archive_entry_hall`/`_landmark_crossing`/
+1. **G3 FINAL 2026-10-27: segment ACCEPTED** (fold, key, two-band spike crossing, long return, Fang reinforcement on first lift; `8bc02ea`, harness `3fecd90`). NOT a full floor; do not retune without evidence. S4 visibility TECHNICAL PASS (`e600f8d`); the Index Descent blueprint is the working design (`-Recipe proto_archive_fold_spikes_guarded`). Fold: `proto_archive_fold` + `archive_entry_hall`/`_landmark_crossing`/
    `_objective_key_vault` + `return` profile + `tools/route_metrics.gd` (ADR §7 "S3a as built"). 200/0/0, p99 14 ms. Play:
    `.\tools\play_composed_floor.ps1 -Seed 7 -Recipe proto_archive_fold -Diagram`. Integrity 200/200 (S3b). 2. Commons plan (P52).
 **Deferred (ROADMAP, do NOT build in M2 slices):** P46 loot on summary · P49 death/resync animation ·

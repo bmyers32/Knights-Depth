@@ -59,7 +59,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P50 | Seed policy for deployments | PROPOSED — **recorded 2026-10-22** | Main fixes `run_seed = 0` (Slice 3 baseline). Once floors vary by seed: fresh seed per deployment by default, deliberate replay-by-seed, layout vs combat seed kept explicit |
 | P51 | Obstacle wall skirts on expedition floors | DEBT — **recorded 2026-10-22**, P39 presentation | FloorBuilder wraps every obstacle in 2.2-high walls pushed 0.3 outward; hubs switch it off (`draw_obstacle_faces`), expedition floors still draw it |
 | P52 | Commons spatial master plan | REQUIRED BEFORE ANY COMMONS REBUILD — **ruled 2026-10-21 (D5)** | Central plaza, connected districts, services/NPC sites, loops, crowd + camera; split build-now / M4 / deferred. Plan first, then review |
-| P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 `6631ed8`, S1 `5b588c6` SHIPPED; S2 `a4f87dd` TECHNICAL PASS 2026-10-23; HUMAN GATE PLAYED 2026-10-23: ITERATE → S2.5 (spatial + encounter quality) COMMITTED `6d252cd`, HUMAN S2.5 GATE PLAYED: ITERATE; S3a `2879d07` G1 PASS; S3b `1a7a18e` G2 TECHNICAL PASS; G3 2026-10-27: KEY-RETRIEVAL SEGMENT ACCEPTED (`8bc02ea`, harness `3fecd90`), NOT A FULL FLOOR; S4 AUTHORIZED TO A NO-COMMIT GATE** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
+| P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 `6631ed8`, S1 `5b588c6` SHIPPED; S2 `a4f87dd` TECHNICAL PASS 2026-10-23; HUMAN GATE PLAYED 2026-10-23: ITERATE → S2.5 (spatial + encounter quality) COMMITTED `6d252cd`, HUMAN S2.5 GATE PLAYED: ITERATE; S3a `2879d07` G1 PASS; S3b `1a7a18e` G2 TECHNICAL PASS; G3 2026-10-27: KEY-RETRIEVAL SEGMENT ACCEPTED (`8bc02ea`, harness `3fecd90`), NOT A FULL FLOOR; S4 VISIBILITY TECHNICAL PASS 2026-10-28 `e600f8d` (automated; no human full-floor acceptance)** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4434,8 +4434,11 @@ Fang reinforcement woken once by the first lift (cross-piece wire, `8bc02ea`). *
 accepted full-length floor**; it becomes one chapter of a directed expedition (blueprint pending owner
 review). Do not tune it further without new evidence. Test harness (`3fecd90`): `tools/verify.py` tiers,
 `tools/godot_run.py` isolation, `tools/mutate.py`.
-**Next:** S4 visibility (authorized to a NO-COMMIT gate): the locked door is the mandatory reveal from the
-landmark's approach; the exit is not a required sightline.
+**S4 visibility TECHNICAL PASS 2026-10-28 (`e600f8d`):** the locked door is the certified mandatory reveal from the
+landmark's approach (200/200 seeds, both experimental recipes); the exit is not a required sightline (diagnostic).
+Automated certification only -- not a human full-floor acceptance.
+**Next:** E0 piece playground + lint-all, E1-p direct-placement editor proof, F1 Index Descent macro feasibility
+(19 nodes, 2 cycles) -- each to its own review gate; the Index Descent blueprint is the working design.
 **Open owner numbers (O4):** fallback rate, diversity floor, safe screen band, grid cell, profile bands --
 measured before any is locked. Seed policy is P50 (O3), scheduled with S5.
 
