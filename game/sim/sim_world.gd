@@ -95,13 +95,25 @@ var _melee_input_buffer_ticks: Dictionary = {}  # weapon_id(String) -> int
 var _melee_hold: Dictionary = {}
 var _combo_index: Dictionary = {}  # actor_id -> int, 0 = next tap swing is hit 1
 var _combo_expire_tick: Dictionary = {}  # actor_id -> int, a "pressed" after this tick starts a fresh sequence (index snapped to 0)
-## actor_id -> {weapon_id: String, released: bool, release_aim: Vector3} -- present
-## ONLY while a "pressed" that arrived during recovery is queued waiting for the
-## cooldown to clear (manual-pass input buffer, GAME-RULES §3). released/release_aim
-## capture an early release that arrived before the buffer materialized, so it can
-## still resolve as a clean tap on the materialization tick instead of a stuck hold
-## (see _advance_buffered_attacks). Erased alongside _melee_hold everywhere that
-## clears it (_clear_attack_input_state, block's rising-edge cancel).
+## actor_id -> {weapon_id: String, released: bool, release_aim: Vector3, held_intent: bool}
+## -- present ONLY while a "pressed" that arrived during recovery is queued waiting for
+## the weapon to become eligible (manual-pass input buffer, GAME-RULES §3). ONE slot per
+## actor holds one of two kinds of pending intent, told apart by held_intent:
+##   TAP intent (held_intent false): the press landed within input_buffer_ticks of
+##     eligibility. released/release_aim capture an early release that arrived before
+##     the buffer materialized, so it still resolves as one clean tap on the
+##     materialization tick instead of a stuck hold (see _advance_buffered_attacks).
+##   HELD intent (held_intent true, 2026-10-30 input-retention rule): the press landed
+##     too early for the tap buffer (rejected mid_swing/on_cooldown as before) but the
+##     button is still physically down, which envoy.gd keeps reporting as "held" every
+##     tick. If it is STILL down at the first legal tick, the hold opens there without a
+##     new rising edge -- the player is actively providing input, so a held button stays
+##     meaningful beyond the tap window. A release before that tick simply erases it:
+##     no tap materializes, no charge begins. Never autofire: held intent is only ever
+##     written by a rejected PRESS (a rising edge), never by "held" ticks on their own,
+##     and a charge fires on release so the button is always up when a swing resolves.
+## Erased alongside _melee_hold everywhere that clears it (_clear_attack_input_state,
+## block's rising-edge cancel) -- shield, switch and death invalidate both kinds.
 var _melee_buffered_press: Dictionary = {}
 var _shields: Dictionary = {}  # actor_id -> Dictionary of resolved shield stats
 var _shield_state: Dictionary = {}  # actor_id -> "ready" | "held" | "broken"
@@ -2463,10 +2475,11 @@ func _apply_phased_melee_attack(actor_id: int, weapon_id: String, phase: String,
 
 ## Slice B interruption rule (locked): death and a weapon switch both clear ALL
 ## attack-input state (hold + combo index + inactivity timer) -- see both death
-## sites above and _apply_switch_weapon. A block rising-edge is the one interruption
-## that does NOT call this: it only cancels the in-progress hold, deliberately
-## leaving combo_index/expire untouched (locked rule -- block-canceling an
-## unreleased hold doesn't consume/complete a step, so prior progress survives).
+## sites above and _apply_switch_weapon. A block rising-edge does NOT call this:
+## it cancels the in-progress hold through _cancel_open_melee_hold (arming the
+## swing's cooldown) and then resets the combo step itself (2026-10-30 shield-cancel
+## rule, see _apply_block) -- same end state for the SEQUENCE, different end state
+## for the COMMITMENT, which a switch/death clears outright and a shield cancel keeps.
 ## Returns a "melee_hold_canceled" Event iff a hold was actually open (manual-pass
 ## cue: presentation listens for this to clear a persistent charge-ready tint --
 ## checked BEFORE erasing, never emitted for a no-op cancel of nothing).
@@ -2527,6 +2540,14 @@ func _advance_buffered_attacks() -> Array[Event]:
 		var buffered: Dictionary = _melee_buffered_press[actor_id]
 		if tick_count < _next_fire_tick.get(actor_id, 0):
 			continue  # still not ready -- keep waiting
+		# A swing still open (windup/executing) is not eligibility either: its cooldown is
+		# only armed when it ends, so _next_fire_tick can read as already-elapsed while
+		# the swing runs. Before 2026-10-30 a TAP buffered mid-swing silently re-buffered
+		# itself here every tick (erase, _begin_melee_hold, re-queue -- no events); HELD
+		# intent would instead have been dropped with a spurious mid_swing rejection, so
+		# both kinds now simply wait. No observable change for taps.
+		if _melee_hold.has(actor_id):
+			continue
 		_melee_buffered_press.erase(actor_id)
 		var weapon_id: String = buffered.weapon_id
 		events.append_array(_begin_melee_hold(actor_id, weapon_id))
@@ -2546,8 +2567,13 @@ func _try_buffer_press(actor_id: int, weapon_id: String, deadline_tick: int, rej
 	var remaining: int = deadline_tick - tick_count
 	var buffer_window: int = _melee_input_buffer_ticks.get(weapon_id, 0)
 	if remaining <= buffer_window:
-		_melee_buffered_press[actor_id] = {"weapon_id": weapon_id, "released": false, "release_aim": Vector3.ZERO}
+		_melee_buffered_press[actor_id] = {"weapon_id": weapon_id, "released": false, "release_aim": Vector3.ZERO, "held_intent": false}
 		return []
+	# Too early for a TAP: the press is rejected exactly as before (the observable
+	# rejection stays byte-identical), but the button may still be physically down --
+	# record HELD intent so a hold opens at the first legal tick if it still is
+	# (input-retention rule, see _melee_buffered_press). A release before then erases it.
+	_melee_buffered_press[actor_id] = {"weapon_id": weapon_id, "released": false, "release_aim": Vector3.ZERO, "held_intent": true}
 	return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": rejection_reason})]
 
 
@@ -2560,12 +2586,17 @@ func _begin_melee_hold(actor_id: int, weapon_id: String) -> Array[Event]:
 			# defensive no-op, not a player action worth an Event.
 			return []
 		if hold.get("state", "") == "windup":
-			# No end_tick exists yet to compute a buffering deadline against -- a
+			# No end_tick exists yet to compute a TAP-buffering deadline against -- a
 			# scope cut for M1, not a technical wall (a projected end_tick IS
 			# computable as windup_end_tick + charge_profile.lunge_duration_ticks;
 			# deferred to avoid another branch in an already-complex state machine --
-			# revisit if the manual re-pass finds mid-windup taps feel bad). Always
-			# rejected, never buffered.
+			# revisit if the manual re-pass finds mid-windup taps feel bad). A tap is
+			# always rejected here, never buffered. HELD intent needs no deadline (it
+			# waits for eligibility itself), and this is exactly where the playtest's
+			# lost input landed: the press after a charge release arrives during the
+			# charge's own windup. Record it so the next hold opens without a re-click.
+			if not _melee_buffered_press.has(actor_id):
+				_melee_buffered_press[actor_id] = {"weapon_id": weapon_id, "released": false, "release_aim": Vector3.ZERO, "held_intent": true}
 			return [Event.new(tick_count, "attack_rejected", {"actor_id": actor_id, "reason": "mid_swing"})]
 		# "executing" -- buffer-eligible against the swing's own end_tick (input
 		# buffer extended to cover mid-swing presses, manual-pass: dropping these
@@ -2604,6 +2635,12 @@ func _release_melee_hold(actor_id: int, weapon_id: String, command: Command) -> 
 		# already told itself locally the button was up).
 		var buffered: Dictionary = _melee_buffered_press.get(actor_id, {})
 		if buffered.get("weapon_id", "") == weapon_id:
+			if bool(buffered.get("held_intent", false)):
+				# HELD intent released before eligibility: the player let go, so there is
+				# nothing to carry forward -- no tap materializes, no charge begins
+				# (input-retention rule, see _melee_buffered_press). Erase and stay silent.
+				_melee_buffered_press.erase(actor_id)
+				return []
 			var stored_facing: Vector3 = _facings.get(actor_id, Vector3(0.0, 0.0, -1.0))
 			buffered.released = true
 			buffered.release_aim = _normalize_horizontal(command.params.get("aim", Vector3.ZERO), stored_facing)
@@ -2782,9 +2819,12 @@ func _advance_melee_execution_tick(actor_id: int) -> Array[Event]:
 ## landing on a winding-up/executing player both need it). State-agnostic -- reads
 ## only .weapon_id/.profile, never branches on state explicitly. Emits
 ## "melee_hold_canceled" iff a hold was actually open (checked BEFORE erasing).
-## Never touches _combo_index/_combo_expire_tick (locked rule: canceling doesn't
-## consume/reset combo progress -- only a charged hit landing, or death/switch via
-## _clear_attack_input_state, does that). arm_cooldown only actually arms one when
+## Never touches _combo_index/_combo_expire_tick ITSELF: an enemy hit that cancels
+## the player's swing leaves the step alone, while the shield cancel resets it at
+## its own call site (_apply_block, 2026-10-30) -- the two callers want different
+## sequence outcomes, so the step decision stays with the caller, never in here.
+## A charged hit landing, or death/switch via _clear_attack_input_state, are the
+## other resets. arm_cooldown only actually arms one when
 ## hold.has("profile") -- a "charging" hold never has this key (only assigned at
 ## release), so canceling a pre-release hold naturally stays cooldown-free, matching
 ## the existing tested contract, with no extra state check needed.
@@ -2825,6 +2865,7 @@ func debug_describe_melee_state(actor_id: int) -> Dictionary:
 		var buffered: Dictionary = _melee_buffered_press[actor_id]
 		description["buffered_weapon_id"] = buffered.weapon_id
 		description["buffered_released"] = buffered.released
+		description["buffered_held_intent"] = bool(buffered.get("held_intent", false))
 	return description
 
 
@@ -2936,8 +2977,8 @@ func _flinch_mode_of(actor_id: int) -> String:
 
 
 ## Records one contribution as a FACT (§3): never recomputed from HP, so healing can't
-## erase it, and a successful flinch never consumes it — contributions only ever leave
-## by expiring on their own tick.
+## erase it. Contributions leave in exactly two ways: expiring on their own tick, or
+## being SPENT by the pressure flinch they bought (see _resolve_hit_on_target, 2026-10-30).
 func _record_pressure(target_id: int, amount: float) -> void:
 	if amount <= 0.0 or not _flinch_thresholds.has(target_id):
 		return
@@ -2964,7 +3005,11 @@ func _pressure_sum(target_id: int) -> float:
 ## Picks the flinch route for one landed hit. Fixed short-circuit order with
 ## VULNERABILITY FIRST (§3): when both routes qualify, vulnerability wins as the
 ## REPORTED reason, while the hit's pressure contribution is still recorded normally by
-## the caller and expires on its own tick. PROTECTED rejects everything.
+## the caller and is NOT spent (only a "pressure" route spends -- see the caller).
+## PROTECTED rejects everything. Capability is a ladder, not an exclusive choice:
+## "exploit" uses only the vulnerability route; "pressure" uses the vulnerability route
+## AND the threshold route (pressure-capable AND exploit-capable -- the sword finisher
+## and charge are the two authored consumers).
 ## Threshold readiness is NOT cash-out: an "exploit" hit that pushes pressure past the
 ## threshold banks it for the next pressure-capable hit rather than flinching.
 func _select_flinch_route(target_id: int, capability: String) -> String:
@@ -3094,31 +3139,46 @@ func _resolve_hit_on_target(attacker_id: int, target_id: int, weapon: Dictionary
 	var flinch_reason: String = ""
 	if remaining_health > 0.0:
 		flinch_reason = _select_flinch_route(target_id, String(weapon.get("flinch_capability", "none")))
+	# PRESSURE IS SPENT BY THE FLINCH IT BOUGHT (sword design pass, 2026-10-30, GAME-RULES §3).
+	# A pressure-route flinch clears the whole live queue, so the next pressure flinch needs
+	# freshly accumulated damage. Nothing else spends it: an EXPLOIT flinch (vulnerability
+	# wins the route and leaves the bank untouched), a landed hit, or a pressure-capable
+	# hit under the threshold all leave the contributions to expire on their own ticks.
+	# THIS IS A SEMANTIC RULE, NOT AN ANTI-CHAIN-FLINCH MECHANIC (owner ruling 2026-10-31): the
+	# current sword rebuilds enough pressure inside the next full combo (hits 1+2 bank 16, the
+	# finisher adds 10) to pressure-flinch every shipped family again. Chain suppression, if
+	# ever wanted, is a threshold/window tuning question in content, never a change here.
+	if flinch_reason == "pressure":
+		_pressure_contributions.erase(target_id)
 
-	# Interruption as graded content (manual-pass, GAME-RULES §3): while target_id is
-	# winding up its own attack, a non-interrupting hit (interrupt_strength <= 0)
-	# neither cancels the windup nor displaces the target -- damage/status below
-	# still resolve normally, only knockback is suppressed (crowding a stunned-
-	# looking enemy shouldn't shove it out of its own windup for free). Otherwise
-	# displacement is a de facto interrupt, so an interrupting hit both knocks back
-	# AND cancels the windup. A target that isn't winding up is completely
-	# unaffected by any of this -- unconditional knockback, exactly as before.
+	# Interruption as graded content (manual-pass, GAME-RULES §3): a target that is NOT
+	# winding up takes unconditional knockback, exactly as always. While target_id IS
+	# winding up its own attack, the action is cancelled by graded interrupt_strength
+	# (an authored bypass -- no M1 sword stage carries it since the 2026-10-30 design
+	# pass; the field stays for content that explicitly needs one) OR by a successful
+	# flinch route (pressure cash-out / authored vulnerability). A hit that cancels
+	# neither way neither interrupts nor displaces -- damage/status still resolve, only
+	# knockback is suppressed (crowding a stunned-looking enemy shouldn't shove it out
+	# of its own windup for free). Displacement is a de facto interrupt, so knockback
+	# follows the CANCEL, not the interrupt_strength field: whichever route cancels the
+	# windup also knocks back. (Before 2026-10-30 only interrupt_strength displaced a
+	# winding-up target; a flinch-route cancel left it in place. Coupling them keeps the
+	# finisher's interrupt+knockback feel after its bypass was removed.)
 	var target_is_winding_up: bool = _ai_attack_fire_tick.has(target_id)
 	var interrupt_strength: int = int(weapon.get("interrupt_strength", 0))
-	var interrupts_this_windup: bool = target_is_winding_up and interrupt_strength > 0
-	var knocked_position: Vector3 = target_position
-	if not target_is_winding_up or interrupt_strength > 0:
-		# BOUNDS SEAM 3/6 — hit knockback. Displacement INFLICTED on an actor obeys the
-		# same walls as displacement it chooses: being shoved through a wall is the same
-		# defect as walking through one.
-		knocked_position = _clamp_to_bounds(target_id, target_position, target_position + resolved_aim * weapon.knockback_distance)
-		entities[target_id] = knocked_position
 	# ATOMICITY (locked): the enemy's current action is canceled EXACTLY ONCE, here at
 	# hit resolution -- windup clear, cooldown arming, the interruption Event, and the
 	# action-scoped susceptibility cleanup are ONE combat consequence, whether the cause
 	# was graded interrupt_strength, a flinch, or both. Nothing downstream re-cancels:
 	# the AI phase only OBSERVES FLINCHED and never mutates combat state.
 	var cancels_windup: bool = target_is_winding_up and (interrupt_strength > 0 or flinch_reason != "")
+	var knocked_position: Vector3 = target_position
+	if not target_is_winding_up or cancels_windup:
+		# BOUNDS SEAM 3/6 — hit knockback. Displacement INFLICTED on an actor obeys the
+		# same walls as displacement it chooses: being shoved through a wall is the same
+		# defect as walking through one.
+		knocked_position = _clamp_to_bounds(target_id, target_position, target_position + resolved_aim * weapon.knockback_distance)
+		entities[target_id] = knocked_position
 	if cancels_windup:
 		_cancel_enemy_windup(target_id)
 
@@ -3636,8 +3696,18 @@ func _apply_block(command: Command) -> Array[Event]:
 			# Slice B interruption rule (locked): raising block cancels an
 			# in-progress charge hold/windup/executing swing -- no swing (or no
 			# REST of an in-progress one), no charge event, attacking and defensive
-			# blocking never coexist. combo_index/expire deliberately survive (see
-			# _cancel_open_melee_hold's doc) -- this only discards the attack itself.
+			# blocking never coexist.
+			# SHIELD CANCEL IS A SEQUENCE RESET (sword design pass, 2026-10-30): the
+			# combo step is reset to H1 below, whether the cancel came before or after
+			# the hit resolved. A landed hit keeps everything it earned (damage, status,
+			# flinch, the cooldown armed by _cancel_open_melee_hold) -- only the SEQUENCE
+			# is abandoned, so the next legal sword attack after that cooldown is H1.
+			# This is what keeps the three sword techniques distinct: BEAT (pause inside
+			# the combo window, step preserved), CHARGE-STEP (hold under the threshold,
+			# walk, release the preserved step), SHIELD CANCEL (defend, start over).
+			# The reset lives HERE and not in _cancel_open_melee_hold because the other
+			# caller of that helper -- an enemy hit interrupting the player's swing --
+			# deliberately leaves the step alone (getting hit is not a choice).
 			# Shield-cancel timing (manual-pass, locked): because _advance_pending_
 			# attacks already ran earlier this same tick (see tick()), an
 			# "executing" record's hit_resolved is already correctly set one way or
@@ -3653,6 +3723,8 @@ func _apply_block(command: Command) -> Array[Event]:
 			# above is already raised and blocks normally either way.
 			var events: Array[Event] = _apply_shield_bump(actor_id, shield)
 			events.append_array(_cancel_open_melee_hold(actor_id, true))
+			_combo_index.erase(actor_id)
+			_combo_expire_tick.erase(actor_id)
 			return events
 	elif state == "held":
 		if not held:

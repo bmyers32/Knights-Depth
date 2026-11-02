@@ -99,7 +99,12 @@ func test_press_just_outside_buffer_window_is_still_rejected() -> void:
 	_advance_until_remaining(INPUT_BUFFER_TICKS + 1)
 	var events := _press()
 	assert_eq(_events_of_kind(events, "attack_rejected").size(), 1, "regression guard: outside the window, rejection is unchanged")
-	assert_false(sim._melee_buffered_press.has(ATTACKER_ID), "outside the buffer window must not queue anything")
+	# 2026-10-30 input-retention rule: outside the window no TAP is queued, but the press
+	# leaves HELD intent behind in the same slot (see test_held_attack_retention.gd) --
+	# and a release erases it, so a tap outside the window still produces nothing.
+	assert_true(bool(sim._melee_buffered_press.get(ATTACKER_ID, {}).get("held_intent", false)), "outside the buffer window only HELD intent is queued, never a tap")
+	_release()
+	assert_false(sim._melee_buffered_press.has(ATTACKER_ID), "released before eligibility: nothing remains queued")
 
 
 func test_press_within_buffer_window_is_accepted_silently() -> void:
@@ -283,7 +288,7 @@ func test_mid_swing_press_one_tick_before_boundary_is_rejected_with_mid_swing() 
 	var rejected := events.filter(func(e): return e.kind == "attack_rejected")
 	assert_eq(rejected.size(), 1)
 	assert_eq(rejected[0].payload.get("reason"), "mid_swing")
-	assert_false(s._melee_buffered_press.has(ATTACKER_ID))
+	assert_true(bool(s._melee_buffered_press.get(ATTACKER_ID, {}).get("held_intent", false)), "one tick outside the window: HELD intent only, never a tap (2026-10-30)")
 
 
 ## The corrected-mechanism test (manual-pass review caught an earlier draft of this

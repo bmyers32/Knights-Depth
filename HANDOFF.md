@@ -32,26 +32,26 @@ picked by DEPTH (authored; the seed changes nothing spatial). Four goldens uncha
 ## ADR-001 PROCEDURAL FLOORS — S0 `6631ed8`, S1 `5b588c6`, S2 `a4f87dd`; S2.5 `6d252cd` (human ITERATE); S3a `2879d07`; S3b `1a7a18e` G2 PASS; G3 FINAL: SEGMENT ACCEPTED `8bc02ea`, NOT A FULL FLOOR
 - `ADR-001-PROCEDURAL-FLOORS.md` is the design of record (ROADMAP P53); numbers in `ADR-001-S2-MEASUREMENTS.md` (+§S2.5).
   Stages are authorized ONE AT A TIME; **S4 (visibility) TECHNICAL PASS 2026-10-28, committed `e600f8d`** (automated certification: sweeps 3/3, suite 1309/1309, mutants 34/34, boots, guard; godot_run refuses below 1.5 GB free). Not a human full-floor acceptance. **Next: E0 piece playground -> E1-p editor proof -> F1 macro feasibility**, each gated.
-- **S2 (committed):** composer/recipes/profiles/report -- see ADR-001 §7 and `floor_composer.gd`.
-- **Playtest verdict (S2):** better than authored rooms; seed 42 best; areas narrow; exit gallery cramped (fixed in S2.5).
-- **S2.5 (`6d252cd`, human ITERATE):** ARRIVAL REACH in `encounter_spacing.gd`; pit, `archive_exit_landing`, dogleg recipe; numbers
-  in ADR-001-S2-MEASUREMENTS §S2.5. **Found, unchanged:** `_activate_encounter` has no engagement opener -- owner's call.
-## SWORD COMBAT PASS — COMMITTED `88c84f3` 2026-10-28 (M1 carry). SWORD FEEL GATE NOT PLAYED
-- **Sim:** an attack "pressed" behind a HELD shield is refused (`attack_rejected` `blocking`, every weapon). A weapon
-  switch that cancels a windup/executing swing arms that swing's cooldown (as block/enemy-interrupt cancels do).
-  Everything else in the sword review was ALREADY built + tested (combo, buffer, 3 shield-cancel timings, lunge clamp,
-  flinch/pressure; hit 3 = guaranteed windup interrupt, flinch only via pressure/vulnerable). Charge 40 ticks unchanged.
-- **Ooze canary re-baselined (owner ruling):** retired `ai_canary_ooze_pre_block_refusal.json` 209 -> active 207; real-wand coverage moved to test_projectile_geometry.
-- **D1 OPEN, playtest first (ROADMAP P54):** Ooze combo lands 1, miss, 3 (pending test). No reach/knockback tuning.
-- **Open choice:** release block + press attack on the SAME tick -> press refused (envoy sends attack before block).
+- **S2/S2.5:** composer/recipes/profiles (ADR-001 §7, `floor_composer.gd`); S2 verdict: better than authored rooms, seed 42 best;
+  S2.5 ARRIVAL REACH, pit, dogleg (MEASUREMENTS §S2.5). **Found, unchanged:** `_activate_encounter` has no engagement opener.
+## SWORD DESIGN-DECISION PASS — COMMITTED 2026-11-02 (M1 carry; follows `88c84f3`). STATIONS 1-5 PASSED, owner-played
+- **Flinch is EARNED:** no unconditional finisher/charge windup interrupt (hit 3 + charge `interrupt_strength` 0). A hit
+  interrupts AND displaces a winding-up enemy only if THAT hit cancelled the windup (pressure or vulnerable-window exploit);
+  knockback stays authored (owner: keep coupling). Pressure flinch SPENDS the bank, exploit flinch PRESERVES it. Spending
+  is a semantic rule, NOT anti-chain (sword rebuilds 16 vs Ooze 12 inside one combo).
+- **Sword tech:** Beat (press inside the 45-tick window) and charge-step (sub-threshold hold, move, release) PRESERVE the
+  step; shield cancel RESETS to H1, keeps the cancelled swing's cooldown. **Held attack retention:** a press refused in
+  windup/recovery/cooldown keeps held intent; the hold opens at the first legal tick, no re-click, never autofire;
+  shield/switch/death clear it. Validated live (retained holds cued 48-49 ticks after the charge hit, Station 5).
+- **Ooze canary re-baselined (owner ruling):** retired `ai_canary_ooze_pre_sword_design_pass.json` 207 -> active 186; one
+  cause at tick 86, every downstream row classified in the test header. Fang/P29/frozen baselines untouched.
+- **D1 STILL OPEN (P54):** Ooze combo lands 1, miss, 3 (pending). NO tuning authorized. Animation/readability NOT done.
+  Same-tick release-block+attack still refuses the press (open choice). Temp arena diagnostic reverted, never committed.
 ## Next action
-0. **Sword playtest (owner-chosen next):** full combo vs all 3 families; Ooze with/without repositioning (why hit 2 misses);
-   retaliation after hit 3; block cancels; release-block-then-attack; mid-swing switch; charge speed. Log in P54; no tuning first.
-1. **G3 FINAL 2026-10-27: segment ACCEPTED** (fold, key, two-band spike crossing, long return, Fang reinforcement on first lift; `8bc02ea`, harness `3fecd90`). NOT a full floor; do not retune without evidence. S4 visibility TECHNICAL PASS (`e600f8d`); the Index Descent blueprint is the working design (`-Recipe proto_archive_fold_spikes_guarded`). Fold: `proto_archive_fold` + `archive_entry_hall`/`_landmark_crossing`/
-   `_objective_key_vault` + `return` profile + `tools/route_metrics.gd` (ADR §7 "S3a as built"). 200/0/0, p99 14 ms. Play:
+0. **Next work starts from this validated sword baseline. No combat tuning.** D1 evidence goes to P54, decision first.
+1. **G3 FINAL 2026-10-27: segment ACCEPTED** (fold, key, two-band spike crossing, long return, Fang reinforcement on first lift; `8bc02ea`, harness `3fecd90`). NOT a full floor; do not retune without evidence. S4 visibility TECHNICAL PASS (`e600f8d`); the Index Descent blueprint is the working design (`-Recipe proto_archive_fold_spikes_guarded`). Fold: `proto_archive_fold` + `archive_entry_hall`/`_landmark_crossing`/`_objective_key_vault` + `return` profile + `tools/route_metrics.gd` (ADR §7 "S3a as built"). 200/0/0, p99 14 ms. Play:
    `.\tools\play_composed_floor.ps1 -Seed 7 -Recipe proto_archive_fold -Diagram`. Integrity 200/200 (S3b). 2. Commons plan (P52).
-**Deferred (ROADMAP, do NOT build in M2 slices):** P46 loot on summary · P49 death/resync animation ·
-P45 descent preloading · P47/P48 co-op revival + carry-through · P38 party/loadout/route · P51 skirts.
+**Deferred (ROADMAP, do NOT build in M2 slices):** P46 loot on summary · P49 death/resync animation · P45 descent preloading · P47/P48 co-op revival + carry-through · P38 party/loadout/route · P51 skirts.
 
 ## Accepted partials / flags
 - **M3:** `aim` LENGTH is behavioural (P42); `GameMain.go_to(EXPEDITION)` is the seam a server "request deployment" replaces; hub sims local; pad deployment is SOLO, not ready-up.
@@ -90,7 +90,7 @@ P45 descent preloading · P47/P48 co-op revival + carry-through · P38 party/loa
 
 ## Commands
 - **Automated runs: `python -I tools/verify.py --tier 1|2|3` / `tools/godot_run.py` (refuses while any Godot is open).**
-- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1322 = 1321 + 1 pending, ~4 min,
+- Suite: `& "C:\Godot\Godot_v4.7-stable_win64_console.exe" --headless -s addons/gut/gut_cmdln.gd` (1357 = 1356 + 1 pending D1, ~4 min,
   35 orphans is the baseline). Headless sim CI: `-gselect=test_sim_world
   -gunit_test_name=test_ticks_1000_times_headless`. Boot: `--headless --path . --quit-after 300`.
 - Guard: `python -I scripts/guard.py --scan` (2 pre-existing `knight` warnings). Goldens:

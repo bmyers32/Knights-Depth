@@ -60,7 +60,7 @@ Future work + ideas outside current milestone scope. Milestone status lives in C
 | P51 | Obstacle wall skirts on expedition floors | DEBT — **recorded 2026-10-22**, P39 presentation | FloorBuilder wraps every obstacle in 2.2-high walls pushed 0.3 outward; hubs switch it off (`draw_obstacle_faces`), expedition floors still draw it |
 | P52 | Commons spatial master plan | REQUIRED BEFORE ANY COMMONS REBUILD — **ruled 2026-10-21 (D5)** | Central plaza, connected districts, services/NPC sites, loops, crowd + camera; split build-now / M4 / deferred. Plan first, then review |
 | P53 | Procedural floors: hybrid hierarchical composition (ADR-001) | **APPROVED IN PRINCIPLE 2026-10-22 — S0 `6631ed8`, S1 `5b588c6` SHIPPED; S2 `a4f87dd` TECHNICAL PASS 2026-10-23; HUMAN GATE PLAYED 2026-10-23: ITERATE → S2.5 (spatial + encounter quality) COMMITTED `6d252cd`, HUMAN S2.5 GATE PLAYED: ITERATE; S3a `2879d07` G1 PASS; S3b `1a7a18e` G2 TECHNICAL PASS; G3 2026-10-27: KEY-RETRIEVAL SEGMENT ACCEPTED (`8bc02ea`, harness `3fecd90`), NOT A FULL FLOOR; S4 VISIBILITY TECHNICAL PASS 2026-10-28 `e600f8d` (automated; no human full-floor acceptance)** | `ADR-001-PROCEDURAL-FLOORS.md`. Experience graph (physical/visibility/dependency edges) casts authored FloorPieces, routes TraversalProfiles, wires across pieces, lowers to AuthoredLayout. S0 = `FloorPlan.violations()` + `ProgressionValidator` (PASS/FAIL/UNSUPPORTED) |
-| P54 | Melee moveset backlog + D1 (melee reach vs body) | DEFERRED — **recorded 2026-10-28**; D1 OPEN, playtest first | Ooze combo lands 1, miss, 3 (centre-measured reach vs body-contact lunge). Backlog of sword identities/multi-hit/knockdown etc.; overlaps P19/P24/P25/P27 |
+| P54 | Melee moveset backlog + D1 (melee reach vs body) | DEFERRED — **recorded 2026-10-28**; design-decision pass SHIPPED 2026-11-02 (earned flinch, sword tech, held retention; Stations 1-5 passed); D1 STILL OPEN, no tuning | Ooze combo lands 1, miss, 3 (centre-measured reach vs body-contact lunge). Backlog of sword identities/multi-hit/knockdown etc.; overlaps P19/P24/P25/P27 |
 | P28 | Global combat-scale coherence pass | RESOLVED for M1 (narrowed) | Was mostly Ooze's undersized footprint, not a global rescale; animation-alignment revalidation still open |
 
 Statuses: PROPOSED → TREAT-CANDIDATE → IN-MILESTONE → SHIPPED / REJECTED.
@@ -4458,6 +4458,30 @@ hit-2 miss comes from hit-1 knockback, player movement, target movement, or some
 intended basic combo with reasonable positioning lands 1-2-3 consistently on a stationary, non-evading target
 (enemy movement and deliberate evasion may legitimately break it). If it fails and frustrates, evaluate a
 content-level change first (hit-1 knockback, hit-2 reach/lunge) before any body-aware reach proposal.
+**SWORD DESIGN-DECISION PASS — SHIPPED 2026-11-02 (owner rulings 2026-10-31; D1 untouched, no tuning).**
+*Flinch semantics:* the sword finisher and charge no longer carry an unconditional windup interrupt
+(`interrupt_strength` 0). A hit interrupts a winding-up enemy only when THAT hit cancelled the windup, by earned
+pressure or by a vulnerable-window exploit, and displacement during a windup follows the same test; knockback
+magnitude stays authored per profile (ruling: keep the coupling; H1/H2 exploiting a vulnerable Watcher may shove it;
+if ever undesirable, treat as reaction design, never restore the bypass). A pressure flinch SPENDS the target's
+pressure bank; an exploit flinch PRESERVES it, so pressure banked before an exploit may legitimately contribute later.
+Spending is a semantic rule, NOT an anti-chain-flinch mechanic: the sword rebuilds 16 against the Ooze threshold 12
+inside one combo, so repeated earned flinches are intended.
+*Sword tech:* Beat (a press inside the 45-tick window, measured from the hit tick to the press) preserves the sequence;
+charge-step (press, hold below the 40-tick threshold, reposition, release) preserves the sequence while moving; shield
+cancel resets the sequence to H1 while the cancelled swing's cooldown (already-earned commitment) stands.
+*Held attack retention:* a press refused during windup, recovery or cooldown leaves held intent, and the hold opens at
+the first legal tick without a new rising edge; never autofire; shield, switch and death clear it.
+*Manual validation (owner-played, lone Ooze / arena Watcher, no tuning):* Station 1 no-buildup H3 in a windup -> no
+flinch, no interrupt, no knockback ("it read as me not having earned the interrupt"). Station 2 earned pressure ->
+every pressure flinch leaves the bank at 0 and every later flinch is newly earned ("it does not feel unfair ... when I
+am repeatedly earning each flinch"). Station 3 Watcher exploit -> in-window hits interrupt and shove, out-of-window hits
+do nothing ("I would keep the new knockback coupling"). Station 4 technique separation -> ~60 reps, every swing the
+expected profile ("different tools with different purposes ... I would keep the current behavior"). Station 5 held
+retention -> retained holds cued 48-49 ticks after the charge hit, no autofire, shield clears intent ("fixes the input
+issue I originally noticed"); the early-release rep stays "consistent but not independently evidenced" (silent input;
+deterministic tests `test_held_attack_retention` 4/5 are the evidence). Ooze canary re-baselined, one cause at tick 86,
+classified in `test_ai_canary_ooze.gd`. Animation/readability for these reactions is NOT done.
 **Backlog:** two-hit heavy vs three-hit agile swords · weapon-specific combo lengths · sweep/thrust/line/
 projectile sword identities · enemy weight and knockback resistance · knockdown as a stronger reaction ·
 intentional switch-reset techniques (today a switch pays the canceled swing's cooldown, like a shield cancel) ·

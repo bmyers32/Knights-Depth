@@ -102,12 +102,20 @@ func test_31_each_landed_hit_banks_its_own_post_mitigation_damage() -> void:
 	for _i in range(200):
 		if seen >= 3:
 			break
-		for event in _attack("released" if pressed else "pressed"):
+		var batch: Array[Event] = _attack("released" if pressed else "pressed")
+		var cashed_out: bool = batch.any(func(e): return e.kind == "flinched" and e.payload.reason == "pressure")
+		for event in batch:
 			if event.kind == "hit":
 				running += float(event.payload.damage)
 				seen += 1
-				assert_almost_eq(_pressure(), running, 0.001,
-					"pressure after hit %d must equal the running sum of ACTUAL damage" % seen)
+				if cashed_out:
+					# 2026-10-30: the pressure flinch SPENDS the bank it bought, this hit's
+					# own contribution included (it was recorded before route selection).
+					assert_almost_eq(_pressure(), 0.0, 0.001,
+						"pressure after the cash-out hit %d is spent" % seen)
+				else:
+					assert_almost_eq(_pressure(), running, 0.001,
+						"pressure after hit %d must equal the running sum of ACTUAL damage" % seen)
 		pressed = not pressed
 	assert_eq(seen, 3, "all three authored combo hits must land against the dev target")
 	assert_almost_eq(running, authored[0] + authored[1] + authored[2], 0.001,
@@ -145,8 +153,8 @@ func test_32_hit_three_cashes_out_pressure_against_a_survivor() -> void:
 		hits_before_flinch += 1
 	assert_eq(hits_before_flinch, 3, "hits 1-2 build; hit 3 is the cash-out")
 	assert_gt(sim._health[TARGET_ID], 0.0, "the target SURVIVES -- death would supersede the flinch")
-	assert_gte(_pressure(), _fang.flinch_threshold,
-		"a successful flinch must not consume or reset the recorded pressure")
+	assert_almost_eq(_pressure(), 0.0, 0.001,
+		"2026-10-30: a successful PRESSURE flinch spends the recorded pressure -- the next one must be rebuilt")
 
 
 # --- 3.3 charge-release cash-out (second pressure route, R1) ------------------------
@@ -187,22 +195,29 @@ func test_34_composed_flinch_lifecycle_persist_no_extend_then_reflinch() -> void
 	var original_until: int = int(first_flinch.until)
 	var pressure_at_flinch: float = _pressure()
 
-	# 2. Contributions PERSIST with their original expiry -- never consumed or reset.
-	assert_gt(pressure_at_flinch, 0.0)
+	# 2. The cash-out SPENT the bank (2026-10-30) -- the next pressure flinch must be rebuilt.
+	assert_almost_eq(pressure_at_flinch, 0.0, 0.001)
 
 	# 3. A qualifying hit DURING recovery adds pressure but must not extend the deadline.
 	var mid_recovery_flinches: Array = []
+	var banked_between_cash_outs: bool = false
 	var pressed: bool = false
 	while sim.tick_count < original_until - 1:
-		for event in _attack("released" if pressed else "pressed"):
+		var batch: Array[Event] = _attack("released" if pressed else "pressed")
+		var landed: bool = false
+		for event in batch:
 			if event.kind == "flinched":
 				mid_recovery_flinches.append(event)
+			if event.kind == "hit":
+				landed = true
+		if landed and not batch.any(func(e): return e.kind == "flinched" and e.payload.reason == "pressure"):
+			banked_between_cash_outs = banked_between_cash_outs or _pressure() > 0.0
 		pressed = not pressed
 	for event in mid_recovery_flinches:
 		assert_eq(int(event.payload.until_tick), original_until,
 			"a mid-recovery re-flinch registers but must NOT extend flinched_until_tick")
 		assert_false(event.payload.recovery_deadline_set)
-	assert_gt(_pressure(), 0.0, "mid-recovery hits still bank pressure normally")
+	assert_true(banked_between_cash_outs, "mid-recovery hits still bank pressure normally between cash-outs")
 
 	# 4. Recovery ends on its exact tick, and the next eligible hit re-flinches.
 	while sim.tick_count < original_until:

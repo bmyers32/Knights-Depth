@@ -27,6 +27,29 @@ extends GutTest
 ## COVERAGE CONSEQUENCE: this canary NO LONGER EXERCISES A SUCCESSFUL WAND PROJECTILE. Real-content
 ## wand_A -> Ooze coverage lives in test_projectile_geometry.gd instead.
 ##
+## RE-BASELINED 2026-10-31 (owner ruling), Ooze only, scenario unchanged. The sword design pass
+## removed the finisher's unconditional windup interruption (`interrupt_strength` 1 -> 0 on hit 3
+## and charge; windup displacement now follows "this hit cancelled the windup") and made a
+## pressure flinch SPEND the pressure queue. RETIRED HISTORICAL TRACE:
+## `ai_canary_ooze_pre_sword_design_pass.json` (207 events, evidence, never overwritten); this
+## ACTIVE artifact has 186. Byte-identical through event 87 (tick 85). Single cause at tick 86:
+## hit 3 lands during a slam windup with hits 1 and 2 whiffed (zero pressure) -- the old bypass
+## interrupted and shoved the Ooze 1.5; the new rule does neither, so the Ooze stays at
+## z=-3.80 in its windup. Everything after is that one cause carried forward: hits 1 and 2 of
+## the next combo (ticks 95, 101) now LAND on the stationary Ooze with knockback suppressed; at
+## tick 110 hit 3 pressure-flinches in both traces, but now also interrupts the still-running
+## windup (knockback 1.5, -3.80 -> -5.30); the Envoy's lunges from tick 93 to 109 clamp at body
+## contact (gap 1.90) instead of advancing 1.45 toward a shoved Ooze. From tick 110 on, event
+## kinds and ticks are identical (same telegraph at 165, same rejections); the Ooze sits +1.50
+## and the Envoy +1.45 in z, with sub-millimetre steering differences after tick 157 that follow
+## from that geometry. The 21 fewer events are the tick-86 interruption and the walk-back
+## `moved` rows the Ooze no longer needs. Recorded by a one-off recorder (deleted), identical
+## across two fresh Godot processes and across two in-process runs.
+## COVERAGE NOTE: pressure spending is a semantic rule, not an anti-chain-flinch mechanic -- the
+## sword rebuilds 16 (hits 1+2) against Ooze's threshold 12 inside one combo, so repeated full
+## combos still pressure-flinch the Ooze each time; this trace shows one flinch only because the
+## scenario's presses stop at tick 130.
+##
 ## NO FAMILY CURRENTLY QUALIFIES AS AN UNTOUCHED CANARY, recorded honestly rather than
 ## manufactured: Fang carries burrow, and P33 authored `avoid_commit_ticks = 45` onto BOTH Ooze
 ## and Watcher, so local avoidance is live for them. Zeroing Watcher's purely to create a clean

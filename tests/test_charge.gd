@@ -158,14 +158,18 @@ func test_block_rising_edge_cancels_an_open_charge_with_no_swing_or_event() -> v
 	assert_eq(_hit_events(release_events).size(), 0, "a release with no open hold must not fire a phantom attack")
 
 
-func test_block_cancel_does_not_reset_the_combo_index() -> void:
+## Reversed 2026-10-30 (sword design pass): SHIELD CANCEL IS A SEQUENCE RESET. The
+## cancelled hold still completes no step (no hit, no credit), and the sequence it
+## belonged to is abandoned -- the next legal attack is H1. test_shield_cancel_reset.gd
+## pins the full technique matrix (beat / charge-step preserve, shield cancel resets).
+func test_block_cancel_resets_the_combo_index() -> void:
 	sim.register_shield(ATTACKER_ID, 20.0, 1.0, 3, 1.0)
 	assert_eq(_hit_events(_tap())[0].payload.get("attack_profile_id"), "1")
 	_press()
 	_hold()
 	sim.tick([Command.new(sim.tick_count, ATTACKER_ID, "block", {"held": true})], 1.0 / 30.0)  # cancels the hold
 	sim.tick([Command.new(sim.tick_count, ATTACKER_ID, "block", {"held": false})], 1.0 / 30.0)  # release block
-	assert_eq(_hit_events(_tap())[0].payload.get("attack_profile_id"), "2", "block-canceling an unreleased hold must not consume or reset a combo step")
+	assert_eq(_hit_events(_tap())[0].payload.get("attack_profile_id"), "1", "a shield cancel abandons the sequence: H1 again, never H2")
 
 
 # --- Interruption: weapon switch ---

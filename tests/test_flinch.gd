@@ -157,11 +157,14 @@ func test_current_hit_damage_counts_toward_its_own_cash_out() -> void:
 		"pressure is recorded BEFORE route selection, so one big hit can cash itself out")
 
 
-func test_successful_flinch_does_not_consume_pressure() -> void:
+## Reversed 2026-10-30 (sword design pass): a PRESSURE flinch spends the pressure that
+## bought it -- the target must rebuild past its threshold before the next one. An
+## exploit flinch still spends nothing (test_flinch_spend.gd pins both halves).
+func test_successful_pressure_flinch_spends_the_pressure() -> void:
 	_weapon(&"big", THRESHOLD, "pressure")
-	_swing(&"big")
-	assert_gte(sim.debug_describe_flinch_state(TARGET_ID).pressure, THRESHOLD,
-		"contributions leave only by expiring, never by being spent")
+	assert_eq(_of(_swing(&"big"), "flinched").size(), 1, "sanity: cashed out")
+	assert_almost_eq(sim.debug_describe_flinch_state(TARGET_ID).pressure, 0.0, 0.001,
+		"contributions leave by expiring OR by being spent on a pressure flinch")
 
 
 # --- vulnerability windows ---------------------------------------------------------

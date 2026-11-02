@@ -244,14 +244,32 @@ func test_enemy_interrupt_arms_the_same_cooldown_a_completed_attack_would_have()
 
 # --- Combo-state interaction ---
 
-func test_cancel_of_executing_preserves_prior_combo_progress() -> void:
+## Reversed 2026-10-30 (sword design pass): a SHIELD cancel abandons the sequence. The
+## cancelled hit2 attempt still completes no step, and the prior progress is reset too --
+## the next legal attack is H1 (test_shield_cancel_reset.gd pins the technique matrix).
+func test_block_cancel_of_executing_resets_combo_progress() -> void:
 	_tap()  # complete hit1 fully
 	for _i in range(LUNGE_DURATION_TICKS + FIRE_INTERVAL_TICKS + 2):
 		_tick_noop()
 	assert_eq(sim._combo_index.get(ATTACKER_ID, 0), 1, "sanity: hit1 completed and advanced the combo")
 	_tap()  # start hit2, cancel before its hit_tick
 	_block(true)
-	assert_eq(sim._combo_index.get(ATTACKER_ID, 0), 1, "canceling hit2's attempt must not reset or advance prior progress")
+	assert_eq(sim._combo_index.get(ATTACKER_ID, 0), 0, "a shield cancel abandons the sequence: back to H1")
+
+
+## The OTHER caller of the shared cancel helper keeps the old rule: getting hit is not a
+## choice, so an enemy interrupt discards only the swing, never the sequence. This pair
+## is what keeps the two cancellations from being merged by accident.
+func test_enemy_interrupt_of_executing_preserves_prior_combo_progress() -> void:
+	_register_enemy_attacker()
+	_tap()  # complete hit1 fully
+	for _i in range(LUNGE_DURATION_TICKS + FIRE_INTERVAL_TICKS + 2):
+		_tick_noop()
+	assert_eq(sim._combo_index.get(ATTACKER_ID, 0), 1, "sanity: hit1 completed and advanced the combo")
+	_tap()  # start hit2
+	var events := sim.tick([Command.new(sim.tick_count, ENEMY_ID, "attack", {"aim": Vector3.ZERO})], 1.0 / 30.0)
+	assert_eq(events.filter(func(e): return e.kind == "melee_hold_canceled").size(), 1, "sanity: the enemy hit cancelled the swing")
+	assert_eq(sim._combo_index.get(ATTACKER_ID, 0), 1, "an enemy interrupt leaves prior progress alone")
 
 
 func test_lethal_hit_during_executing_fully_resets_combo_state() -> void:

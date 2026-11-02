@@ -19,12 +19,18 @@ extends Resource
 @export var status_proc_chance: float = 0.0
 ## Interruption as graded content (manual-pass, 2026-08-04): a hit with
 ## interrupt_strength > 0 cancels a target enemy's in-progress attack windup
-## (SimWorld._cancel_enemy_windup) and knocks it back normally; a hit with 0 hits a
+## (SimWorld._cancel_enemy_windup) UNCONDITIONALLY -- an authored bypass of the
+## flinch routes below. A hit with 0 interrupts a windup only through those routes
+## (pressure cash-out or an authored VULNERABLE window); when neither fires it hits a
 ## winding-up enemy for damage/status as normal but its knockback is suppressed
 ## (crowding a stunned-looking enemy shouldn't shove it out of its own windup for
-## free). Currently just a boolean gate (>0); the field is an int, not a bool, so it
-## can graduate to comparison against a per-enemy poise/interruption threshold later
-## without a shape change -- no enemy-side threshold value exists yet.
+## free). Whichever way the windup is cancelled, knockback applies with it.
+## SWORD DESIGN PASS (2026-10-30): no M1 sword stage carries the bypass any more --
+## hit 3 and the charge went 1 -> 0 after the sword playtest showed the finisher
+## cancelling every normal windup merely because it landed. Flinch eligibility is
+## authored per attack/stage through flinch_capability; this field stays for content
+## that explicitly needs an unconditional interrupt. Still a boolean gate (>0); the
+## field is an int so it can graduate to a per-enemy poise comparison later.
 @export var interrupt_strength: int = 0
 
 ## Forward lunge (manual-pass, 2026-08-05): deterministic authored sim movement,
@@ -59,13 +65,19 @@ extends Resource
 ##   &"exploit"  — flinches only when it lands during an enemy action authored
 ##                 VULNERABLE; never cashes stored pressure.
 ##   &"pressure" — cashes stored pressure at/above the target's threshold, AND
-##                 exploits a VULNERABLE window like &"exploit".
-## Locked M1 sword mapping, VALIDATED at the 2026-08-13 re-gate: hits 1-2 = exploit,
-## hit 3 = pressure, charge = pressure (a deliberate SECOND cash-out route -- the
-## player reported getting "hits and charge off" under real threat, so charge is a
-## live option rather than a trap or a dominant answer). Threshold readiness is NOT cash-out: an exploit hit that
+##                 exploits a VULNERABLE window like &"exploit". This is the
+##                 "pressure-capable AND exploit-capable" value: the ladder is
+##                 deliberate (none < exploit < pressure), not a set of exclusive
+##                 modes, so no second field is needed to author both.
+## Locked M1 sword mapping, VALIDATED at the 2026-08-13 re-gate and re-confirmed by
+## the 2026-10-30 sword playtest: hits 1-2 = exploit, hit 3 = pressure, charge =
+## pressure (a deliberate SECOND cash-out route -- the player reported getting "hits
+## and charge off" under real threat, so charge is a live option rather than a trap
+## or a dominant answer). Threshold readiness is NOT cash-out: an exploit hit that
 ## pushes pressure past the threshold banks it for the next pressure-capable hit
 ## rather than flinching. That is intended behavior, not a tuning gap.
+## A PRESSURE flinch SPENDS the pressure that bought it (2026-10-30): the target must
+## rebuild past its threshold before the next one. An exploit flinch spends nothing.
 @export var flinch_capability: StringName = &"none"
 ## contributes_pressure: whether this hit's post-mitigation HP damage is RECORDED
 ## toward the target's pressure. Independent of capability above — a hit may
